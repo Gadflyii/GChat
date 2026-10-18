@@ -71,6 +71,10 @@ export type OpenCodeReadiness = {
   reason?: OpenCodeReadinessReason
 }
 
+export type OpenCodeUpdateResult =
+  | { kind: 'updated'; logPath: string }
+  | { kind: 'external'; command: string }
+
 export type OpenCodeProvisionPhase = 'checking' | 'installing' | 'configuring'
 
 export type OpenCodeProvisionRequest = {

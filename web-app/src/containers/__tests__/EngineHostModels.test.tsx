@@ -1,21 +1,29 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
+import { toast } from 'sonner'
 import { afterEach, expect, it, vi } from 'vitest'
 import { HostCard } from '../EngineHostModels'
 import { engineCommand, type EngineSnapshot, type EngineStartupQuote } from '@/services/engines'
 import { settleConfirm, useConfirmStore } from '@/lib/confirm'
 
-const { refreshHosts } = vi.hoisted(() => ({ refreshHosts: vi.fn().mockResolvedValue(undefined) }))
+const { refreshHosts, publishSnapshot } = vi.hoisted(() => ({
+  refreshHosts: vi.fn().mockResolvedValue(undefined),
+  publishSnapshot: vi.fn(),
+}))
 
 vi.mock('@/services/engines', async (original) => ({
   ...await original<typeof import('@/services/engines')>(),
   engineCommand: vi.fn().mockResolvedValue({}),
 }))
-vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: () => refreshHosts }))
+vi.mock('@/stores/engine-hosts-store', () => ({
+  useEngineHosts: (selector: (state: { refresh: typeof refreshHosts; publishSnapshot: typeof publishSnapshot }) => unknown) =>
+    selector({ refresh: refreshHosts, publishSnapshot }),
+}))
+vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }))
 vi.mock('../EngineProfilePicker', () => ({ EngineProfilePicker: () => null }))
 vi.mock('../EngineFirstRun', () => ({ EngineFirstRun: ({ hostId, hardwareProfileControls }: { hostId: string; hardwareProfileControls?: ReactNode }) => <section aria-label={`First-run setup for ${hostId}`}>{hardwareProfileControls}</section> }))
-afterEach(() => { cleanup(); settleConfirm(false); vi.clearAllMocks() })
+afterEach(() => { cleanup(); settleConfirm(false); vi.clearAllMocks(); publishSnapshot.mockReset() })
 
 const localHost = { local: true, host_id: 'host', name: 'Host', base_url: 'https://host', certificate_sha256: '', client_id: 'client' }
 const importedModelSnapshot: EngineSnapshot = {
@@ -343,9 +351,140 @@ it('discards late quote results after settings change and reports a fresh Host r
   expect(vi.mocked(engineCommand).mock.calls.every(([action]) => action === 'quote')).toBe(true)
 })
 
+it('keeps an accepted scan result through host-list refresh failure and read-only retries', async () => {
+  const inventoryMessage = 'Some model files could not be read. Check that the files are available, then refresh the model list.'
+  const initial: EngineSnapshot = { ...importedModelSnapshot, models: [], inventory_errors: [
+    { path: '/local/renamed.ginfer', error: 'Temporary file read failure' },
+  ] }
+  const accepted: EngineSnapshot = { ...importedModelSnapshot, revision: 2, inventory_errors: [] }
+  const refreshMessage = 'Could not refresh the host list. Choose Refresh host list to try again.'
+  let finishScan!: (snapshot: EngineSnapshot) => void
+  let rejectRefresh!: (reason: Error) => void
+  let rejectRetry!: (reason: Error) => void
+  vi.mocked(engineCommand).mockReset().mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishScan = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRefresh = reject }))
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRetry = reject }))
+  const view = render(<HostCard host={localHost} snapshot={initial} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={localHost} snapshot={snapshot} />)
+  })
+  fireEvent.click(screen.getByText('Model and memory settings'))
+  fireEvent.click(screen.getByText('Choose model settings'))
+  expect(screen.getByText(inventoryMessage)).toBeVisible()
+  const scan = screen.getByRole('button', { name: 'Refresh model list' })
+  expect(scan).toBeEnabled()
+  fireEvent.click(scan)
+  expect(scan).toBeDisabled()
+  fireEvent.click(scan)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('scan', { host_id: 'host' })
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+
+  await act(async () => finishScan(accepted))
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+  await act(async () => rejectRefresh(new Error('Host list unavailable')))
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(publishSnapshot.mock.invocationCallOrder[0]).toBeLessThan(refreshHosts.mock.invocationCallOrder[0])
+  expect(screen.getByRole('status')).toHaveTextContent('Model list refreshed.')
+  expect(screen.queryByText(inventoryMessage)).not.toBeInTheDocument()
+  expect(screen.queryByText('/local/renamed.ginfer: Temporary file read failure')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Refresh model list' })).not.toBeInTheDocument()
+  expect(screen.queryByText(/Could not refresh the model list/)).not.toBeInTheDocument()
+  expect(toast.error).not.toHaveBeenCalled()
+  const feedback = screen.getByRole('alert')
+  expect(feedback).toHaveTextContent(refreshMessage)
+  expect(within(feedback).getByText('Error: Host list unavailable')).not.toBeVisible()
+  expect(within(feedback).getByText('Host refresh error details').closest('details')).not.toHaveAttribute('open')
+  await userEvent.click(screen.getByLabelText('Installed model'))
+  expect(screen.getByRole('menuitemradio', { name: /Qwen 3.8 27B/ })).toBeVisible()
+  await userEvent.keyboard('{Escape}')
+
+  const refreshButton = within(feedback).getByRole('button', { name: 'Refresh host list' })
+  fireEvent.click(refreshButton)
+  expect(refreshButton).toBeDisabled()
+  fireEvent.click(refreshButton)
+  expect(refreshHosts).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('scan', { host_id: 'host' })
+  await act(async () => rejectRetry(new Error('Host list still unavailable')))
+  expect(feedback).toHaveTextContent(refreshMessage)
+  expect(within(feedback).getByText('Error: Host list still unavailable')).not.toBeVisible()
+  expect(refreshButton).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent('Model list refreshed.')
+  expect(screen.queryByText(inventoryMessage)).not.toBeInTheDocument()
+  expect(toast.error).not.toHaveBeenCalled()
+
+  fireEvent.click(refreshButton)
+  await waitFor(() => expect(feedback).not.toBeInTheDocument())
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Model list refreshed.')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(refreshHosts).toHaveBeenCalledTimes(3)
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('scan', { host_id: 'host' })
+  expect(toast.error).not.toHaveBeenCalled()
+})
+
+it('keeps a rejected scan result retryable without publishing or reading the host list', async () => {
+  const initial: EngineSnapshot = { ...importedModelSnapshot, models: [], inventory_errors: [
+    { path: '/local/renamed.ginfer', error: 'Temporary file read failure' },
+  ] }
+  const accepted: EngineSnapshot = { ...importedModelSnapshot, revision: 2, inventory_errors: [] }
+  const failureMessage = 'Could not refresh the model list. Check that the model files are available, then try again.'
+  let rejectScan!: (reason: Error) => void
+  let finishRetry!: (snapshot: EngineSnapshot) => void
+  vi.mocked(engineCommand).mockReset()
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((_resolve, reject) => { rejectScan = reject }))
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishRetry = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  const view = render(<HostCard host={localHost} snapshot={initial} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={localHost} snapshot={snapshot} />)
+  })
+  fireEvent.click(screen.getByText('Model and memory settings'))
+  fireEvent.click(screen.getByText('Choose model settings'))
+  const scan = screen.getByRole('button', { name: 'Refresh model list' })
+  fireEvent.click(scan)
+  expect(scan).toBeDisabled()
+  fireEvent.click(scan)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('scan', { host_id: 'host' })
+  await act(async () => rejectScan(new Error('Model directory is unavailable')))
+  const feedback = screen.getByText(failureMessage).closest<HTMLElement>('[role="alert"]')!
+  expect(feedback).toBeVisible()
+  const diagnostic = within(feedback).getByText('Error: Model directory is unavailable')
+  expect(diagnostic).not.toBeVisible()
+  expect(diagnostic.closest('details')).not.toHaveAttribute('open')
+  fireEvent.click(within(feedback).getByText('Technical details'))
+  expect(diagnostic).toBeVisible()
+  expect(scan).toBeEnabled()
+  expect(screen.getByText(/Some model files could not be read/)).toBeVisible()
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(failureMessage)
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(screen.queryByText('Model list refreshed.')).not.toBeInTheDocument()
+
+  fireEvent.click(scan)
+  expect(scan).toBeDisabled()
+  expect(screen.queryByText(failureMessage)).not.toBeInTheDocument()
+  fireEvent.click(scan)
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'scan', { host_id: 'host' })
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  await act(async () => finishRetry(accepted))
+  expect(await screen.findByRole('status')).toHaveTextContent('Model list refreshed.')
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(refreshHosts).toHaveBeenCalledOnce()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Refresh model list' })).not.toBeInTheDocument()
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(failureMessage)
+})
+
 it('keeps a saved remote host passive until its Connect button is used', async () => {
   const host = { local: false, host_id: 'remote', name: 'Saved server', base_url: 'https://host', certificate_sha256: '', client_id: 'client' }
   const error = 'Connect this saved host to unlock its credential for this session'
+  vi.mocked(engineCommand).mockReset().mockResolvedValueOnce({ ...importedModelSnapshot, host_id: host.host_id, display_name: host.name })
   render(<HostCard host={host} error={error} />)
   expect(screen.getByText(/Choose Connect to use this saved computer/)).toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -356,19 +495,232 @@ it('keeps a saved remote host passive until its Connect button is used', async (
   await waitFor(() => expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled())
 })
 
-it('explains a remote connection failure, preserves its details and allows retry', async () => {
-  vi.mocked(engineCommand).mockRejectedValueOnce('TLS credential unavailable: keyring locked')
-  render(<HostCard host={{ ...localHost, local: false }} />)
-  fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+it('keeps an accepted Connect result through host-list refresh failure and read-only retries', async () => {
+  const host = { ...localHost, local: false, host_id: 'remote', name: 'Saved server' }
+  const accepted: EngineSnapshot = {
+    host_id: 'remote', display_name: 'Saved server', revision: 2, instances: [], gpus: [], models: [],
+  }
+  const refreshMessage = 'Could not refresh the host list. Choose Refresh host list to try again.'
+  let finishConnect!: (snapshot: EngineSnapshot) => void
+  let rejectRefresh!: (reason: Error) => void
+  let rejectRetry!: (reason: Error) => void
+  vi.mocked(engineCommand).mockReset().mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishConnect = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRefresh = reject }))
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRetry = reject }))
+  const view = render(<HostCard host={host} error="Connect this saved host to unlock its credential for this session" />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={host} snapshot={snapshot} />)
+  })
+  const connect = screen.getByRole('button', { name: 'Connect' })
+  fireEvent.click(connect)
+  expect(connect).toBeDisabled()
+  fireEvent.click(connect)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('connect', { host_id: 'remote' })
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+
+  await act(async () => finishConnect(accepted))
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+  expect(screen.getByRole('button', { name: 'Remove connection' })).toBeDisabled()
+
+  await act(async () => rejectRefresh(new Error('Host list unavailable')))
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('remote', accepted)
+  expect(publishSnapshot.mock.invocationCallOrder[0]).toBeLessThan(refreshHosts.mock.invocationCallOrder[0])
+  expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
+  expect(screen.getByText(`${host.base_url} · Connected`)).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(screen.queryByText(/Could not connect to this computer/)).not.toBeInTheDocument()
+  const feedback = screen.getByRole('alert')
+  expect(feedback).toHaveTextContent(refreshMessage)
+  const diagnostic = within(feedback).getByText('Error: Host list unavailable')
+  expect(diagnostic).not.toBeVisible()
+  expect(within(feedback).getByText('Host refresh error details').closest('details')).not.toHaveAttribute('open')
+  expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
+  expect(screen.queryByText(/Could not connect to this computer/)).not.toBeInTheDocument()
+  const refreshButton = within(feedback).getByRole('button', { name: 'Refresh host list' })
+  expect(refreshButton).toBeEnabled()
+  fireEvent.click(refreshButton)
+  expect(refreshButton).toBeDisabled()
+  fireEvent.click(refreshButton)
+  expect(refreshHosts).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('connect', { host_id: 'remote' })
+  await act(async () => rejectRetry(new Error('Host list still unavailable')))
+  expect(feedback).toHaveTextContent(refreshMessage)
+  expect(within(feedback).getByText('Error: Host list still unavailable')).not.toBeVisible()
+  expect(refreshButton).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
+  expect(screen.getByText(`${host.base_url} · Connected`)).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+
+  fireEvent.click(refreshButton)
+  await waitFor(() => expect(feedback).not.toBeInTheDocument())
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
+  expect(screen.getByText(`${host.base_url} · Connected`)).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(refreshHosts).toHaveBeenCalledTimes(3)
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('remote', accepted)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('connect', { host_id: 'remote' })
+})
+
+it('keeps a rejected Connect result retryable without publishing or reading the host list', async () => {
+  const host = { ...localHost, local: false, host_id: 'remote', name: 'Saved server' }
+  const accepted: EngineSnapshot = {
+    host_id: 'remote', display_name: 'Saved server', revision: 2, instances: [], gpus: [], models: [],
+  }
+  let rejectConnect!: (reason: string) => void
+  let finishRetry!: (snapshot: EngineSnapshot) => void
+  vi.mocked(engineCommand).mockReset()
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((_resolve, reject) => { rejectConnect = reject }))
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishRetry = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  const view = render(<HostCard host={host} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={host} snapshot={snapshot} />)
+  })
+  const connect = screen.getByRole('button', { name: 'Connect' })
+  fireEvent.click(connect)
+  expect(connect).toBeDisabled()
+  fireEvent.click(connect)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('connect', { host_id: 'remote' })
+  await act(async () => rejectConnect('TLS credential unavailable: keyring locked'))
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent('Could not connect to this computer. Check that it is on and reachable, then try Connect again.')
   const details = within(alert).getByText('TLS credential unavailable: keyring locked')
   expect(details).not.toBeVisible()
+  expect(details.closest('details')).not.toHaveAttribute('open')
   fireEvent.click(within(alert).getByText('Technical details'))
   expect(details).toBeVisible()
-  fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
-  await waitFor(() => expect(engineCommand).toHaveBeenCalledTimes(2))
+  expect(connect).toBeEnabled()
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(screen.queryByText('Connected to Saved server.')).not.toBeInTheDocument()
+
+  fireEvent.click(connect)
+  expect(connect).toBeDisabled()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  fireEvent.click(connect)
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'connect', { host_id: 'remote' })
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  await act(async () => finishRetry(accepted))
+  await waitFor(() => expect(screen.getByText(`${host.base_url} · Connected`)).toBeVisible())
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('remote', accepted)
+  expect(refreshHosts).toHaveBeenCalledOnce()
+  expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it.each([
+  { label: 'without a credential cleanup warning', cleanupWarning: null },
+  { label: 'with a credential cleanup warning', cleanupWarning: 'The private keyring is locked' },
+])('keeps successful removal distinct from a failed refresh $label', async ({ cleanupWarning }) => {
+  const refreshMessage = 'Could not refresh the host list. Choose Refresh host list to try again.'
+  const cleanupMessage = 'The saved connection was removed, but its saved sign-in could not be cleared from this computer.'
+  let rejectRetry!: (reason: Error) => void
+  vi.mocked(engineCommand).mockReset().mockResolvedValue({ forgotten: 'host', credential_cleanup_warning: cleanupWarning })
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+    .mockRejectedValueOnce(new Error('Host list unavailable'))
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRetry = reject }))
+  render(<HostCard host={{ ...localHost, local: false }} snapshot={importedModelSnapshot} error="Computer temporarily unavailable" />)
+  expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled()
+  expect(screen.getByText('Model and memory settings')).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+  expect(useConfirmStore.getState().pending).toMatchObject({
+    title: 'Remove the connection to Host?', confirmLabel: 'Remove connection', destructive: true,
+  })
+  await act(async () => settleConfirm(true))
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('forget', { host_id: 'host' })
+  expect(await screen.findByRole('status')).toHaveTextContent('The saved connection was removed.')
+  expect(screen.getByRole('heading', { name: 'Host' })).toBeInTheDocument()
+  expect(screen.getByText(refreshMessage)).toBeVisible()
+  expect(screen.queryByText('Could not remove this saved connection. Try again.')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Remove connection' })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(screen.queryByText('Model and memory settings')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Installed model')).not.toBeInTheDocument()
+  expect(screen.getAllByRole('alert')).toHaveLength(cleanupWarning ? 2 : 1)
+  if (cleanupWarning) {
+    expect(screen.getByText(cleanupMessage)).toBeVisible()
+    const details = screen.getByText(cleanupWarning)
+    expect(details).not.toBeVisible()
+    fireEvent.click(screen.getByText('Technical details'))
+    expect(details).toBeVisible()
+  } else expect(screen.queryByText(cleanupMessage)).not.toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+  expect(useConfirmStore.getState().pending).toBeNull()
+  expect(engineCommand).toHaveBeenCalledTimes(1)
+  const refreshButton = screen.getByRole('button', { name: 'Refresh host list' })
+  expect(refreshButton).toBeEnabled()
+  fireEvent.click(refreshButton)
+  expect(refreshButton).toBeDisabled()
+  fireEvent.click(refreshButton)
+  expect(refreshHosts).toHaveBeenCalledTimes(2)
+  await act(async () => rejectRetry(new Error('Host list still unavailable')))
+  expect(screen.getByText(refreshMessage)).toBeVisible()
+  expect(screen.getByText('Error: Host list still unavailable')).not.toBeVisible()
+  expect(screen.getByRole('button', { name: 'Refresh host list' })).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent('The saved connection was removed.')
+  expect(screen.getByRole('button', { name: 'Remove connection' })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('forget', { host_id: 'host' })
+  if (cleanupWarning) expect(screen.getByText(cleanupMessage)).toBeVisible()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh host list' }))
+  await waitFor(() => expect(screen.queryByText(refreshMessage)).not.toBeInTheDocument())
+  expect(refreshHosts).toHaveBeenCalledTimes(3)
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(screen.queryByText('Error: Host list still unavailable')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('The saved connection was removed.')
+  expect(screen.getByRole('button', { name: 'Remove connection' })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(screen.queryAllByRole('alert')).toHaveLength(cleanupWarning ? 1 : 0)
+  if (cleanupWarning) {
+    expect(screen.getByText(cleanupMessage)).toBeVisible()
+    expect(screen.getByText(cleanupWarning)).toBeVisible()
+  }
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('forget', { host_id: 'host' })
+})
+
+it('keeps a rejected removal available for an explicitly confirmed retry', async () => {
+  vi.mocked(engineCommand).mockReset().mockResolvedValue({ forgotten: 'host' })
+    .mockRejectedValueOnce(new Error('Registry write denied'))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  render(<HostCard host={{ ...localHost, local: false }} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+  await act(async () => settleConfirm(true))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Could not remove this saved connection. Try again.')
+  const details = within(alert).getByText('Error: Registry write denied')
+  expect(details).not.toBeVisible()
+  fireEvent.click(within(alert).getByText('Technical details'))
+  expect(details).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Remove connection' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled()
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('forget', { host_id: 'host' })
+
+  fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+  expect(useConfirmStore.getState().pending).toMatchObject({ confirmLabel: 'Remove connection' })
+  await act(async () => settleConfirm(false))
+  expect(engineCommand).toHaveBeenCalledTimes(1)
+  expect(refreshHosts).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+  expect(useConfirmStore.getState().pending).toMatchObject({ confirmLabel: 'Remove connection' })
+  await act(async () => settleConfirm(true))
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'forget', { host_id: 'host' })
+  expect(refreshHosts).toHaveBeenCalledOnce()
 })
 
 it('explains the effect of restarting a remote model and honors cancellation before sending', async () => {
@@ -456,4 +808,377 @@ it('explains the busy GPU while the Host finishes speed tuning after Stop', () =
   expect(screen.getByText(/Finishing graphics-card speed tuning \(about 1 minute\)/)).toBeVisible()
   rerender(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, draft_width_calibrations: [{ ...job, status: 'queued' }] }} />)
   expect(screen.queryByText(/Finishing graphics-card speed tuning/)).not.toBeInTheDocument()
+})
+
+const savedModelProfile = {
+  model_id: 'imported-model', gpu_uuids: ['GPU-one'], max_context: 65536, concurrency: 1,
+  vision: true, structured_outputs: true, spec: 'none' as const, draft_tokens: 0, draft_tp: 0,
+  kv_dtype: 'auto' as const, kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false,
+}
+
+it.each([
+  { action: 'start', label: 'Start model', initialStatus: 'stopped', acceptedStatus: 'starting', result: 'Model start requested.' },
+  { action: 'stop', label: 'Stop model', initialStatus: 'ready', acceptedStatus: 'stopped', result: 'Model stop requested.' },
+  { action: 'restart', label: 'Restart model', initialStatus: 'ready', acceptedStatus: 'starting', result: 'Model restart requested.' },
+  { action: 'reload', label: 'Save and restart model', initialStatus: 'ready', acceptedStatus: 'starting', result: 'Model settings saved; restart requested.' },
+] as const)('keeps an accepted $action model control result through failed reads and read-only retries', async ({ action, label, initialStatus, acceptedStatus, result }) => {
+  const initial: EngineSnapshot = { ...importedModelSnapshot, instances: [{
+    instance_id: 'saved', session_id: initialStatus === 'stopped' ? null : 'session',
+    display_name: 'Saved model', upstream_model_id: 'imported-model', status: initialStatus,
+    configuration: savedModelProfile, profile: savedModelProfile,
+  }] }
+  const acceptedProfile = action === 'reload' ? { ...savedModelProfile, max_context: 32768 } : savedModelProfile
+  const accepted: EngineSnapshot = { ...initial, revision: 2, instances: [{
+    ...initial.instances[0], session_id: action === 'stop' ? null : 'next-session', status: acceptedStatus,
+    configuration: acceptedProfile, profile: acceptedProfile,
+  }] }
+  let finishCommand!: (snapshot: EngineSnapshot) => void
+  let rejectRefresh!: (reason: Error) => void
+  let rejectRetry!: (reason: Error) => void
+  vi.mocked(engineCommand).mockReset().mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishCommand = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRefresh = reject }))
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRetry = reject }))
+  const view = render(<HostCard host={localHost} snapshot={initial} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={localHost} snapshot={snapshot} />)
+  })
+  if (action === 'reload') {
+    fireEvent.click(screen.getByText('Model and memory settings'))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+    fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
+  }
+  const control = screen.getByRole('button', { name: label })
+  expect(control).toBeEnabled()
+  fireEvent.click(control)
+  if (action === 'restart' || action === 'reload') {
+    expect(useConfirmStore.getState().pending).toMatchObject({
+      title: action === 'restart' ? 'Restart this model?' : 'Save and restart this model?',
+      confirmLabel: action === 'restart' ? 'Restart model' : 'Save and restart',
+    })
+    expect(engineCommand).not.toHaveBeenCalled()
+    await act(async () => settleConfirm(true))
+  }
+  expect(control).toBeDisabled()
+  fireEvent.click(control)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith(action, {
+    host_id: 'host', instance_id: 'saved', body: action === 'start' ? {}
+      : action === 'reload' ? { configuration: expect.objectContaining(acceptedProfile), expected_session_id: 'session' }
+        : { force: false, expected_session_id: 'session' },
+  })
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+
+  await act(async () => finishCommand(accepted))
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+  expect(control).toBeDisabled()
+  fireEvent.click(control)
+  expect(engineCommand).toHaveBeenCalledOnce()
+  await act(async () => rejectRefresh(new Error('Host list unavailable')))
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(publishSnapshot.mock.invocationCallOrder[0]).toBeLessThan(refreshHosts.mock.invocationCallOrder[0])
+  expect(screen.getByRole('status')).toHaveTextContent(result)
+  expect(screen.getByText(action === 'stop' ? /Saved model.*Stopped/ : /Saved model.*Starting/)).toBeVisible()
+  expect(screen.queryByText(/Saved model.*Ready to chat/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Could not (start|stop|restart) this model/)).not.toBeInTheDocument()
+  expect(toast.error).not.toHaveBeenCalled()
+  const feedback = screen.getByRole('alert')
+  expect(feedback).toHaveTextContent('Could not refresh the host list. Choose Refresh host list to try again.')
+  expect(within(feedback).getByText('Error: Host list unavailable')).not.toBeVisible()
+  expect(within(feedback).getByText('Host refresh error details').closest('details')).not.toHaveAttribute('open')
+
+  const refreshButton = within(feedback).getByRole('button', { name: 'Refresh host list' })
+  fireEvent.click(refreshButton)
+  expect(refreshButton).toBeDisabled()
+  fireEvent.click(refreshButton)
+  expect(refreshHosts).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenCalledOnce()
+  await act(async () => rejectRetry(new Error('Host list still unavailable')))
+  expect(within(feedback).getByText('Error: Host list still unavailable')).not.toBeVisible()
+  expect(refreshButton).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent(result)
+  fireEvent.click(refreshButton)
+  await waitFor(() => expect(feedback).not.toBeInTheDocument())
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent(result)
+  expect(refreshHosts).toHaveBeenCalledTimes(3)
+  expect(engineCommand).toHaveBeenCalledOnce()
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(toast.error).not.toHaveBeenCalled()
+})
+
+it('keeps a multi-copy launch model control result despite a failed first read without publishing receipts', async () => {
+  type Receipt = { instance_id: string; kv_arena_bytes: number }
+  let finishFirst!: (receipt: Receipt) => void
+  let finishSecond!: (receipt: Receipt) => void
+  let rejectRefresh!: (reason: Error) => void
+  vi.mocked(engineCommand).mockReset()
+    .mockReturnValueOnce(new Promise<Receipt>((resolve) => { finishFirst = resolve }))
+    .mockReturnValueOnce(new Promise<Receipt>((resolve) => { finishSecond = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRefresh = reject }))
+    .mockRejectedValueOnce(new Error('Host list still unavailable'))
+  render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  await selectImportedModel()
+  fireEvent.change(screen.getByLabelText('Model copies'), { target: { value: '2' } })
+  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '65536' } })
+  const launch = screen.getByRole('button', { name: 'Start model with these settings' })
+  fireEvent.click(launch)
+  expect(launch).toBeDisabled()
+  fireEvent.click(launch)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('launch', { host_id: 'host', body: expect.objectContaining({
+    model_id: 'imported-model', gpu_uuids: ['GPU-one'], max_context: 65536, remaining_instances: 2,
+  }) })
+  expect(refreshHosts).not.toHaveBeenCalled()
+  await act(async () => finishFirst({ instance_id: 'copy-one', kv_arena_bytes: 1048576 }))
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+  expect(launch).toBeDisabled()
+  fireEvent.click(launch)
+  expect(engineCommand).toHaveBeenCalledOnce()
+  await act(async () => rejectRefresh(new Error('Host list unavailable')))
+  await waitFor(() => expect(engineCommand).toHaveBeenCalledTimes(2))
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'launch', { host_id: 'host', body: expect.objectContaining({
+    model_id: 'imported-model', gpu_uuids: ['GPU-one'], max_context: 65536, remaining_instances: 1,
+  }) })
+  expect(launch).toBeDisabled()
+  fireEvent.click(launch)
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  await act(async () => finishSecond({ instance_id: 'copy-two', kv_arena_bytes: 1048576 }))
+  await waitFor(() => expect(launch).toBeEnabled())
+  expect(refreshHosts).toHaveBeenCalledTimes(2)
+  expect(screen.getByRole('status')).toHaveTextContent('Model start requested.')
+  expect(screen.queryByText(/Ready to chat/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Could not start this model/)).not.toBeInTheDocument()
+  const feedback = screen.getByRole('alert')
+  expect(feedback).toHaveTextContent('Could not refresh the host list. Choose Refresh host list to try again.')
+  expect(within(feedback).getByText('Error: Host list still unavailable')).not.toBeVisible()
+  expect(within(feedback).getByText('Host refresh error details').closest('details')).not.toHaveAttribute('open')
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(toast.error).not.toHaveBeenCalled()
+  expect(toast.warning).not.toHaveBeenCalled()
+  fireEvent.click(within(feedback).getByRole('button', { name: 'Refresh host list' }))
+  await waitFor(() => expect(feedback).not.toBeInTheDocument())
+  expect(refreshHosts).toHaveBeenCalledTimes(3)
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(screen.getByRole('status')).toHaveTextContent('Model start requested.')
+  expect(toast.error).not.toHaveBeenCalled()
+  expect(toast.warning).not.toHaveBeenCalled()
+})
+
+it('keeps a rejected start model control result actionable until an explicit guarded retry is accepted', async () => {
+  const initial: EngineSnapshot = { ...importedModelSnapshot, instances: [{
+    instance_id: 'saved', session_id: null, display_name: 'Saved model', upstream_model_id: 'imported-model', status: 'stopped',
+    configuration: savedModelProfile, profile: savedModelProfile,
+  }] }
+  const accepted: EngineSnapshot = { ...initial, revision: 2, instances: [{
+    ...initial.instances[0], session_id: 'next-session', status: 'starting',
+  }] }
+  const failureMessage = 'Could not start this model. Check its settings and available graphics-card memory, then try again.'
+  let rejectStart!: (reason: Error) => void
+  let finishRetry!: (snapshot: EngineSnapshot) => void
+  vi.mocked(engineCommand).mockReset()
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((_resolve, reject) => { rejectStart = reject }))
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishRetry = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  const view = render(<HostCard host={localHost} snapshot={initial} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={localHost} snapshot={snapshot} />)
+  })
+  const start = screen.getByRole('button', { name: 'Start model' })
+  expect(start).toBeEnabled()
+  fireEvent.click(start)
+  expect(start).toBeDisabled()
+  fireEvent.click(start)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('start', { host_id: 'host', instance_id: 'saved', body: {} })
+  await act(async () => rejectStart(new Error('Insufficient graphics-card memory')))
+  const feedback = screen.getByRole('alert')
+  expect(feedback).toHaveTextContent(failureMessage)
+  const diagnostic = within(feedback).getByText('Error: Insufficient graphics-card memory')
+  expect(diagnostic).not.toBeVisible()
+  expect(diagnostic.closest('details')).not.toHaveAttribute('open')
+  fireEvent.click(within(feedback).getByText('Technical details'))
+  expect(diagnostic).toBeVisible()
+  expect(screen.getByText(/Saved model.*Stopped/)).toBeVisible()
+  expect(start).toBeEnabled()
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(failureMessage)
+
+  fireEvent.click(start)
+  expect(start).toBeDisabled()
+  expect(feedback).not.toBeInTheDocument()
+  fireEvent.click(start)
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'start', { host_id: 'host', instance_id: 'saved', body: {} })
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  await act(async () => finishRetry(accepted))
+  expect(await screen.findByRole('status')).toHaveTextContent('Model start requested.')
+  expect(screen.getByText(/Saved model.*Starting/)).toBeVisible()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.queryByText('Error: Insufficient graphics-card memory')).not.toBeInTheDocument()
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(refreshHosts).toHaveBeenCalledOnce()
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(failureMessage)
+})
+
+it('completes an accepted model editor save result after a failed read and reopens with the replacement session', async () => {
+  const initial: EngineSnapshot = { ...importedModelSnapshot, instances: [{
+    instance_id: 'saved', session_id: 'session-one', display_name: 'Saved model', upstream_model_id: 'imported-model', status: 'ready',
+    configuration: savedModelProfile, profile: savedModelProfile,
+  }] }
+  const firstProfile = { ...savedModelProfile, max_context: 32768, concurrency: 2 }
+  const firstAccepted: EngineSnapshot = { ...initial, revision: 2, instances: [{
+    ...initial.instances[0], session_id: 'session-two', status: 'starting', configuration: firstProfile, profile: firstProfile,
+  }] }
+  const secondProfile = { ...firstProfile, max_context: 16384 }
+  const secondAccepted: EngineSnapshot = { ...firstAccepted, revision: 3, instances: [{
+    ...firstAccepted.instances[0], session_id: 'session-three', configuration: secondProfile, profile: secondProfile,
+  }] }
+  let finishFirst!: (snapshot: EngineSnapshot) => void
+  let finishSecond!: (snapshot: EngineSnapshot) => void
+  let rejectRefresh!: (reason: Error) => void
+  vi.mocked(engineCommand).mockReset()
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishFirst = resolve }))
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishSecond = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRefresh = reject }))
+  const view = render(<HostCard host={localHost} snapshot={initial} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={localHost} snapshot={snapshot} />)
+  })
+  fireEvent.click(screen.getByText('Model and memory settings'))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
+  fireEvent.change(screen.getByLabelText('Requests at once'), { target: { value: '2' } })
+  const save = screen.getByRole('button', { name: 'Save and restart model' })
+  fireEvent.click(save)
+  expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Save and restart this model?', confirmLabel: 'Save and restart' })
+  expect(engineCommand).not.toHaveBeenCalled()
+  await act(async () => settleConfirm(true))
+  expect(save).toBeDisabled()
+  fireEvent.click(save)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('reload', { host_id: 'host', instance_id: 'saved', body: {
+    configuration: expect.objectContaining(firstProfile), expected_session_id: 'session-one',
+  } })
+  await act(async () => finishFirst(firstAccepted))
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+  await act(async () => rejectRefresh(new Error('Host list unavailable')))
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', firstAccepted)
+  expect(publishSnapshot.mock.invocationCallOrder[0]).toBeLessThan(refreshHosts.mock.invocationCallOrder[0])
+  expect(screen.getByRole('status')).toHaveTextContent('Model settings saved; restart requested.')
+  expect(screen.queryByRole('button', { name: 'Save and restart model' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Cancel editing' })).not.toBeInTheDocument()
+  expect(screen.getByText('Choose model settings').closest('details')).not.toHaveAttribute('open')
+  expect(screen.queryByText(/^Changing .*Saved model/)).not.toBeInTheDocument()
+  const readFeedback = screen.getByRole('alert')
+  expect(readFeedback).toHaveTextContent('Could not refresh the host list. Choose Refresh host list to try again.')
+  expect(within(readFeedback).getByText('Error: Host list unavailable')).not.toBeVisible()
+  expect(toast.error).not.toHaveBeenCalled()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+  expect(screen.getByText('Change model settings').closest('details')).toHaveAttribute('open')
+  expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(32768)
+  expect(screen.getByLabelText('Requests at once')).toHaveValue(2)
+  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '16384' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save and restart model' }))
+  expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Save and restart this model?' })
+  await act(async () => settleConfirm(true))
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'reload', { host_id: 'host', instance_id: 'saved', body: {
+    configuration: expect.objectContaining(secondProfile), expected_session_id: 'session-two',
+  } })
+  await act(async () => finishSecond(secondAccepted))
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Save and restart model' })).not.toBeInTheDocument())
+  expect(screen.getByText('Choose model settings').closest('details')).not.toHaveAttribute('open')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Model settings saved; restart requested.')
+  expect(screen.getByText(/Saved model.*Starting/)).toBeVisible()
+  expect(publishSnapshot).toHaveBeenNthCalledWith(2, 'host', secondAccepted)
+  expect(refreshHosts).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(toast.error).not.toHaveBeenCalled()
+})
+
+it('retains a canceled or rejected model editor save result draft until an explicit retry is accepted', async () => {
+  const initial: EngineSnapshot = { ...importedModelSnapshot, instances: [{
+    instance_id: 'saved', session_id: 'session-one', display_name: 'Saved model', upstream_model_id: 'imported-model', status: 'ready',
+    configuration: savedModelProfile, profile: savedModelProfile,
+  }] }
+  const draft = { ...savedModelProfile, max_context: 32768, concurrency: 2 }
+  const accepted: EngineSnapshot = { ...initial, revision: 2, instances: [{
+    ...initial.instances[0], session_id: 'session-two', status: 'starting', configuration: draft, profile: draft,
+  }] }
+  let rejectSave!: (reason: Error) => void
+  let finishRetry!: (snapshot: EngineSnapshot) => void
+  vi.mocked(engineCommand).mockReset()
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((_resolve, reject) => { rejectSave = reject }))
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishRetry = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  const view = render(<HostCard host={localHost} snapshot={initial} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={localHost} snapshot={snapshot} />)
+  })
+  fireEvent.click(screen.getByText('Model and memory settings'))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
+  fireEvent.change(screen.getByLabelText('Requests at once'), { target: { value: '2' } })
+  const save = screen.getByRole('button', { name: 'Save and restart model' })
+  fireEvent.click(save)
+  expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Save and restart this model?' })
+  await act(async () => settleConfirm(false))
+  expect(save).toBeEnabled()
+  expect(screen.getByText('Change model settings').closest('details')).toHaveAttribute('open')
+  expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(32768)
+  expect(screen.getByLabelText('Requests at once')).toHaveValue(2)
+  expect(engineCommand).not.toHaveBeenCalled()
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+
+  fireEvent.click(save)
+  await act(async () => settleConfirm(true))
+  expect(save).toBeDisabled()
+  fireEvent.click(save)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('reload', { host_id: 'host', instance_id: 'saved', body: {
+    configuration: expect.objectContaining(draft), expected_session_id: 'session-one',
+  } })
+  await act(async () => rejectSave(new Error('Assigned engine session has changed')))
+  const failureMessage = 'Could not restart this model. Check the settings and try again.'
+  const feedback = screen.getByRole('alert')
+  expect(feedback).toHaveTextContent(failureMessage)
+  expect(within(feedback).getByText('Error: Assigned engine session has changed')).not.toBeVisible()
+  expect(within(feedback).getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+  expect(save).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Cancel editing' })).toBeEnabled()
+  expect(screen.getByText('Change model settings').closest('details')).toHaveAttribute('open')
+  expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(32768)
+  expect(screen.getByLabelText('Requests at once')).toHaveValue(2)
+  expect(screen.getByText(/Saved model.*Ready to chat/)).toBeVisible()
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+
+  fireEvent.click(save)
+  await act(async () => settleConfirm(true))
+  expect(save).toBeDisabled()
+  expect(feedback).not.toBeInTheDocument()
+  fireEvent.click(save)
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'reload', { host_id: 'host', instance_id: 'saved', body: {
+    configuration: expect.objectContaining(draft), expected_session_id: 'session-one',
+  } })
+  await act(async () => finishRetry(accepted))
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Save and restart model' })).not.toBeInTheDocument())
+  expect(screen.queryByRole('button', { name: 'Cancel editing' })).not.toBeInTheDocument()
+  expect(screen.getByText('Choose model settings').closest('details')).not.toHaveAttribute('open')
+  expect(screen.getByRole('status')).toHaveTextContent('Model settings saved; restart requested.')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(refreshHosts).toHaveBeenCalledOnce()
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(failureMessage)
 })

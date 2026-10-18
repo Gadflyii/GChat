@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner'
 import GbotAvatar from '@/components/GbotAvatar'
 import GbotTaskActions from '@/components/GbotTaskActions'
+import GbotTaskInterruption from '@/components/GbotTaskInterruption'
 import GbotDesktopView, {
   type DesktopViewHandle,
 } from '@/components/GbotDesktopView'
@@ -60,7 +61,14 @@ export default function GbotCompanion() {
   const [owner] = useState(gbotControlOwner)
   const [busy, setBusy] = useState(false)
   const [submittingTask, setSubmittingTask] = useState<string>()
+  const [taskErrors, setTaskErrors] = useState<Record<string, string | undefined>>(
+    {}
+  )
   const taskSubmission = useRef(false)
+  const controlChange = useRef(false)
+  const [controlErrors, setControlErrors] = useState<
+    Record<string, { returning: boolean; details: string } | undefined>
+  >({})
   const desktop = useRef<DesktopViewHandle>(null)
   const panel = useRef<HTMLElement>(null)
   const wasVisible = useRef(false)
@@ -114,6 +122,14 @@ export default function GbotCompanion() {
   )
   const tab = state.tabs[workspaceId] ?? 'conversation'
   const draft = state.drafts[workspaceId] ?? ''
+  const taskErrorKey = JSON.stringify([state.target, workspaceId])
+  const taskError = taskErrors[taskErrorKey]
+  const controlErrorKey = JSON.stringify([
+    state.target,
+    identity?.workspace_id,
+    identity?.session_id,
+  ])
+  const controlError = controlErrors[controlErrorKey]
 
   useEffect(() => {
     const sharing = useGbotPage.getState().sharing
@@ -189,12 +205,16 @@ export default function GbotCompanion() {
     wasVisible.current = visible
   }, [visible, workspaceId])
 
-  const perform = async (action: () => Promise<unknown>) => {
+  const perform = async (
+    action: () => Promise<unknown>,
+    propagateError = false
+  ) => {
     if (busy) return
     setBusy(true)
     try {
       await action()
     } catch (cause) {
+      if (propagateError) throw cause
       toast.error(String(cause))
     } finally {
       await useGbotCompanion.getState().refresh()
@@ -204,6 +224,34 @@ export default function GbotCompanion() {
   const hide = () => {
     desktop.current?.stopInput()
     state.setMode('hidden')
+  }
+  const changeControl = () => {
+    if (busy || controlChange.current || !identity || setupBlocked) return
+    controlChange.current = true
+    const key = controlErrorKey
+    const returning = control?.state === 'human' || control?.state === 'paused'
+    setControlErrors((previous) => ({ ...previous, [key]: undefined }))
+    if (returning) desktop.current?.stopInput()
+    void perform(
+      () =>
+        gbot(returning ? 'control/hand-back' : 'control/take-over', {
+          identity,
+          owner,
+        }),
+      true
+    )
+      .catch((cause) =>
+        setControlErrors((previous) => ({
+          ...previous,
+          [key]: {
+            returning,
+            details: cause instanceof Error ? cause.message : String(cause),
+          },
+        }))
+      )
+      .finally(() => {
+        controlChange.current = false
+      })
   }
 
   if (!enabled) return null
@@ -378,7 +426,7 @@ export default function GbotCompanion() {
             className="min-h-0 flex-1 overflow-y-auto p-4"
           >
             <div className="mx-auto max-w-3xl space-y-4">
-              {!history.length && (
+              {!history.length && !state.executorError && (
                 <p className="text-sm text-muted-foreground">
                   Give {bot.name} a task, or ask a question about its work.
                 </p>
@@ -389,8 +437,9 @@ export default function GbotCompanion() {
                   approval={approval}
                   busy={busy}
                   reply={(allow) =>
-                    perform(() =>
-                      gbot('tasks/approval', { id: approval.id, allow })
+                    perform(
+                      () => gbot('tasks/approval', { id: approval.id, allow }),
+                      true
                     )
                   }
                 />
@@ -400,7 +449,7 @@ export default function GbotCompanion() {
                   key={task.id}
                   className="space-y-3 rounded-lg border p-3"
                 >
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
                     <span>{task.state.replaceAll('_', ' ')}</span>
                     <GbotTaskActions
                       taskState={task.state}
@@ -408,10 +457,14 @@ export default function GbotCompanion() {
                       ready={ready}
                       botHasControl={botHasControl}
                       onAction={(action) =>
-                        perform(() => gbot(`tasks/${action}`, { id: task.id }))
+                        perform(
+                          () => gbot(`tasks/${action}`, { id: task.id }),
+                          true
+                        )
                       }
                     />
                   </div>
+                  <GbotTaskInterruption task={task} />
                   {task.messages
                     .filter(
                       (m) =>
@@ -450,12 +503,14 @@ export default function GbotCompanion() {
                       request={request}
                       busy={busy}
                       reply={(response) =>
-                        perform(() =>
-                          gbot('tasks/help', {
-                            id: task.id,
-                            request_id: request.id,
-                            response,
-                          })
+                        perform(
+                          () =>
+                            gbot('tasks/help', {
+                              id: task.id,
+                              request_id: request.id,
+                              response,
+                            }),
+                          true
                         )
                       }
                     />
@@ -463,11 +518,30 @@ export default function GbotCompanion() {
                 </article>
               ))}
               {state.executorError && (
-                <p role="status" className="text-sm text-muted-foreground">
-                  {state.executorError}
-                </p>
+                <div role="alert" className="space-y-2 text-sm">
+                  <p>Could not load tasks and approval requests. Try again.</p>
+                  <details className="text-muted-foreground">
+                    <summary className="cursor-pointer">Details</summary>
+                    <p className="break-words">{state.executorError}</p>
+                  </details>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={state.loading}
+                    onClick={() => {
+                      const current = useGbotCompanion.getState()
+                      if (!current.loading) void current.refresh()
+                    }}
+                  >
+                    {state.loading ? 'Loading tasks…' : 'Retry loading tasks'}
+                  </Button>
+                </div>
               )}
-              {!ready && !preparing && !loading && !connectionError && (
+              {!ready &&
+                !preparing &&
+                !loading &&
+                !connectionError &&
+                !state.executorError && (
                 <p className="text-sm text-muted-foreground">
                   {setupBlocked
                     ? 'Finish this bot’s computer setup in Gbot settings to run tasks.'
@@ -476,8 +550,9 @@ export default function GbotCompanion() {
               )}
               {!botHasControl && (
                 <p className="text-sm text-muted-foreground">
-                  The bot is paused for desktop control. Hand back in Desktop to
-                  continue.
+                  The bot is paused for desktop control. Choose Hand back in
+                  Desktop, then Resume task in Conversation to continue a paused
+                  task.
                 </p>
               )}
             </div>
@@ -500,23 +575,38 @@ export default function GbotCompanion() {
                 const submitted = draft
                 taskSubmission.current = true
                 setSubmittingTask(workspaceId)
-                void perform(async () => {
-                  const request = useGbotPage
-                    .getState()
-                    .capture(workspaceId, state.target, submitted)
-                  const task = await gbot<Task>('tasks/start', {
-                    identity,
-                    prompt: request?.prompt ?? submitted,
+                setTaskErrors((previous) => ({
+                  ...previous,
+                  [taskErrorKey]: undefined,
+                }))
+                void perform(
+                  async () => {
+                    const request = useGbotPage
+                      .getState()
+                      .capture(workspaceId, state.target, submitted)
+                    const task = await gbot<Task>('tasks/start', {
+                      identity,
+                      prompt: request?.prompt ?? submitted,
+                    })
+                    if (request && task?.id)
+                      useGbotPage.getState().remember(task.id, request)
+                    const current = useGbotCompanion.getState()
+                    if (current.drafts[workspaceId] === submitted)
+                      current.setDraft(workspaceId, '')
+                  },
+                  true
+                )
+                  .catch((cause) => {
+                    setTaskErrors((previous) => ({
+                      ...previous,
+                      [taskErrorKey]:
+                        cause instanceof Error ? cause.message : String(cause),
+                    }))
                   })
-                  if (request && task?.id)
-                    useGbotPage.getState().remember(task.id, request)
-                  const current = useGbotCompanion.getState()
-                  if (current.drafts[workspaceId] === submitted)
-                    current.setDraft(workspaceId, '')
-                }).finally(() => {
-                  taskSubmission.current = false
-                  setSubmittingTask(undefined)
-                })
+                  .finally(() => {
+                    taskSubmission.current = false
+                    setSubmittingTask(undefined)
+                  })
               }}
             >
               {pageState.page && (
@@ -551,6 +641,9 @@ export default function GbotCompanion() {
               )}
               <textarea
                 aria-label="Message bot"
+                aria-describedby={
+                  taskError !== undefined ? 'gbot-companion-task-error' : undefined
+                }
                 placeholder={`Message ${bot.name}`}
                 value={draft}
                 className="min-h-20 max-h-48 w-full resize-y rounded-lg border bg-background p-3 text-sm"
@@ -560,6 +653,19 @@ export default function GbotCompanion() {
                   state.setDraft(workspaceId, event.target.value)
                 }
               />
+              {taskError !== undefined && (
+                <div
+                  id="gbot-companion-task-error"
+                  role="alert"
+                  className="space-y-1 text-sm"
+                >
+                  <p>Could not send this task. Try again.</p>
+                  <details className="text-muted-foreground">
+                    <summary className="cursor-pointer">Details</summary>
+                    <p className="break-words">{taskError}</p>
+                  </details>
+                </div>
+              )}
               {submittingTask === workspaceId && (
                 <p role="status" className="text-sm text-muted-foreground">
                   Sending this task to the bot…
@@ -657,30 +763,37 @@ export default function GbotCompanion() {
                     </p>
                     <Button
                       variant="outline"
+                      aria-describedby={
+                        controlError ? 'gbot-companion-control-error' : undefined
+                      }
                       disabled={
                         busy ||
                         Boolean(control?.owner && control.owner !== owner)
                       }
-                      onClick={() =>
-                        void perform(() => {
-                          const returning =
-                            control?.state === 'human' ||
-                            control?.state === 'paused'
-                          if (returning) desktop.current?.stopInput()
-                          return gbot(
-                            returning
-                              ? 'control/hand-back'
-                              : 'control/take-over',
-                            { identity, owner }
-                          )
-                        })
-                      }
+                      onClick={changeControl}
                     >
                       {control?.state === 'human' || control?.state === 'paused'
                         ? 'Hand back'
                         : 'Take over'}
                     </Button>
                   </div>
+                  {controlError && (
+                    <div
+                      id="gbot-companion-control-error"
+                      role="alert"
+                      className="space-y-1 text-sm"
+                    >
+                      <p>
+                        {controlError.returning
+                          ? 'Could not hand back control. Try again.'
+                          : 'Could not take over this desktop. Try again.'}
+                      </p>
+                      <details className="text-muted-foreground">
+                        <summary className="cursor-pointer">Details</summary>
+                        <p className="break-words">{controlError.details}</p>
+                      </details>
+                    </div>
+                  )}
                   <GbotDesktopView
                     key={`${identity.workspace_id}:${identity.session_id}`}
                     ref={desktop}
@@ -692,9 +805,9 @@ export default function GbotCompanion() {
                     visible={visible && tab === 'desktop'}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Hiding this pane closes desktop input and audio. A bot
-                    paused for takeover stays paused until you hand back
-                    control.
+                    Hiding this pane closes desktop input and audio. Hand back
+                    returns control to the bot; paused tasks still need Resume
+                    task in Conversation.
                   </p>
                 </>
               ) : !preparing && !loading && !connectionError ? (

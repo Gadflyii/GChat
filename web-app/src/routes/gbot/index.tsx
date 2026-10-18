@@ -6,6 +6,7 @@ import { confirmAction } from '@/lib/confirm'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
 import GbotTaskActions from '@/components/GbotTaskActions'
+import GbotTaskInterruption from '@/components/GbotTaskInterruption'
 import HumanHelp from '@/components/GbotHumanHelp'
 import GbotTaskApproval from '@/components/GbotTaskApproval'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
@@ -77,6 +78,12 @@ function GbotPage() {
   })
   const [serviceReady, setServiceReady] = useState(false)
   const [serviceError, setServiceError] = useState('')
+  const serviceChange = useRef(false)
+  const [serviceActionErrors, setServiceActionErrors] = useState<
+    Record<string, { message: string; details: string } | undefined>
+  >({})
+  const serviceActionErrorKey = JSON.stringify(serviceTarget)
+  const serviceActionError = serviceActionErrors[serviceActionErrorKey]
   const serviceSelectionPending = useRef(false)
   const changeServiceDraft = useCallback(
     (target: ServiceTarget, ready: boolean) => {
@@ -97,7 +104,21 @@ function GbotPage() {
   const [setupError, setSetupError] = useState('')
   const [prompts, setPrompts] = useState<Record<string, string>>({})
   const [submittingTask, setSubmittingTask] = useState<string>()
+  const [taskErrors, setTaskErrors] = useState<Record<string, string | undefined>>(
+    {}
+  )
   const taskSubmission = useRef(false)
+  const controlChange = useRef(false)
+  const [controlErrors, setControlErrors] = useState<
+    Record<string, { returning: boolean; details: string } | undefined>
+  >({})
+  const [recoveryErrors, setRecoveryErrors] = useState<
+    Record<string, string | undefined>
+  >({})
+  const connectionChange = useRef(false)
+  const [connectionErrors, setConnectionErrors] = useState<
+    Record<string, { disconnecting: boolean; details: string } | undefined>
+  >({})
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({})
   const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
   const setGbotEnabled = useGeneralSetting((state) => state.setGbotEnabled)
@@ -193,17 +214,19 @@ function GbotPage() {
     }
   }, [refresh, gbotEnabled, serviceStopped])
   const changeService = async (start: boolean) => {
-    if (busy) return
+    if (busy || serviceChange.current) return
+    serviceChange.current = true
+    const key = serviceActionErrorKey
+    setServiceActionErrors((previous) => ({ ...previous, [key]: undefined }))
     const paired = serviceTarget.kind === 'paired_host'
-    setServiceAction(
-      start
-        ? paired
-          ? 'connecting'
-          : 'starting'
-        : paired
-          ? 'disconnecting'
-          : 'stopping'
-    )
+    const action = start
+      ? paired
+        ? 'connecting'
+        : 'starting'
+      : paired
+        ? 'disconnecting'
+        : 'stopping'
+    setServiceAction(action)
     try {
       if (start) {
         await startGbotService()
@@ -217,8 +240,24 @@ function GbotPage() {
       }
     } catch (cause) {
       if (!start) stopped.current = false
-      toast.error(String(cause))
+      setServiceActionErrors((previous) => ({
+        ...previous,
+        [key]: {
+          message: {
+            starting:
+              'Could not start Gbot on this computer. Try Start Gbot service again.',
+            connecting:
+              'Could not connect to the Gbot service on your LAN computer. Try Connect Gbot service again.',
+            stopping:
+              'Could not stop Gbot on this computer. Try Quit Gbot service again.',
+            disconnecting:
+              'Could not disconnect from the Gbot service on your LAN computer. Try Disconnect Gbot service again.',
+          }[action],
+          details: cause instanceof Error ? cause.message : String(cause),
+        },
+      }))
     } finally {
+      serviceChange.current = false
       setServiceAction(undefined)
       void useGbotCompanion.getState().refresh()
     }
@@ -256,12 +295,16 @@ function GbotPage() {
       setBusy(false)
     }
   }
-  const perform = async (action: () => Promise<unknown>) => {
+  const perform = async (
+    action: () => Promise<unknown>,
+    propagateError = false
+  ) => {
     if (busy) return
     setBusy(true)
     try {
       await action()
     } catch (cause) {
+      if (propagateError) throw cause
       toast.error(String(cause))
     } finally {
       try {
@@ -359,28 +402,118 @@ function GbotPage() {
   const recoveryKey = recoverableControl
     ? `${recoverableControl.identity.workspace_id}:${recoverableControl.identity.session_id}:${recoverableControl.owner}`
     : ''
-  const recoverControl = () => {
-    if (!recoverableControl || recoveryConfirmation !== recoveryKey) return
-    void perform(async () => {
-      await gbot('control/recover', {
-        identity: recoverableControl.identity,
-        expected_owner: recoverableControl.owner,
-        owner,
+  const recoveryErrorKey = JSON.stringify([serviceTarget, recoveryKey])
+  const recoveryError = recoveryErrors[recoveryErrorKey]
+  const controlErrorKey = JSON.stringify([
+    serviceTarget,
+    identity?.workspace_id,
+    identity?.session_id,
+  ])
+  const controlError = controlErrors[controlErrorKey]
+  const connectionErrorKey = JSON.stringify([
+    serviceTarget,
+    workspaceId,
+    identity?.session_id,
+  ])
+  const connectionError = connectionErrors[connectionErrorKey]
+  const changeConnection = () => {
+    if (busy || connectionChange.current || !bot || setupBlocked) return
+    connectionChange.current = true
+    const key = connectionErrorKey
+    const disconnecting = Boolean(identity)
+    setConnectionErrors((previous) => ({ ...previous, [key]: undefined }))
+    void perform(
+      () =>
+        gbot(
+          disconnecting ? 'disconnect' : 'connect',
+          identity ||
+            (control && control.state !== 'bot'
+              ? control.identity
+              : {
+                  workspace_id: bot.id,
+                  session_id: crypto.randomUUID(),
+                })
+        ),
+      true
+    )
+      .catch((cause) =>
+        setConnectionErrors((previous) => ({
+          ...previous,
+          [key]: {
+            disconnecting,
+            details: cause instanceof Error ? cause.message : String(cause),
+          },
+        }))
+      )
+      .finally(() => {
+        connectionChange.current = false
       })
-      setRecoveryConfirmation('')
-    })
+  }
+  const recoverControl = () => {
+    if (
+      busy ||
+      controlChange.current ||
+      !recoverableControl ||
+      recoveryConfirmation !== recoveryKey
+    )
+      return
+    controlChange.current = true
+    const key = recoveryErrorKey
+    setRecoveryErrors((previous) => ({ ...previous, [key]: undefined }))
+    void perform(
+      async () => {
+        await gbot('control/recover', {
+          identity: recoverableControl.identity,
+          expected_owner: recoverableControl.owner,
+          owner,
+        })
+        setRecoveryConfirmation('')
+      },
+      true
+    )
+      .catch((cause) =>
+        setRecoveryErrors((previous) => ({
+          ...previous,
+          [key]: cause instanceof Error ? cause.message : String(cause),
+        }))
+      )
+      .finally(() => {
+        controlChange.current = false
+      })
   }
   const changeControl = () => {
-    if (!identity || (setupBlocked && !canHandBackDuringSetup)) return
-    void perform(() => {
-      const returning =
-        control?.state === 'human' || control?.state === 'paused'
-      if (returning) desktop.current?.stopInput()
-      return gbot(returning ? 'control/hand-back' : 'control/take-over', {
-        identity,
-        owner,
+    if (
+      busy ||
+      controlChange.current ||
+      !identity ||
+      (setupBlocked && !canHandBackDuringSetup)
+    )
+      return
+    controlChange.current = true
+    const key = controlErrorKey
+    const returning = control?.state === 'human' || control?.state === 'paused'
+    setControlErrors((previous) => ({ ...previous, [key]: undefined }))
+    if (returning) desktop.current?.stopInput()
+    void perform(
+      () =>
+        gbot(returning ? 'control/hand-back' : 'control/take-over', {
+          identity,
+          owner,
+        }),
+      true
+    )
+      .catch((cause) =>
+        setControlErrors((previous) => ({
+          ...previous,
+          [key]: {
+            returning,
+            details: cause instanceof Error ? cause.message : String(cause),
+          },
+        }))
+      )
+      .finally(() => {
+        controlChange.current = false
       })
-    })
   }
   const botHasControl = !control || control.state === 'bot'
   const ready = Boolean(
@@ -426,6 +559,8 @@ function GbotPage() {
       ? 'Ready to run this task.'
       : 'Enter a task, then choose Run.'
   })()
+  const taskErrorKey = JSON.stringify([serviceTarget, workspaceId])
+  const taskError = taskErrors[taskErrorKey]
   const add = async (connection: BotConnection) => {
     if (connection.workspaceId) {
       setSelected(connection.workspaceId)
@@ -497,6 +632,9 @@ function GbotPage() {
               variant="outline"
               size="sm"
               disabled={busy}
+              aria-describedby={
+                serviceActionError ? 'gbot-service-action-error' : undefined
+              }
               onClick={() =>
                 void changeService(serviceStopped || Boolean(error))
               }
@@ -534,6 +672,19 @@ function GbotPage() {
             }[serviceAction]
           }
         </p>
+      )}
+      {serviceActionError && (
+        <div
+          id="gbot-service-action-error"
+          role="alert"
+          className="space-y-1 border-b px-5 py-3 text-sm"
+        >
+          <p>{serviceActionError.message}</p>
+          <details className="text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="break-words">{serviceActionError.details}</p>
+          </details>
+        </div>
       )}
       {choosingService && (
         <section
@@ -836,13 +987,27 @@ function GbotPage() {
                     </p>
                     {recoveryConfirmation === recoveryKey ? (
                       <div className="flex flex-wrap gap-2">
-                        <Button disabled={busy} onClick={recoverControl}>
+                        <Button
+                          disabled={busy}
+                          aria-describedby={
+                            recoveryError
+                              ? 'gbot-settings-recovery-error'
+                              : undefined
+                          }
+                          onClick={recoverControl}
+                        >
                           Confirm recovery
                         </Button>
                         <Button
                           variant="outline"
                           disabled={busy}
-                          onClick={() => setRecoveryConfirmation('')}
+                          onClick={() => {
+                            setRecoveryConfirmation('')
+                            setRecoveryErrors((previous) => ({
+                              ...previous,
+                              [recoveryErrorKey]: undefined,
+                            }))
+                          }}
                         >
                           Cancel recovery
                         </Button>
@@ -855,6 +1020,22 @@ function GbotPage() {
                       >
                         Recover control
                       </Button>
+                    )}
+                    {recoveryError && (
+                      <div
+                        id="gbot-settings-recovery-error"
+                        role="alert"
+                        className="space-y-1"
+                      >
+                        <p>
+                          Could not recover control of this desktop. Try Confirm
+                          recovery again.
+                        </p>
+                        <details className="text-muted-foreground">
+                          <summary className="cursor-pointer">Details</summary>
+                          <p className="break-words">{recoveryError}</p>
+                        </details>
+                      </div>
                     )}
                   </div>
                 )}
@@ -888,12 +1069,32 @@ function GbotPage() {
                         <Button
                           variant="outline"
                           disabled={busy}
+                          aria-describedby={
+                            controlError ? 'gbot-settings-control-error' : undefined
+                          }
                           onClick={changeControl}
                         >
                           Hand back
                         </Button>
                       </div>
                     )}
+                  </div>
+                )}
+                {controlError && (
+                  <div
+                    id="gbot-settings-control-error"
+                    role="alert"
+                    className="space-y-1 text-sm"
+                  >
+                    <p>
+                      {controlError.returning
+                        ? 'Could not hand back control. Try again.'
+                        : 'Could not take over this desktop. Try again.'}
+                    </p>
+                    <details className="text-muted-foreground">
+                      <summary className="cursor-pointer">Details</summary>
+                      <p className="break-words">{controlError.details}</p>
+                    </details>
                   </div>
                 )}
                 <fieldset disabled={setupBlocked} className="min-w-0 space-y-4">
@@ -935,26 +1136,21 @@ function GbotPage() {
                     <Button
                       variant="outline"
                       disabled={busy}
-                      onClick={() =>
-                        void perform(() =>
-                          gbot(
-                            identity ? 'disconnect' : 'connect',
-                            identity ||
-                              (control && control.state !== 'bot'
-                                ? control.identity
-                                : {
-                                    workspace_id: bot.id,
-                                    session_id: crypto.randomUUID(),
-                                  })
-                          )
-                        )
+                      aria-describedby={
+                        connectionError
+                          ? 'gbot-settings-connection-error'
+                          : undefined
                       }
+                      onClick={changeConnection}
                     >
                       {identity ? 'Disconnect' : 'Connect'}
                     </Button>
                     {identity && !canHandBackDuringSetup && (
                       <Button
                         variant="outline"
+                        aria-describedby={
+                          controlError ? 'gbot-settings-control-error' : undefined
+                        }
                         disabled={
                           busy || (!!control?.owner && control.owner !== owner)
                         }
@@ -967,6 +1163,23 @@ function GbotPage() {
                       </Button>
                     )}
                   </div>
+                  {connectionError && (
+                    <div
+                      id="gbot-settings-connection-error"
+                      role="alert"
+                      className="space-y-1 text-sm"
+                    >
+                      <p>
+                        {connectionError.disconnecting
+                          ? 'Could not disconnect this bot’s computer. Try Disconnect again.'
+                          : 'Could not connect this bot’s computer. Try Connect again.'}
+                      </p>
+                      <details className="text-muted-foreground">
+                        <summary className="cursor-pointer">Details</summary>
+                        <p className="break-words">{connectionError.details}</p>
+                      </details>
+                    </div>
+                  )}
                   {bot.bot_pc?.kind === 'lan' && (
                     <GbotLanBot
                       key={bot.id}
@@ -1037,8 +1250,9 @@ function GbotPage() {
                         approval={approval}
                         busy={busy}
                         reply={(allow) =>
-                          perform(() =>
-                            gbot('tasks/approval', { id: approval.id, allow })
+                          perform(
+                            () => gbot('tasks/approval', { id: approval.id, allow }),
+                            true
                           )
                         }
                       />
@@ -1048,7 +1262,7 @@ function GbotPage() {
                       key={task.id}
                       className="space-y-2 rounded-lg border p-3"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-start justify-between gap-3">
                         <span className="text-sm capitalize">
                           {task.state.replaceAll('_', ' ')}
                         </span>
@@ -1061,12 +1275,14 @@ function GbotPage() {
                           resumeLabel="Resume"
                           size="default"
                           onAction={(action) =>
-                            perform(() =>
-                              gbot(`tasks/${action}`, { id: task.id })
+                            perform(
+                              () => gbot(`tasks/${action}`, { id: task.id }),
+                              true
                             )
                           }
                         />
                       </div>
+                      <GbotTaskInterruption task={task} />
                       {task.messages
                         .filter(
                           (message) =>
@@ -1089,12 +1305,14 @@ function GbotPage() {
                           request={request}
                           busy={busy}
                           reply={(response) =>
-                            perform(() =>
-                              gbot('tasks/help', {
-                                id: task.id,
-                                request_id: request.id,
-                                response,
-                              })
+                            perform(
+                              () =>
+                                gbot('tasks/help', {
+                                  id: task.id,
+                                  request_id: request.id,
+                                  response,
+                                }),
+                              true
                             )
                           }
                         />
@@ -1108,6 +1326,19 @@ function GbotPage() {
                   >
                     {taskGuidance}
                   </p>
+                  {taskError !== undefined && (
+                    <div
+                      id="gbot-task-error"
+                      role="alert"
+                      className="space-y-1 text-sm"
+                    >
+                      <p>Could not send this task. Try again.</p>
+                      <details className="text-muted-foreground">
+                        <summary className="cursor-pointer">Details</summary>
+                        <p className="break-words">{taskError}</p>
+                      </details>
+                    </div>
+                  )}
                   <form
                     className="flex gap-2"
                     aria-busy={submittingTask === workspaceId}
@@ -1126,29 +1357,50 @@ function GbotPage() {
                       const submittedPrompt = prompt
                       taskSubmission.current = true
                       setSubmittingTask(submittedIdentity.workspace_id)
-                      void perform(async () => {
-                        await gbot('tasks/start', {
-                          identity: submittedIdentity,
-                          prompt: submittedPrompt,
+                      setTaskErrors((previous) => ({
+                        ...previous,
+                        [taskErrorKey]: undefined,
+                      }))
+                      void perform(
+                        async () => {
+                          await gbot('tasks/start', {
+                            identity: submittedIdentity,
+                            prompt: submittedPrompt,
+                          })
+                          setPrompts((previous) =>
+                            previous[submittedIdentity.workspace_id] ===
+                            submittedPrompt
+                              ? {
+                                  ...previous,
+                                  [submittedIdentity.workspace_id]: '',
+                                }
+                              : previous
+                          )
+                        },
+                        true
+                      )
+                        .catch((cause) => {
+                          setTaskErrors((previous) => ({
+                            ...previous,
+                            [taskErrorKey]:
+                              cause instanceof Error
+                                ? cause.message
+                                : String(cause),
+                          }))
                         })
-                        setPrompts((previous) =>
-                          previous[submittedIdentity.workspace_id] ===
-                          submittedPrompt
-                            ? {
-                                ...previous,
-                                [submittedIdentity.workspace_id]: '',
-                              }
-                            : previous
-                        )
-                      }).finally(() => {
-                        taskSubmission.current = false
-                        setSubmittingTask(undefined)
-                      })
+                        .finally(() => {
+                          taskSubmission.current = false
+                          setSubmittingTask(undefined)
+                        })
                     }}
                   >
                     <Input
                       aria-label="Bot task"
-                      aria-describedby="gbot-task-guidance"
+                      aria-describedby={
+                        taskError !== undefined
+                          ? 'gbot-task-guidance gbot-task-error'
+                          : 'gbot-task-guidance'
+                      }
                       placeholder="Give this bot a task"
                       value={prompt}
                       onChange={(event) => {

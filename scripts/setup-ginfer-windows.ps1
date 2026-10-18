@@ -85,7 +85,7 @@ if (Test-Path -LiteralPath $locator) {
     $configuration = @{
         data_dir = Join-Path $provider 'host'
         host_url = "https://127.0.0.1:$HostPort"
-        desktop = @{ provider = $provider; engine = Join-Path $destination 'bin\ginfer-serve.exe' }
+        desktop = @{ provider = $provider; engine = Join-Path $destination 'bin\ginfer-serve.exe'; runtime_set = $false }
     }
     Write-Output "Host state and managed models: $provider (created by the host on first launch)"
 }

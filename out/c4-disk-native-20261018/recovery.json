@@ -1,0 +1,12 @@
+{
+  "requested_storage": "/media/ron/SSD_RAID/ai/tmp-c4-gui-journey-20261018/home/data/GChat/data/ginfer/models",
+  "storage_accepted": true,
+  "storage_error": null,
+  "selected_release_ids": [],
+  "download_ids": [],
+  "startup_profiles": [],
+  "time": 1792297709.5261602,
+  "host_pid": 2635956,
+  "host_children": "",
+  "models_is_directory": true
+}

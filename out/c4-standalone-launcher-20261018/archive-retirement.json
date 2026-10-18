@@ -1,0 +1,18 @@
+{
+  "removed_owned_superseded_archives": [
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/distribution/ginfer-bundle-0.1.0-linux-x86_64.tar.gz",
+      "bytes": 622162078
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/distribution-final/ginfer-bundle-0.1.0-linux-x86_64.tar.gz",
+      "bytes": 622162010
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/distribution-actionable/ginfer-bundle-0.1.0-linux-x86_64.tar.gz",
+      "bytes": 278072188
+    }
+  ],
+  "retained_final_archive": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/distribution-actionable-recovery/ginfer-bundle-0.1.0-linux-x86_64.tar.gz",
+  "retired_utc": "2026-10-18T04:47:58.841472+00:00"
+}

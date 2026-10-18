@@ -343,6 +343,13 @@ function newNode(
   return { ...newRole(id, name), workspace }
 }
 
+function nextRoleNumber(prefix: string, roles: AgentRole[]): number {
+  const ids = new Set(roles.map((role) => role.id))
+  let next = roles.length + 1
+  while (ids.has(`${prefix}-${next}`)) next += 1
+  return next
+}
+
 function cloneDefinition(definition: AgentDefinition): AgentDefinition {
   return structuredClone(definition)
 }
@@ -725,6 +732,7 @@ function AgentStudioPage() {
           <main className="min-h-0 min-w-0 overflow-y-auto p-5">
             {draft ? (
               <DefinitionEditor
+                key={draftSavedId === null ? 'unsaved' : `saved:${draftSavedId}`}
                 draft={draft}
                 modelInstances={modelInstances}
                 skills={skills
@@ -861,7 +869,8 @@ function DefinitionEditor({
             <Input
               value={draft.id}
               placeholder="created-from-name"
-              onChange={(event) => common({ id: slug(event.target.value) })}
+              onChange={(event) => common({ id: slug(event.target.value, true) })}
+              onBlur={(event) => common({ id: slug(event.target.value) })}
             />
           </Field>
         </div>
@@ -1033,14 +1042,11 @@ function DefinitionEditor({
               }
               help="Sets the maximum number of think → act → observe rounds before the role must return its answer. One round can run a batch of independent tools."
             >
-              <Input
-                type="number"
+              <RequiredNumberInput
                 min={1}
                 max={25}
                 value={draft.maxSteps}
-                onChange={(event) =>
-                  common({ maxSteps: Number(event.target.value) })
-                }
+                onValueChange={(maxSteps) => common({ maxSteps })}
               />
             </Field>
             <div className="rounded-xl border bg-muted/15 p-3 text-xs text-muted-foreground">
@@ -1240,14 +1246,11 @@ function GoalLoopEditor({
           label="Maximum cycles"
           help="One cycle is one executor result plus one evaluator decision."
         >
-          <Input
-            type="number"
+          <RequiredNumberInput
             min={1}
             max={8}
             value={draft.maxCycles}
-            onChange={(event) =>
-              onChange({ ...draft, maxCycles: Number(event.target.value) })
-            }
+            onValueChange={(maxCycles) => onChange({ ...draft, maxCycles })}
           />
         </Field>
         <div className="rounded-xl border bg-background p-3 text-xs text-muted-foreground">
@@ -1425,14 +1428,11 @@ function CoordinatorEditor({
           label="Maximum parallel workers"
           help="Limits how many specialist model instances can work at the same time."
         >
-          <Input
-            type="number"
+          <RequiredNumberInput
             min={1}
             max={Math.max(1, draft.workers.length)}
             value={draft.maxParallel}
-            onChange={(event) =>
-              onChange({ ...draft, maxParallel: Number(event.target.value) })
-            }
+            onValueChange={(maxParallel) => onChange({ ...draft, maxParallel })}
           />
         </Field>
         <div className="rounded-xl border bg-background p-3 text-xs text-muted-foreground">
@@ -1474,7 +1474,7 @@ function CoordinatorEditor({
         variant="outline"
         disabled={draft.workers.length >= 8}
         onClick={() => {
-          const next = draft.workers.length + 1
+          const next = nextRoleNumber('specialist', draft.workers)
           onChange({
             ...draft,
             workers: [
@@ -1579,31 +1579,21 @@ function WorkflowEditor({
                 }
               />
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <Field
-                  label="Depends on stage IDs"
-                  help="Comma-separate the IDs of stages that must finish before this one starts. Leave empty for an entry stage."
-                >
-                  <Input
-                    value={dependencies}
-                    placeholder="Example: research, review"
-                    onChange={(event) => {
-                      const from = event.target.value
-                        .split(',')
-                        .map((value) => slug(value))
-                        .filter(Boolean)
-                      onChange({
-                        ...draft,
-                        edges: [
-                          ...draft.edges.filter((edge) => edge.to !== node.id),
-                          ...from.map((source) => ({
-                            from: source,
-                            to: node.id,
-                          })),
-                        ],
-                      })
-                    }}
-                  />
-                </Field>
+                <WorkflowDependencyInput
+                  value={dependencies}
+                  onChange={(from) => {
+                    onChange({
+                      ...draft,
+                      edges: [
+                        ...draft.edges.filter((edge) => edge.to !== node.id),
+                        ...from.map((source) => ({
+                          from: source,
+                          to: node.id,
+                        })),
+                      ],
+                    })
+                  }}
+                />
                 <Field
                   label="Workspace"
                   help="Isolated stages can safely run in parallel and receive the source workspace read-only. A main-workspace stage can edit the user’s files and must be the only writer at its level."
@@ -1633,7 +1623,7 @@ function WorkflowEditor({
         variant="outline"
         disabled={draft.nodes.length >= 8}
         onClick={() => {
-          const next = draft.nodes.length + 1
+          const next = nextRoleNumber('stage', draft.nodes)
           onChange({
             ...draft,
             nodes: [...draft.nodes, newNode(`stage-${next}`, `Stage ${next}`)],
@@ -1643,6 +1633,79 @@ function WorkflowEditor({
         <IconPlus /> Add stage
       </Button>
     </section>
+  )
+}
+
+function RequiredNumberInput({
+  value,
+  onValueChange,
+  ...props
+}: Omit<
+  React.ComponentProps<typeof Input>,
+  'type' | 'value' | 'onChange' | 'onBlur'
+> & {
+  value: number
+  onValueChange: (value: number) => void
+}) {
+  const [draftValue, setDraftValue] = useState<{
+    text: string
+    numeric: number
+  } | null>(null)
+
+  useEffect(() => {
+    setDraftValue((current) => (current?.numeric === value ? current : null))
+  }, [value])
+
+  return (
+    <Input
+      {...props}
+      type="number"
+      // Keep an empty edit visible while the definition still receives a number.
+      value={draftValue?.numeric === value ? draftValue.text : String(value)}
+      onChange={(event) => {
+        const text = event.target.value
+        const numeric = Number(text)
+        setDraftValue({ text, numeric })
+        onValueChange(numeric)
+      }}
+      onBlur={() => setDraftValue(null)}
+    />
+  )
+}
+
+function WorkflowDependencyInput({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (dependencies: string[]) => void
+}) {
+  const [draftValue, setDraftValue] = useState<{
+    text: string
+    normalized: string
+  } | null>(null)
+
+  return (
+    <Field
+      label="Depends on stage IDs"
+      help="Comma-separate the IDs of stages that must finish before this one starts. Leave empty for an entry stage."
+    >
+      <Input
+        // Preserve punctuation while typing; external graph edits take precedence.
+        value={draftValue?.normalized === value ? draftValue.text : value}
+        placeholder="Example: research, review"
+        onChange={(event) => {
+          const text = event.target.value
+          const dependencies = text
+            .split(',')
+            .map((source) => slug(source))
+            .filter(Boolean)
+          setDraftValue({ text, normalized: dependencies.join(', ') })
+          onChange(dependencies)
+        }}
+        onBlur={() => setDraftValue(null)}
+      />
+    </Field>
   )
 }
 
@@ -1711,14 +1774,11 @@ function RoleEditor({
           label="Maximum tool steps"
           help="The most think → act → observe rounds this role may use."
         >
-          <Input
-            type="number"
+          <RequiredNumberInput
             min={1}
             max={25}
             value={role.maxSteps}
-            onChange={(event) =>
-              onChange({ ...role, maxSteps: Number(event.target.value) })
-            }
+            onValueChange={(maxSteps) => onChange({ ...role, maxSteps })}
           />
         </Field>
         <div className="rounded-xl border bg-muted/15 p-3 text-xs text-muted-foreground">
@@ -2186,10 +2246,12 @@ function RunInspector({
                   </Button>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Continuation opens a new run setup with prior findings for
-                review. It does not resume execution or replay tool calls.
-              </p>
+              {selected.status !== 'finished' && (
+                <p className="text-xs text-muted-foreground">
+                  Continuation opens a new run setup with prior findings for
+                  review. It does not resume execution or replay tool calls.
+                </p>
+              )}
             </section>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">

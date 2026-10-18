@@ -1,0 +1,188 @@
+  92:24  warning  The ref value 'refreshVersion.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'refreshVersion.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+  64:24  warning  The ref value 'requestVersion.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'requestVersion.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+  279:19  warning  The ref value 'latestReads.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'latestReads.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+  453:64  warning  The ref value 'historyRequest.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'historyRequest.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+  187:5  warning  React Hook useCallback has a missing dependency: 'sel'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+✖ 5 problems (0 errors, 5 warnings)
+# Subtest: secure storage results show neutral success and an error alert only on failure
+ok 6 - secure storage results show neutral success and an error alert only on failure
+# Subtest: Forget removes the host while its credential warning survives snapshots and refresh errors
+ok 9 - Forget removes the host while its credential warning survives snapshots and refresh errors
+# Subtest: Forget with no credential warning shows ordinary successful removal
+ok 10 - Forget with no credential warning shows ordinary successful removal
+# Subtest: screened startup profiles remain selectable with the full-context warning and witnessed cap
+ok 54 - screened startup profiles remain selectable with the full-context warning and witnessed cap
+   ✓ Workspace AGENTS.md instructions > keeps a failed read retryable and clears its error while reading again  308ms
+stdout | src/hooks/__tests__/useAppUpdater.test.ts > useAppUpdater > checkForUpdate > should handle errors during update check
+stdout | src/hooks/__tests__/useAppUpdater.test.ts > useAppUpdater > downloadAndInstallUpdate > should handle download errors
+stdout | src/hooks/__tests__/useAppUpdater.test.ts > useAppUpdater > downloadAndInstallUpdate > should handle download errors
+   ✓ useAppUpdater > downloadAndInstallUpdate > should handle download errors  1010ms
+stderr | src/lib/__tests__/custom-chat-transport.harness.test.ts > CustomChatTransport production harness > logs exact context and format warning evidence without changing errors or reusing previous request counts
+  responseBody: [32m'{"error":{"message":"The current request cannot fit after safe compaction.","type":"invalid_request_error","param":"messages","code":"context_turn_too_large","inputTokens":131009,"inputBudget":122624,"summaryInputTokens":4096,"configuredContextTokens":131072}}'[39m
+stderr | src/lib/__tests__/custom-chat-transport.harness.test.ts > CustomChatTransport production harness > logs exact context and format warning evidence without changing errors or reusing previous request counts
+stderr | src/lib/__tests__/custom-chat-transport.harness.test.ts > CustomChatTransport production harness > logs exact context and format warning evidence without changing errors or reusing previous request counts
+  Error message: [{"code":"invalid_union","errors":[[{"code":"invalid_value","values":["system"],"path":["role"],"message":"Invalid input: expected \"system\""},{"expected":"string","code":"invalid_type","path":["content"],"message":"Invalid input: expected string, received array"}],[{"code":"invalid_value","values":["user"],"path":["role"],"message":"Invalid input: expected \"user\""},{"code":"invalid_union","errors":[[{"expected":"string","code":"invalid_type","path":[],"message":"Invalid input: expected string, received array"}],[{"code":"invalid_union","errors":[[{"code":"invalid_value","values":["text"],"path":["type"],"message":"Invalid input: expected \"text\""},{"expected":"string","code":"invalid_type","path":["text"],"message":"Invalid input: expected string, received undefined"}],[{"code":"invalid_value","values":["image"],"path":["type"],"message":"Invalid input: expected \"image\""},{"code":"invalid_union","errors":[[{"code":"invalid_union","errors":[[{"expected":"string","code":"invalid_type","path":[],"message":"Invalid input: expected string, received undefined"}],[{"code":"invalid_type","expected":"Uint8Array","path":[],"message":"Invalid input: expected Uint8Array, received undefined"}],[{"code":"invalid_type","expected":"ArrayBuffer","path":[],"message":"Invalid input: expected ArrayBuffer, received undefined"}],[{"code":"custom","path":[],"message":"Must be a Buffer"}]],"path":[],"message":"Invalid input"}],[{"code":"invalid_type","expected":"URL","path":[],"message":"Invalid input: expected URL, received undefined"}]],"path":["image"],"message":"Invalid input"}],[{"code":"invalid_value","values":["file"],"path":["type"],"message":"Invalid input: expected \"file\""},{"code":"invalid_union","errors":[[{"code":"invalid_union","errors":[[{"expected":"string","code":"invalid_type","path":[],"message":"Invalid input: expected string, received undefined"}],[{"code":"invalid_type","expected":"Uint8Array","path":[],"message":"Invalid input: expected Uint8Array, received undefined"}],[{"code":"invalid_type","expected":"ArrayBuffer","path":[],"message":"Invalid input: expected ArrayBuffer, received undefined"}],[{"code":"custom","path":[],"message":"Must be a Buffer"}]],"path":[],"message":"Invalid input"}],[{"code":"invalid_type","expected":"URL","path":[],"message":"Invalid input: expected URL, received undefined"}]],"path":["data"],"message":"Invalid input"},{"expected":"string","code":"invalid_type","path":["mediaType"],"message":"Invalid input: expected string, received undefined"}]],"path":[0],"message":"Invalid input"}]],"path":["content"],"message":"Invalid input"}],[{"code":"invalid_value","values":["assistant"],"path":["role"],"message":"Invalid input: expected \"assistant\""},{"code":"invalid_union","errors":[[{"expected":"string","code":"invalid_type","path":[],"message":"Invalid input: expected string, received array"}],[{"code":"invalid_union","errors":[[{"code":"invalid_value","values":["text"],"path":["type"],"message":"Invalid input: expected \"text\""},{"expected":"string","code":"invalid_type","path":["text"],"message":"Invalid input: expected string, received undefined"}],[{"code":"invalid_value","values":["file"],"path":["type"],"message":"Invalid input: expected \"file\""},{"code":"invalid_union","errors":[[{"code":"invalid_union","errors":[[{"expected":"string","code":"invalid_type","path":[],"message":"Invalid input: expected string, received undefined"}],[{"code":"invalid_type","expected":"Uint8Array","path":[],"message":"Invalid input: expected Uint8Array, received undefined"}],[{"code":"invalid_type","expected":"ArrayBuffer","path":[],"message":"Invalid input: expected ArrayBuffer, received undefined"}],[{"code":"custom","path":[],"message":"Must be a Buffer"}]],"path":[],"message":"Invalid input"}],[{"code":"invalid_type","expected":"URL","path":[],"message":"Invalid input: expected URL, received undefined"}]],"path":["data"],"message":"Invalid input"},{"expected":"string","code":"invalid_type","path":["mediaType"],"message":"Invalid input: expected string, received undefined"}],[{"code":"invalid_value","values":["reasoning"],"path":["type"],"message":"Invalid input: expected \"reasoning\""},{"expected":"string","code":"invalid_type","path":["text"],"message":"Invalid input: expected string, received undefined"}],[{"code":"invalid_value","values":["tool-call"],"path":["type"],"message":"Invalid input: expected \"tool-call\""}],[{"code":"invalid_union","errors":[[{"expected":"null","code":"invalid_type","path":[],"message":"Invalid input: expected null, received object"}],[{"expected":"string","code":"invalid_type","path":[],"message":"Invalid input: expected string, received object"}],[{"expected":"number","code":"invalid_type","path":[],"message":"Invalid input: expected number, received object"}],[{"expected":"boolean","code":"invalid_type","path":[],"message":"Invalid input: expected boolean, received object"}],[{"code":"invalid_union","errors":[[{"expected":"null","code":"invalid_type","path":[],"message":"Invalid input: expected null, received object"}],[{"expected":"string","code":"invalid_type","path":[],"message":"Invalid input: expected string, received object"}],[{"expected":"number","code":"invalid_type","path":[],"message":"Invalid input: expected number, received object"}],[{"expected":"boolean","code":"invalid_type","path":[],"message":"Invalid input: expected boolean, received object"}],[{"code":"invalid_union","errors":[[{"expected":"null","code":"invalid_type","path":[],"message":"Invalid input: expected null, received undefined"}],[{"expected":"string","code":"invalid_type","path":[],"message":"Invalid input: expected string, received undefined"}],[{"expected":"number","code":"invalid_type","path":[],"message":"Invalid input: expected number, received undefined"}],[{"expected":"boolean","code":"invalid_type","path":[],"message":"Invalid input: expected boolean, received undefined"}],[{"expected":"record","code":"invalid_type","path":[],"message":"Invalid input: expected record, received undefined"}],[{"expected":"array","code":"invalid_type","path":[],"message":"Invalid input: expected array, received undefined"}]],"path":["absent"],"message":"Invalid input"}],[{"expected":"array","code":"invalid_type","path":[],"message":"Invalid input: expected array, received object"}]],"path":["nested"],"message":"Invalid input"}],[{"expected":"array","code":"invalid_type","path":[],"message":"Invalid input: expected array, received object"}]],"path":["output","value"],"message":"Invalid input"}]],"path":[0],"message":"Invalid input"}]],"path":["content"],"message":"Invalid input"}],[{"code":"invalid_union","errors":[[{"expected":"null","code":"invalid_type","path":[],"message":"Invalid input: expected null, received object"}],[{"expected":"string","code":"invalid_type","path":[],"message":"Invalid input: expected string, received object"}],[{"expected":"number","code":"invalid_type","path":[],"message":"Invalid input: expected number, received object"}],[{"expected":"boolean","code":"invalid_type","path":[],"message":"Invalid input: expected boolean, received object"}],[{"code":"invalid_union","errors":[[{"expected":"null","code":"invalid_type","path":[],"message":"Invalid input: expected null, received object"}],[{"expected":"string","code":"invalid_type","path":[],"message":"Invalid input: expected string, received object"}],[{"expected":"number","code":"invalid_type","path":[],"message":"Invalid input: expected number, received object"}],[{"expected":"boolean","code":"invalid_type","path":[],"message":"Invalid input: expected boolean, received object"}],[{"code":"invalid_union","errors":[[{"expected":"null","code":"invalid_type","path":[],"message":"Invalid input: expected null, received undefined"}],[{"expected":"string","code":"invalid_type","path":[],"message":"Invalid input: expected string, received undefined"}],[{"expected":"number","code":"invalid_type","path":[],"message":"Invalid input: expected number, received undefined"}],[{"expected":"boolean","code":"invalid_type","path":[],"message":"Invalid input: expected boolean, received undefined"}],[{"expected":"record","code":"invalid_type","path":[],"message":"Invalid input: expected record, received undefined"}],[{"expected":"array","code":"invalid_type","path":[],"message":"Invalid input: expected array, received undefined"}]],"path":["absent"],"message":"Invalid input"}],[{"expected":"array","code":"invalid_type","path":[],"message":"Invalid input: expected array, received object"}]],"path":["nested"],"message":"Invalid input"}],[{"expected":"array","code":"invalid_type","path":[],"message":"Invalid input: expected array, received object"}]],"path":["content",0,"output","value"],"message":"Invalid input"}]],"path":[2],"message":"Invalid input"}]
+    [[32mSymbol(vercel.ai.error)[39m]: [33mtrue[39m,
+    [[32mSymbol(vercel.ai.error.AI_TypeValidationError)[39m]: [33mtrue[39m
+  [[32mSymbol(vercel.ai.error)[39m]: [33mtrue[39m,
+  [[32mSymbol(vercel.ai.error.AI_InvalidPromptError)[39m]: [33mtrue[39m
+Could not log Chat warning: TypeError: window.__TAURI_INTERNALS__.invoke is not a function
+    at logChatWarning [90m(/work/gchat/[39mweb-app/src/lib/chat-warning.ts:86:8[90m)[39m
+Could not log Chat warning: TypeError: window.__TAURI_INTERNALS__.invoke is not a function
+    at logChatWarning [90m(/work/gchat/[39mweb-app/src/lib/chat-warning.ts:86:8[90m)[39m
+Could not log Chat warning: TypeError: window.__TAURI_INTERNALS__.invoke is not a function
+    at logChatWarning [90m(/work/gchat/[39mweb-app/src/lib/chat-warning.ts:86:8[90m)[39m
+stdout | src/services/__tests__/models.test.ts > DefaultModelsService > fetchModelCatalog > should fall back to baseline on HTTP error
+stderr | src/services/__tests__/models.test.ts > DefaultModelsService > fetchModelCatalog > should fall back to baseline on HTTP error
+stdout | src/services/__tests__/models.test.ts > DefaultModelsService > fetchModelCatalog > should fall back to baseline on network error
+stderr | src/services/__tests__/models.test.ts > DefaultModelsService > fetchModelCatalog > should fall back to baseline on network error
+[model-catalog-registry] Falling back: Network error
+stderr | src/services/__tests__/models.test.ts > DefaultModelsService > startModel > should handle start model error
+stderr | src/services/__tests__/models.test.ts > DefaultModelsService > isModelSupported > should return GREY when there is an error
+Error checking model support for /path/to/model.gguf: Error: Test error
+stderr | src/containers/__tests__/GlobalError.test.tsx > GlobalError Component > should render error message for Error instance
+Error in root route: Error: Test error message
+stderr | src/containers/__tests__/GlobalError.test.tsx > GlobalError Component > should render error message for non-Error instance
+Error in root route: String error message
+Error in root route: Error: Test error
+Error in root route: Error: Test error
+stderr | src/containers/__tests__/GlobalError.test.tsx > GlobalError Component > should render proper error structure with styling
+Error in root route: Error: Test error
+This will cause a hydration error.
+stderr | src/services/__tests__/path.test.ts > TauriPathService > sep > should return default separator on error
+Error getting path separator in Tauri: Error: Test error
+stderr | src/services/__tests__/path.test.ts > TauriPathService > join > should fallback to slash joining on error
+Error joining paths in Tauri: Error: Test error
+stderr | src/services/__tests__/path.test.ts > TauriPathService > dirname > should fallback to manual dirname extraction on error
+Error getting dirname in Tauri: Error: Test error
+Error getting dirname in Tauri: Error: Test error
+Error getting basename in Tauri: Error: Test error
+Error getting basename in Tauri: Error: Test error
+Error getting basename in Tauri: Error: Test error
+Error getting basename in Tauri: Error: Test error
+Error getting basename in Tauri: Error: Test error
+Error getting basename in Tauri: Error: Test error
+Error getting basename in Tauri: Error: Test error
+Error getting basename in Tauri: Error: Test error
+Error getting basename in Tauri: Error: Test error
+Error getting basename in Tauri: Error: Test error
+stderr | src/services/__tests__/path.test.ts > TauriPathService > extname > should fallback to manual extension extraction on error
+Error getting extname in Tauri: Error: Test error
+Error getting extname in Tauri: Error: Test error
+Error getting extname in Tauri: Error: Test error
+Error getting extname in Tauri: Error: Test error
+stderr | src/services/__tests__/threads.test.ts > DefaultThreadsService > fetchThreads > should handle error and return empty array
+ ✓ |@gchat/web-app| src/utils/__tests__/error.test.ts (32 tests) 11ms
+ ✓ |@gchat/web-app| src/lib/__tests__/disk-space-warning.test.ts (3 tests) 7ms
+ Test Files  338 passed | 1 skipped (339)
+      Tests  3357 passed | 6 skipped (3363)
+  chat-warning.ts  |   98.73 |    81.25 |     100 |   98.73 | 65                
+  error.ts         |   91.48 |    86.02 |      80 |   91.48 | ...87,89-90,98-99 
+ Test Files  5 passed (5)
+      Tests  121 passed (121)
+Coverage floor passed (6 critical files).
+cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli -- --test-threads=1
+   Compiling thiserror v1.0.69
+   Compiling thiserror v2.0.18
+   Compiling thiserror-impl v1.0.69
+   Compiling thiserror-impl v2.0.18
+   Compiling proc-macro-error-attr v1.0.4
+   Compiling proc-macro-error v1.0.4
+test core::agent::batch_executor::tests::isolates_error_outcomes_from_siblings ... ok
+test core::agent::capabilities::tests::ipc_catalog_preserves_gbot_resource_initialization_errors ... ok
+test core::agent::compressor::tests::extracts_the_first_error_signature ... ok
+test core::agent::ginfer_client::tests::extracts_and_caps_server_error_detail ... ok
+test core::agent::runner_tests::ginfer_http_error_is_reported_as_model_failure ... ok
+test core::agent::session::tests::failed_verbose_results_keep_the_key_error_signature ... ok
+test core::agent::tools::web::tests::preserves_fallback_errors_and_records_the_route ... ok
+test core::agent::tools::web_exa::tests::rejects_mcp_errors_malformed_and_empty_content ... ok
+test core::connectors::accounts::tests::microsoft_error_body_is_bounded_even_without_content_length_and_honors_disconnect ... ok
+test core::connectors::accounts::tests::microsoft_errors_use_known_codes_without_inferring_account_kind ... ok
+test core::connectors::accounts::tests::microsoft_token_errors_preserve_rate_server_and_reconnect_semantics ... ok
+test core::engine_hosts::registration_tests::host_errors_read_as_plain_sentences_without_json_quoting ... ok
+test core::mcp::tests::test_extension_disconnected_error_detection ... ok
+test core::mcp::tests::test_mcp_call_errors_redact_configured_credentials ... ok
+test core::mcp::tests::test_mcp_server_status_exposes_runtime_error ... ok
+test core::mcp::tests::test_mcp_start_error_preserves_transport_error_and_stderr_context ... ok
+test core::mcp::tests::test_mcp_tool_error_payload_redacts_credentials_but_success_preserves_output ... ok
+test core::server::context_error::tests::classifies_only_context_failures_on_supported_statuses ... ok
+test core::server::proxy::context_error_tests::cors_empty_origin_does_not_set_acao ... ok
+test core::server::proxy::context_error_tests::cors_trusted_origin_reflects_acao ... ok
+test core::server::proxy::context_error_tests::cors_untrusted_origin_omits_acao ... ok
+test core::server::proxy::context_error_tests::detects_503_context_overflow ... ok
+test core::server::proxy::context_error_tests::detects_already_structured_error_body ... ok
+test core::server::proxy::context_error_tests::detects_ctx_overflow_400 ... ok
+test core::server::proxy::context_error_tests::detects_ctx_overflow_500 ... ok
+test core::server::proxy::context_error_tests::detects_detail_ctx_overflow_500 ... ok
+test core::server::proxy::context_error_tests::detects_ui_canonical_phrase ... ok
+test core::server::proxy::context_error_tests::error_code_for_prioritizes_ctx_overflow_then_oom ... ok
+test core::server::proxy::context_error_tests::ignores_200_even_with_matching_body ... ok
+test core::server::proxy::context_error_tests::ignores_401_403_404 ... ok
+test core::server::proxy::context_error_tests::ignores_413_without_context_keyword ... ok
+test core::server::proxy::context_error_tests::ignores_unrelated_5xx ... ok
+test core::server::proxy::context_error_tests::structure_backend_error_body_passes_through_structured ... ok
+test core::server::proxy::context_error_tests::structure_backend_error_body_wraps_detail_with_ctx_code ... ok
+test core::server::proxy::context_error_tests::structure_backend_error_body_wraps_oom_with_oom_code ... ok
+test core::server::proxy::context_error_tests::structure_backend_error_body_wraps_plaintext_as_server_error ... ok
+test core::server::proxy::context_error_tests::structured_error_json_shape ... ok
+test core::server::proxy::request_contract_tests::native_messages_errors_keep_the_backend_error_without_retry ... ok
+test core::server::proxy::request_contract_tests::remote_native_messages_preserve_controls_and_do_not_retry_validation_errors ... ok
+test core::threads::ipc_tests::serializes_assistant_not_found_errors ... ok
+test core::threads::ipc_tests::serializes_message_errors_and_malformed_jsonl ... ok
+test core::threads::ipc_tests::serializes_thread_errors_and_skips_corrupt_metadata ... ok
+test core::threads::tests::reports_assistant_errors ... ok
+test core::threads::tests::reports_thread_update_errors ... ok
+test result: ok. 730 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 31.02s
+cargo test --manifest-path src-tauri/plugins/tauri-plugin-ginfer/Cargo.toml
+   Compiling thiserror-impl v1.0.69
+   Compiling thiserror-impl v2.0.18
+   Compiling thiserror v1.0.69
+   Compiling thiserror v2.0.18
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.56s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml
+test facade::tests::request_resources_delimiter_fragments_preserve_raw_frames_and_errors ... ok
+test facade::tests::public_response_adapter_preserves_errors_and_stream_usage ... ok
+test first_run::tests::deferred_storage_and_capacity_errors_require_an_explicit_corrected_choice ... ok
+test first_run::tests::maintenance_retry_rechecks_the_saved_folder_after_a_storage_error ... ok
+test hardware_profile::tests::hardware_profile_route_cancellation_propagates_only_its_reap_error ... ok
+test local_inference::tests::desktop_can_read_errors_instead_of_hanging_behind_cors ... ok
+test service::disk_full_tests::disk_full_errors_become_plain_and_others_pass_through ... ok
+test service::resource_tests::service_resource_scan_deduplicates_managed_paths_and_refreshes_errors ... ignored, global allocation measurement; run explicitly with --test-threads=1
+test result: ok. 250 passed; 0 failed; 13 ignored; 0 measured; 0 filtered out; finished in 16.49s
+test result: ok. 6 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.73s
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test committed_fleet_edit_survives_registry_read_error_and_membership_retries ... ok
+test snapshot_batch_observes_hosts_concurrently_and_preserves_order_and_errors ... ok
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.62s
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.66s
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo test --manifest-path src-tauri/Cargo.toml -p ginfer-manager
+test native_tests::tray_share_uses_first_online_local_and_preserves_errors_and_toggle ... ok
+test native_tests::refresh_keeps_current_locators_order_and_exact_error_fallbacks ... ok
+test native_tests::command_refresh_error_preserves_snapshot_bytes_and_cached_observation ... ok
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo test --manifest-path src-tauri/Cargo.toml -p gbot-service
+   Compiling thiserror-impl v2.0.18
+   Compiling thiserror v2.0.18
+test contract::tests::status_cancel_and_remote_errors_stay_bound_to_guest_operations ... ok
+test ssh::plain_error_tests::connection_errors_speak_of_the_bots_computer_and_say_what_to_check ... ok
+test api::tests::ssh_key_import_authentication_errors_and_vault_only_storage ... ok
+test tasks::tests::task_mutex_holder_cancellation_and_error_clear_diagnostics ... ok
+test result: ok. 103 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.73s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test other_guest_close_errors_remain_failures_with_the_gateway_stopped ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+test lan_tools_require_consent_stage_over_pinned_ssh_and_preserve_retry_errors ... ok
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.79s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo test --manifest-path src-tauri/plugins/tauri-plugin-hardware/Cargo.toml
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo test --manifest-path src-tauri/utils/Cargo.toml
+test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.63s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

@@ -1,0 +1,101 @@
+{
+  "stages": {
+    "focused": {
+      "start": "2026-10-18T05:44:06Z",
+      "end": "2026-10-18T05:44:28Z",
+      "exit": 0,
+      "totals": {
+        "passed": 19,
+        "failed": 0,
+        "ignored": 1
+      }
+    },
+    "check": {
+      "start": "2026-10-18T05:44:28Z",
+      "end": "2026-10-18T05:44:35Z",
+      "exit": 0
+    },
+    "clippy": {
+      "start": "2026-10-18T05:44:35Z",
+      "end": "2026-10-18T05:44:41Z",
+      "exit": 0
+    },
+    "verify": {
+      "start": "2026-10-18T05:44:41Z",
+      "end": "2026-10-18T05:46:33Z",
+      "exit": 2
+    },
+    "core-build": {
+      "start": "2026-10-18T05:49:27Z",
+      "end": "2026-10-18T05:49:29Z",
+      "exit": 0
+    },
+    "coverage-continuation": {
+      "start": "2026-10-18T05:49:29Z",
+      "end": "2026-10-18T05:50:59Z",
+      "exit": 0
+    },
+    "rust-continuation": {
+      "start": "2026-10-18T05:50:59Z",
+      "end": "2026-10-18T05:53:31Z",
+      "exit": 0,
+      "totals": {
+        "passed": 1249,
+        "failed": 0,
+        "ignored": 28
+      }
+    }
+  },
+  "source_before": "abdea19c6cb91f9da81d6163443a37c13263550393c7be31aed26f0278ecf827",
+  "source_after": "abdea19c6cb91f9da81d6163443a37c13263550393c7be31aed26f0278ecf827",
+  "row": "GUI-FIRST-RUN-RETRY-FOLLOWUPS",
+  "status": "PASS_WITH_GATE_CONTINUATION",
+  "branch": "fix/c4-first-run-retry-followups-20261018",
+  "base": "50aa7e1cc",
+  "host": "AIS-2-8592-L01",
+  "platform": "native Linux x86_64",
+  "image": "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+  "cpus": "112-119",
+  "regressions": [
+    "maintenance_retry_accepts_gpu_and_complete_without_rewriting_progress",
+    "stale_maintenance_retry_returns_current_status_without_writing_or_waking"
+  ],
+  "make_verify_invocations": 1,
+  "verify_first_failure": {
+    "cause": "Private fresh source stage omitted generated core/dist; @gchat/core entry could not resolve before assertions",
+    "preceding_passed": [
+      "lint (five existing warnings; no errors)",
+      "typecheck",
+      "quality guards",
+      "registry contracts",
+      "manager UI",
+      "Tauri assets"
+    ],
+    "continuation": "Build @gchat/core from exact staged source; run only failed make test-coverage-critical and unrun make test-rust; no second make verify",
+    "prevention": "Build @gchat/core before gates in fresh isolated source stages"
+  },
+  "coverage": {
+    "app_core_passed": 3378,
+    "app_core_skipped": 6,
+    "app_core_files_passed": 339,
+    "app_core_files_skipped": 1,
+    "extension_passed": 127,
+    "extension_files_passed": 5,
+    "critical_floors_passed": 6
+  },
+  "isolation": {
+    "private_ssd_source_and_caches": true,
+    "private_home_xdg": true,
+    "dependencies_offline": true,
+    "network": "Docker bridge for existing UDP route fixture",
+    "donor_copy_terminal": "2026-10-18T05:41:28Z",
+    "donor_mutated": false
+  },
+  "limits": [
+    "No native desktop GUI acceptance run",
+    "No Windows build or run",
+    "No GPU or model load",
+    "No Engine source touched; Engine CTest not required"
+  ],
+  "resource_status": "Native checks terminal05:53:31Z; stopped containers and owned21GiB SSD root retired; booking3047 returned"
+}

@@ -1752,6 +1752,11 @@ mod tests {
         let sentinel = models.join("reset-sentinel.txt");
         fs::write(&sentinel, "PRESERVE_UNTIL_HOST_EXIT").unwrap();
         let fleet = TestFleet::desktop_reset(&data).await;
+        let remote = TestFleet::unconfigured().await;
+        let remote_registration = remote.client.registered().await.unwrap();
+        assert_eq!(remote_registration.len(), 1);
+        fleet.register(&remote).await;
+        assert_eq!(fleet.client.registered().await.unwrap().len(), 2);
         let pids = start_reset_host_children(&fleet, &models).await;
         let ginfer = GinferState::default();
         assert!(ginfer.ginfer_process.lock().await.is_empty());
@@ -1794,6 +1799,16 @@ mod tests {
         .expect("reset must stop Host-owned Ready and Starting children and await ownership release");
         assert!(!models.exists());
         assert!(!data.join("ginfer/host/host.json").exists());
+        assert_eq!(
+            fleet.client.registered().await.unwrap(),
+            remote_registration,
+            "reset must forget the deleted local Host without removing another saved Host"
+        );
+        assert_eq!(
+            fleet.second_client().registered().await.unwrap(),
+            remote_registration,
+            "local Host removal must survive reopening the shared registry"
+        );
         assert!(app
             .state::<GinferState>()
             .ginfer_process
@@ -1827,6 +1842,8 @@ mod tests {
         let fleet = TestFleet::desktop_reset(&data).await;
         let pids = start_reset_host_children(&fleet, &models).await;
         let host_state = fs::read(data.join("ginfer/host/host.json")).unwrap();
+        let saved_hosts = fleet.client.registered().await.unwrap();
+        assert_eq!(saved_hosts.len(), 1);
         let app = tauri::test::mock_builder()
             .manage(GinferState::default())
             .manage(fleet.client.clone())
@@ -1873,6 +1890,16 @@ mod tests {
         assert_eq!(
             fs::read(data.join("ginfer/host/host.json")).unwrap(),
             host_state
+        );
+        assert_eq!(
+            fleet.client.registered().await.unwrap(),
+            saved_hosts,
+            "an unsuccessful reset must preserve the saved local Host"
+        );
+        assert_eq!(
+            fleet.second_client().registered().await.unwrap(),
+            saved_hosts,
+            "an unsuccessful reset must not change the durable shared registry"
         );
         assert_eq!(
             state.mcp_active_servers.lock().await.get("still-needed"),

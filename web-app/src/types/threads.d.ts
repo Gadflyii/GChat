@@ -42,6 +42,7 @@ type Thread = {
   isFavorite?: boolean
 
   model?: ThreadModel
+  created?: number
   updated: number
   order?: number
   metadata?: {

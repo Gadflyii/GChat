@@ -110,7 +110,7 @@ export function AgentRunSetup({
         if (!open) close()
       }}
     >
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="grid-cols-1 max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Run {definition.name}</DialogTitle>
           <DialogDescription>

@@ -840,18 +840,6 @@ fn command_for_shell(
     command
 }
 
-fn default_open_code_command(windows: bool) -> &'static str {
-    if windows {
-        // npm/nvm installs both opencode.ps1 and opencode.cmd. PowerShell's
-        // bare-name resolution prefers the .ps1 shim, which is blocked on a
-        // default Restricted execution policy. Naming the application shim
-        // explicitly preserves the user's policy and works in the same PTY.
-        "opencode.cmd"
-    } else {
-        "opencode"
-    }
-}
-
 fn shell_literal(value: &str, windows: bool) -> String {
     if windows {
         format!("'{}'", value.replace('\'', "''"))
@@ -869,36 +857,36 @@ fn windows_cli_path(path: &Path) -> String {
         .unwrap_or_else(|| value.into_owned())
 }
 
-fn format_open_code_command(executable: Option<&str>, cwd: &Path, windows: bool) -> String {
+fn format_open_code_command(executable: &Path, cwd: &Path, windows: bool) -> String {
     let workspace = if windows {
         windows_cli_path(cwd)
     } else {
         cwd.to_string_lossy().into_owned()
     };
-    let executable = match executable {
-        Some(path) if windows => format!("& {}", shell_literal(path, true)),
-        Some(path) => shell_literal(path, false),
-        None => default_open_code_command(windows).to_string(),
+    let executable = if windows {
+        format!("& {}", shell_literal(&windows_cli_path(executable), true))
+    } else {
+        shell_literal(&executable.to_string_lossy(), false)
     };
     format!("{executable} {}\r", shell_literal(&workspace, windows))
 }
 
-fn quote_open_code_command(executable: Option<&str>, cwd: &Path) -> Result<Vec<u8>, String> {
-    let executable = executable.map(str::trim).filter(|path| !path.is_empty());
-    if let Some(path) = executable {
-        let path = Path::new(path);
-        if !path.is_absolute() || !path.is_file() {
-            return Err("The custom OpenCode executable must be an absolute file path".to_string());
-        }
-    }
+fn quote_open_code_command(
+    data: &Path,
+    custom_path: Option<&str>,
+    cwd: &Path,
+) -> Result<(PathBuf, Vec<u8>), String> {
+    let executable = super::system::opencode_runtime::resolve(data, custom_path)?
+        .ok_or("OpenCode is not installed. Set up Code before starting a workspace.")?
+        .executable;
 
     #[cfg(windows)]
-    let command = format_open_code_command(executable, cwd, true);
+    let command = format_open_code_command(&executable, cwd, true);
 
     #[cfg(not(windows))]
-    let command = format_open_code_command(executable, cwd, false);
+    let command = format_open_code_command(&executable, cwd, false);
 
-    Ok(command.into_bytes())
+    Ok((executable, command.into_bytes()))
 }
 
 fn format_hermes_command(executable: Option<&str>, windows: bool) -> String {
@@ -1147,22 +1135,21 @@ pub fn terminal_spawn<R: Runtime>(
         .to_str()
         .ok_or_else(|| "The terminal workspace path must be valid Unicode".to_string())?
         .to_string();
+    let mut opencode_executable = None;
+    let mut opencode_directory = None;
     let mut launch_command = match request.launch {
         TerminalLaunch::Shell => None,
-        TerminalLaunch::OpenCode => Some(quote_open_code_command(
-            request.executable.as_deref(),
-            &cwd,
-        )?),
-        TerminalLaunch::Hermes => Some(quote_hermes_command(request.executable.as_deref())?),
-    };
-    let opencode_directory = match request.launch {
-        TerminalLaunch::Shell | TerminalLaunch::Hermes => None,
         TerminalLaunch::OpenCode => {
             let data = super::app::commands::get_jan_data_folder_path(app.clone());
+            let (executable, command) =
+                quote_open_code_command(&data, request.executable.as_deref(), &cwd)?;
+            opencode_executable = Some(windows_cli_path(&executable));
             let directory = super::system::opencode_config::config_directory(&data);
             install_gchat_opencode_theme(&directory)?;
-            Some(directory)
+            opencode_directory = Some(directory);
+            Some(command)
         }
+        TerminalLaunch::Hermes => Some(quote_hermes_command(request.executable.as_deref())?),
     };
     let hermes_appearance = match request.launch {
         TerminalLaunch::Hermes => Some(request.appearance.unwrap_or(TerminalAppearance::Dark)),
@@ -1250,7 +1237,7 @@ pub fn terminal_spawn<R: Runtime>(
                 directory: windows_cli_path(&cwd),
                 port,
                 password: password.clone(),
-                executable: request.executable.clone(),
+                executable: opencode_executable,
             },
         )?;
         command.env("OPENCODE_SERVER_PASSWORD", password);
@@ -1785,8 +1772,12 @@ pub async fn opencode_readiness<R: Runtime>(
 ) -> Result<OpenCodeReadiness, String> {
     let data = super::app::commands::get_jan_data_folder_path(app);
     let config_directory = super::system::opencode_config::config_directory(&data);
-    let detection =
-        super::system::commands::detect_agent_installed("opencode".to_string(), custom_path).await;
+    let installed = tokio::task::spawn_blocking(move || {
+        super::system::opencode_runtime::resolve(&data, custom_path.as_deref())
+    })
+    .await
+    .map_err(|error| format!("Could not check OpenCode installation: {error}"))??
+    .is_some();
     let config_path = super::system::opencode_config::writable_config_path(&config_directory);
     let config_state = match opencode_configuration_state(&config_directory) {
         Ok(state) => state,
@@ -1796,10 +1787,8 @@ pub async fn opencode_readiness<R: Runtime>(
         }
     };
     let configured = config_state == OpenCodeConfigurationState::Ready;
-    let reason = if !detection.installed {
+    let reason = if !installed {
         Some(OpenCodeReadinessReason::NotInstalled)
-    } else if detection.via_wsl {
-        Some(OpenCodeReadinessReason::WslOnly)
     } else if config_state == OpenCodeConfigurationState::Invalid {
         Some(OpenCodeReadinessReason::InvalidConfiguration)
     } else if config_state == OpenCodeConfigurationState::Missing {
@@ -1809,9 +1798,9 @@ pub async fn opencode_readiness<R: Runtime>(
     };
     Ok(OpenCodeReadiness {
         ready: reason.is_none(),
-        installed: detection.installed,
+        installed,
         configured,
-        via_wsl: detection.via_wsl,
+        via_wsl: false,
         config_path: config_path.to_string_lossy().into_owned(),
         reason,
     })
@@ -1878,8 +1867,11 @@ fn hermes_configuration_state(directory: &Path) -> Result<OpenCodeConfigurationS
 
 #[tauri::command]
 pub async fn hermes_readiness(custom_path: Option<String>) -> Result<HermesReadiness, String> {
-    let detection =
-        super::system::commands::detect_agent_installed("hermes".to_string(), custom_path).await;
+    let detection = super::system::commands::detect_external_agent_installed(
+        "hermes".to_string(),
+        custom_path,
+    )
+    .await;
     let directory = super::system::commands::resolve_hermes_dir()?;
     let config_path = directory.join("config.yaml");
     let config_state = match hermes_configuration_state(&directory) {
@@ -1916,20 +1908,55 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_opencode_command_uses_the_windows_application_shim() {
-        assert_eq!(default_open_code_command(true), "opencode.cmd");
-        assert_eq!(default_open_code_command(false), "opencode");
-    }
-
-    #[test]
     fn opencode_receives_the_workspace_as_its_project_path() {
         assert_eq!(
-            format_open_code_command(None, Path::new(r"\\?\C:\Users\Ron\Agent Work"), true),
-            "opencode.cmd 'C:\\Users\\Ron\\Agent Work'\r"
+            format_open_code_command(
+                Path::new(r"\\?\C:\GChat Data\code\opencode\runtime\node_modules\.bin\opencode.cmd"),
+                Path::new(r"\\?\C:\Users\Ron\Agent Work"),
+                true,
+            ),
+            "& 'C:\\GChat Data\\code\\opencode\\runtime\\node_modules\\.bin\\opencode.cmd' 'C:\\Users\\Ron\\Agent Work'\r"
         );
         assert_eq!(
-            format_open_code_command(None, Path::new("/home/ron/agent work"), false),
-            "opencode '/home/ron/agent work'\r"
+            format_open_code_command(
+                Path::new("/home/ron/GChat Data/code/opencode/runtime/node_modules/.bin/opencode"),
+                Path::new("/home/ron/agent work"),
+                false,
+            ),
+            "'/home/ron/GChat Data/code/opencode/runtime/node_modules/.bin/opencode' '/home/ron/agent work'\r"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn embedded_opencode_launch_runs_the_selected_managed_executable_with_spaced_paths() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("GChat's data");
+        let project = root.path().join("Agent's work");
+        std::fs::create_dir_all(&project).unwrap();
+        let executable = super::super::system::opencode_runtime::managed_executable(&data);
+        std::fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\nprintf '%s' \"$1\" > launch-witness\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(data.join("code/opencode/runtime/.gchat-verified"), "1.2.3").unwrap();
+
+        let (resolved, command) = quote_open_code_command(&data, None, &project).unwrap();
+        assert_eq!(resolved, executable);
+        let status = std::process::Command::new("/bin/sh")
+            .args(["-c", String::from_utf8(command).unwrap().trim_end_matches('\r')])
+            .current_dir(&project)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert_eq!(
+            std::fs::read_to_string(project.join("launch-witness")).unwrap(),
+            project.to_str().unwrap(),
         );
     }
 

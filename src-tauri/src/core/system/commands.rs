@@ -4,11 +4,10 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_ginfer::cleanup_ginfer_processes;
 
 use crate::core::app::commands::{
-    default_data_folder_path, get_app_configurations, get_jan_data_folder_path,
-    update_app_configuration,
+    default_data_folder_path, get_configuration_file_path, get_jan_data_folder_path,
+    read_configured_data_folder,
 };
 use crate::core::app::constants::{JAN_DATA_FILES, JAN_DATA_SUBDIRS};
-use crate::core::app::models::AppConfiguration;
 use crate::core::mcp::helpers::{stop_mcp_servers_with_context, ShutdownContext};
 use crate::core::state::AppState;
 
@@ -116,41 +115,74 @@ pub async fn factory_reset<R: Runtime>(
     app_handle: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let autostart_preference = get_app_configurations(app_handle.clone()).autostart_preference;
-    let data_folder = get_jan_data_folder_path(app_handle.clone());
-    if data_folder.exists() && !is_safe_to_delete(&data_folder) {
-        log::error!(
-            "Refusing factory reset: path is too close to filesystem root: {}",
-            data_folder.display()
-        );
-        return Ok(());
+    let configuration_file = get_configuration_file_path(app_handle.clone());
+    let default_folder = PathBuf::from(default_data_folder_path(app_handle.clone()));
+    if let Err(error) =
+        reset_configured_app_data(&app_handle, &state, &configuration_file, &default_folder).await
+    {
+        // Deletion or registration cleanup can fail after reset hides the
+        // windows. Keep the returned error and retry controls visible.
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        for (label, window) in app_handle.webview_windows() {
+            if let Err(show_error) = window.show() {
+                log::warn!("Failed to restore window {label:?} after reset failed: {show_error}");
+            }
+        }
+        return Err(error);
     }
 
-    reset_app_data(&app_handle, &state, &data_folder).await?;
-
-    // Reset the configuration
-    let default_config = AppConfiguration {
-        data_folder: default_data_folder_path(app_handle.clone()),
-        autostart_preference,
-    };
-    let _ = update_app_configuration(app_handle.clone(), default_config);
-
+    // Keep the installation's selected location and startup preference. A move
+    // retains its old copy, so selecting the default here can resurrect data.
     restart_app(&app_handle)
 }
 
-/// Drain Agents and stop the configured Host before deleting their data.
+async fn reset_configured_app_data<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    state: &State<'_, AppState>,
+    configuration_file: &Path,
+    default_folder: &Path,
+) -> Result<(), String> {
+    reset_app_data_with(app_handle, state, || {
+        let folder = read_configured_data_folder(configuration_file, default_folder).map_err(
+            |error| format!("GChat reset could not select its data folder: {error}. Your data has not been deleted. Repair the settings file, then try again."),
+        )?;
+        if !folder.is_absolute() || !is_safe_to_delete(&folder) {
+            return Err(format!(
+                "GChat reset refused the unsafe data folder {}. Your data has not been deleted. Select an absolute App Data folder away from the filesystem root, then try again.",
+                folder.display()
+            ));
+        }
+        Ok(folder)
+    })
+    .await
+}
+
+#[cfg(test)]
 pub(crate) async fn reset_app_data<R: Runtime>(
     app_handle: &AppHandle<R>,
     state: &State<'_, AppState>,
     data_folder: &Path,
 ) -> Result<(), String> {
+    reset_app_data_with(app_handle, state, || Ok(data_folder.to_path_buf())).await
+}
+
+/// Drain Agents, select the current root under the relocation fence, then stop
+/// its Host before deleting data. Retain both fences through the deletion.
+async fn reset_app_data_with<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    state: &State<'_, AppState>,
+    select_data_folder: impl FnOnce() -> Result<PathBuf, String>,
+) -> Result<(), String> {
     crate::core::agent::commands::shutdown(app_handle)
         .await
         .map_err(|error| format!("GChat reset could not finish: {error}. Try resetting again after the Agent runs stop."))?;
 
-    let _access = crate::core::engine_hosts::data_folder_access().write().await;
+    let _access = crate::core::engine_hosts::data_folder_access()
+        .write()
+        .await;
+    let data_folder = select_data_folder()?;
     let client = crate::core::engine_hosts::reset_client(app_handle);
-    let _host = client
+    let host = client
         .prepare_local_reset(&data_folder.join("ginfer/host"))
         .await
         .map_err(|error| format!("GChat reset could not stop its local Host: {error}. Your data has not been deleted. Check Host status, then try resetting again."))?;
@@ -209,7 +241,7 @@ pub(crate) async fn reset_app_data<R: Runtime>(
             false
         };
 
-        remove_jan_data_contents(data_folder);
+        remove_jan_data_contents(&data_folder);
 
         if bin_preserved {
             let ginfer_dir = data_folder.join("ginfer");
@@ -221,7 +253,7 @@ pub(crate) async fn reset_app_data<R: Runtime>(
         }
     }
 
-    Ok(())
+    host.complete().await.map_err(|error| format!("GChat reset could not finish cleaning its local Host connection: {error}. Check GInfer Hosts before resetting again."))
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -324,6 +356,17 @@ fn open_file_explorer_with(
 #[tauri::command]
 pub fn open_file_explorer(path: String) -> Result<(), String> {
     open_file_explorer_with(Path::new(&path), |command| command.status())
+}
+
+/// The Linux opener uses blocking zbus, which must not enter its runtime from
+/// the Tokio worker that executes an async Tauri command.
+#[tauri::command]
+pub async fn reveal_item_in_dir(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tauri_plugin_opener::reveal_item_in_dir(path).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("Folder reveal task failed: {error}"))?
 }
 
 /// Deliver a desktop notification from the blocking pool.
@@ -706,50 +749,87 @@ fn remove_legacy_cli_binary(dir: &std::path::Path) {
     }
 }
 
-/// Check if the `gchat-cli` binary is accessible on PATH.
-#[tauri::command]
-pub async fn check_jan_cli_installed() -> CliInstallStatus {
-    let which_cmd = if cfg!(windows) { "where" } else { "which" };
-    let mut cmd = std::process::Command::new(which_cmd);
-    cmd.arg(CLI_COMMAND_NAME);
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    }
-
-    match tokio::task::spawn_blocking(move || cmd.output()).await {
-        Ok(Ok(out)) if out.status.success() => {
-            let raw = String::from_utf8_lossy(&out.stdout);
-            #[cfg(windows)]
-            let path = {
-                // `where` returns one path per line; pick the first that isn't a
-                // dev-build artifact (i.e. skip paths containing \target\)
-                raw.lines()
-                    .map(str::trim)
-                    .find(|p| !p.is_empty() && !p.to_ascii_lowercase().contains("\\target\\"))
-                    .map(str::to_string)
-                    // fall back to the raw first line if every path looks like a build dir
-                    .or_else(|| {
-                        raw.lines()
-                            .map(str::trim)
-                            .find(|p| !p.is_empty())
-                            .map(str::to_string)
-                    })
+fn cli_install_status_on_path(
+    path: Option<&std::ffi::OsStr>,
+    bundled_directories: &[PathBuf],
+) -> CliInstallStatus {
+    let bundled_directories: Vec<_> = bundled_directories
+        .iter()
+        .filter_map(|directory| fs::canonicalize(directory).ok())
+        .collect();
+    let binary_name = if cfg!(windows) {
+        "gchat-cli.exe"
+    } else {
+        CLI_COMMAND_NAME
+    };
+    let path = path.and_then(|path| {
+        std::env::split_paths(path).find_map(|directory| {
+            let directory = if directory.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                directory
             };
-            #[cfg(not(windows))]
-            let path = Some(raw.trim().to_string());
-            CliInstallStatus {
-                installed: path.is_some(),
-                path,
+            let directory = fs::canonicalize(directory).ok()?;
+            if bundled_directories
+                .iter()
+                .any(|bundled| directory.starts_with(bundled))
+            {
+                return None;
             }
-        }
-        _ => CliInstallStatus {
-            installed: false,
-            path: None,
-        },
+
+            // Resolve directory aliases, not the executable itself: an external
+            // PATH entry may legitimately install a symlink to the bundled CLI.
+            let candidate = directory.join(binary_name);
+            if !candidate.is_file() {
+                return None;
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::ffi::OsStrExt;
+                let candidate_c = std::ffi::CString::new(candidate.as_os_str().as_bytes()).ok()?;
+                // SAFETY: candidate_c is a live, NUL-terminated pathname.
+                if unsafe { nix::libc::access(candidate_c.as_ptr(), nix::libc::X_OK) } != 0 {
+                    return None;
+                }
+            }
+            let path = candidate.to_string_lossy().into_owned();
+            #[cfg(windows)]
+            let path = strip_verbatim_prefix(&path);
+            Some(path)
+        })
+    });
+    CliInstallStatus {
+        installed: path.is_some(),
+        path,
     }
+}
+
+/// Check for a terminal installation, excluding the app's private bundled CLI.
+#[tauri::command]
+pub async fn check_jan_cli_installed<R: Runtime>(app_handle: AppHandle<R>) -> CliInstallStatus {
+    // AppRun prepends its private directories to PATH in both a mounted
+    // AppImage and an extracted AppDir. A DEB's system /usr/bin stays eligible.
+    #[cfg(target_os = "linux")]
+    let appdir = app_handle.env().appdir.map(PathBuf::from);
+    #[cfg(not(target_os = "linux"))]
+    let appdir: Option<PathBuf> = None;
+    let bundled_directories: Vec<_> = app_handle
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|directory| directory.join("resources/bin"))
+        .into_iter()
+        .chain(appdir)
+        .collect();
+    let path = std::env::var_os("PATH");
+    tokio::task::spawn_blocking(move || {
+        cli_install_status_on_path(path.as_deref(), &bundled_directories)
+    })
+    .await
+    .unwrap_or(CliInstallStatus {
+        installed: false,
+        path: None,
+    })
 }
 
 fn install_desktop_launcher_config(directory: &std::path::Path, provider: &std::path::Path) -> Result<(), String> {
@@ -764,7 +844,7 @@ fn install_desktop_launcher_config(directory: &std::path::Path, provider: &std::
     let configuration = serde_json::json!({
         "data_dir": provider.join("host"),
         "host_url": "https://127.0.0.1:7443",
-        "desktop": { "provider": provider, "engine": engine },
+        "desktop": { "provider": provider, "engine": engine, "runtime_set": true },
     });
     let temporary = directory.join(format!(".ginfer-launch-{}", uuid::Uuid::new_v4()));
     let result = (|| -> Result<(), String> {
@@ -1797,7 +1877,8 @@ fn strip_gchat_managed_block(content: &str) -> String {
 
 /// Installer spec for an agent: (program, args, prerequisite_binary, docs_url).
 /// Verified against each vendor's official install path:
-///   - Claude Code / Codex / OpenCode / OpenClaw ship as global npm packages.
+///   - Claude Code / Codex / OpenClaw ship as global npm packages.
+///   - OpenCode uses the separate app-owned local npm runtime.
 ///   - Hermes is a Python project installed via its official shell / PowerShell
 ///     bootstrap script (NOT npm).
 fn agent_install_spec(
@@ -1841,10 +1922,6 @@ fn agent_install_spec(
         "codex" => {
             let (p, a) = npm("@openai/codex");
             Ok((p, a, "npm", "https://github.com/openai/codex"))
-        }
-        "opencode" => {
-            let (p, a) = npm("opencode-ai");
-            Ok((p, a, "npm", "https://opencode.ai"))
         }
         "cline" => {
             let (p, a) = npm("cline");
@@ -2290,7 +2367,7 @@ fn proxy_url_with_auth(url: &str, username: Option<&str>, password: Option<&str>
 ///
 /// Best-effort: `uv`/`curl` honor `ALL_PROXY`/SOCKS; npm and PowerShell
 /// `Invoke-RestMethod` largely ignore SOCKS env (handled by clearer messaging).
-fn apply_proxy_env(cmd: &mut std::process::Command, proxy: &ProxyEnv) {
+pub(crate) fn apply_proxy_env(cmd: &mut std::process::Command, proxy: &ProxyEnv) {
     let url = proxy.url.trim();
     if url.is_empty() {
         return;
@@ -2430,6 +2507,29 @@ async fn detect_via_wsl(bin: &str) -> bool {
     )
 }
 
+/// Probe agent availability. OpenCode uses its selected data root and the
+/// shared custom > managed > native resolver, without treating WSL as native.
+/// Other integrations retain their external-agent lookup below.
+#[tauri::command]
+pub async fn detect_agent_installed<R: Runtime>(
+    app: AppHandle<R>,
+    bin: String,
+    custom_path: Option<String>,
+) -> AgentDetection {
+    if bin == "opencode" {
+        let data = get_jan_data_folder_path(app);
+        let found = tokio::task::spawn_blocking(move || {
+            super::opencode_runtime::resolve(&data, custom_path.as_deref())
+        })
+        .await;
+        return AgentDetection {
+            installed: matches!(found, Ok(Ok(Some(_)))),
+            via_wsl: false,
+        };
+    }
+    detect_external_agent_installed(bin, custom_path).await
+}
+
 /// Probe whether an external CLI agent is reachable.
 ///
 /// Resolution order:
@@ -2439,8 +2539,10 @@ async fn detect_via_wsl(bin: &str) -> bool {
 /// 2. native PATH lookup (`which` / `where`).
 /// 3. (Windows only) a WSL fallback so agents installed inside a WSL
 ///    distribution are detected instead of showing as missing.
-#[tauri::command]
-pub async fn detect_agent_installed(bin: String, custom_path: Option<String>) -> AgentDetection {
+pub async fn detect_external_agent_installed(
+    bin: String,
+    custom_path: Option<String>,
+) -> AgentDetection {
     if let Some(path) = custom_path
         .as_deref()
         .map(str::trim)
@@ -2493,7 +2595,7 @@ async fn try_bootstrap_npm_via_winget<R: Runtime>(
 ) -> bool {
     // winget itself (App Installer) must be present; it ships on Win10 1809+
     // mainline but not on LTSC / Server / stripped images.
-    let winget = detect_agent_installed("winget".to_string(), None).await;
+    let winget = detect_external_agent_installed("winget".to_string(), None).await;
     if !native_agent_available(&winget) {
         let _ = app_handle.emit(
             event,
@@ -2565,7 +2667,7 @@ async fn try_bootstrap_npm_via_winget<R: Runtime>(
     // winget adds the Node install dir to PATH; `detect_agent_installed`
     // re-reads the registry PATH at runtime, so native npm is found without a
     // restart. A WSL-only npm does not satisfy a native Windows install.
-    let npm = detect_agent_installed("npm".to_string(), None).await;
+    let npm = detect_external_agent_installed("npm".to_string(), None).await;
     native_agent_available(&npm)
 }
 
@@ -2586,6 +2688,23 @@ pub async fn install_agent<R: Runtime>(
     agent_id: String,
     proxy: Option<ProxyEnv>,
 ) -> Result<(), String> {
+    if agent_id == "opencode" {
+        let data = get_jan_data_folder_path(app_handle.clone());
+        return tokio::task::spawn_blocking(move || {
+            super::opencode_runtime::install_managed(
+                &data,
+                None,
+                proxy.as_ref(),
+                "gchat-install.log",
+                |line| {
+                    let _ = app_handle.emit("agent_install_log:opencode", line.to_owned());
+                },
+            )
+            .map(|_| ())
+        })
+        .await
+        .map_err(|error| format!("Code setup stopped: {error}"))?;
+    }
     let (program, args, prereq, docs) = agent_install_spec(&agent_id)?;
 
     let event = format!("agent_install_log:{}", agent_id);
@@ -2594,7 +2713,7 @@ pub async fn install_agent<R: Runtime>(
     // so a Node/npm installed after the app launched (or present in the registry
     // but not the GUI's snapshotted PATH) is found without an app restart. A
     // prerequisite found only inside WSL cannot run a native installer.
-    let prerequisite = detect_agent_installed(prereq.to_string(), None).await;
+    let prerequisite = detect_external_agent_installed(prereq.to_string(), None).await;
     if !native_agent_available(&prerequisite) {
         // For npm-based agents on Windows, try to auto-install Node.js (which
         // bundles npm) via winget before giving up, so the Launch flow works on
@@ -4596,16 +4715,23 @@ pub fn open_agent_terminal<R: Runtime>(
     app: AppHandle<R>,
     agent_id: String,
     command: String,
+    custom_path: Option<String>,
     proxy: Option<ProxyEnv>,
 ) -> Result<(), String> {
     let command = command.trim().to_string();
     if command.is_empty() {
         return Err("Empty terminal command".to_string());
     }
-    let environment = if agent_id == "opencode" {
-        agent_terminal_environment(&agent_id, &get_jan_data_folder_path(app))
+    let (command, environment) = if agent_id == "opencode" {
+        let data = get_jan_data_folder_path(app);
+        let resolved = super::opencode_runtime::resolve(&data, custom_path.as_deref())?
+            .ok_or("Code is not installed. Set it up in GChat, then try again.")?;
+        (
+            super::opencode_runtime::shell_invocation(&resolved.executable, &[]),
+            agent_terminal_environment(&agent_id, &data),
+        )
     } else {
-        Vec::new()
+        (command, Vec::new())
     };
     #[cfg(unix)]
     let command = agent_terminal_payload(&command, &environment)?;
@@ -4643,6 +4769,23 @@ pub fn open_agent_terminal<R: Runtime>(
 
     #[cfg(target_os = "windows")]
     {
+        if agent_id == "opencode" {
+            use std::os::windows::process::CommandExt;
+            // Bypass cmd.exe so metacharacters in a user-selected path remain
+            // literal PowerShell arguments in the new interactive console.
+            let mut cmd = std::process::Command::new("powershell.exe");
+            cmd.args(["-NoProfile", "-NoExit", "-Command", &command])
+                .envs(environment)
+                .creation_flags(0x00000010); // CREATE_NEW_CONSOLE
+            apply_login_path(&mut cmd);
+            apply_runtime_path(&mut cmd);
+            if let Some(ref proxy) = proxy {
+                apply_proxy_env(&mut cmd, proxy);
+            }
+            cmd.spawn()
+                .map_err(|error| format!("Could not open the Code terminal: {error}"))?;
+            return Ok(());
+        }
         // `start "" cmd /K <cmd>` opens a fresh console that stays open so the
         // interactive agent keeps running. The empty "" is the window title arg.
         // The new console inherits this command's environment, so the proxy env
@@ -4867,6 +5010,255 @@ pub fn migrate_macos_autostart_launchagent<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+    struct ResetWithoutHostCredentials;
+
+    impl ginfer_host::client::CredentialStore for ResetWithoutHostCredentials {
+        fn get(&self, _: uuid::Uuid) -> ginfer_host::client::CredentialFuture<'_, String> {
+            panic!("resetting a folder without a Host must not read credentials");
+        }
+
+        fn set<'a>(
+            &'a self,
+            _: uuid::Uuid,
+            _: &'a str,
+        ) -> ginfer_host::client::CredentialFuture<'a, ()> {
+            panic!("resetting a folder without a Host must not write credentials");
+        }
+
+        fn delete(&self, _: uuid::Uuid) -> ginfer_host::client::CredentialFuture<'_, ()> {
+            panic!("resetting a folder without a Host must not delete credentials");
+        }
+    }
+
+    fn reset_test_app(data_folder: &Path) -> tauri::App<tauri::test::MockRuntime> {
+        let client = std::sync::Arc::new(ginfer_host::client::Client::new(
+            None,
+            std::sync::Arc::new(ResetWithoutHostCredentials),
+        ));
+        tauri::test::mock_builder()
+            .manage(AppState::default())
+            .manage(client)
+            .manage(crate::test_support::TestDataRoot(data_folder.to_path_buf()))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn factory_reset_keeps_relocated_selection_and_old_default_data() {
+        let root = tempfile::tempdir().unwrap();
+        let default_folder = root.path().join("original-data");
+        let selected = root.path().join("relocated-data");
+        let old_chat = default_folder.join("threads/retained-chat.json");
+        let current_chat = selected.join("threads/current-chat.json");
+        let current_model = selected.join("ginfer/models/current-model.ginfer");
+        fs::create_dir_all(old_chat.parent().unwrap()).unwrap();
+        fs::create_dir_all(current_chat.parent().unwrap()).unwrap();
+        fs::create_dir_all(current_model.parent().unwrap()).unwrap();
+        fs::write(&old_chat, b"old copy retained by relocation").unwrap();
+        fs::write(&current_chat, b"selected chat to reset").unwrap();
+        fs::write(&current_model, b"selected model to reset").unwrap();
+        let configuration_file = root.path().join("settings.json");
+        let configuration =
+            serde_json::to_vec_pretty(&crate::core::app::models::AppConfiguration {
+                data_folder: selected.to_string_lossy().into_owned(),
+                autostart_preference: crate::core::app::models::AutostartPreference::Disabled,
+            })
+            .unwrap();
+        fs::write(&configuration_file, &configuration).unwrap();
+        let app = reset_test_app(&selected);
+
+        reset_configured_app_data(
+            app.handle(),
+            &app.state::<AppState>(),
+            &configuration_file,
+            &default_folder,
+        )
+        .await
+        .unwrap();
+
+        assert!(!selected.join("threads").exists());
+        assert!(!current_model.exists());
+        assert_eq!(
+            fs::read(&old_chat).unwrap(),
+            b"old copy retained by relocation"
+        );
+        assert_eq!(fs::read(&configuration_file).unwrap(), configuration);
+        // This is also the reader used by the desktop/CLI folder resolver:
+        // restarting must keep selecting the cleared folder, never the old copy.
+        assert_eq!(
+            read_configured_data_folder(&configuration_file, &default_folder).unwrap(),
+            selected
+        );
+    }
+
+    #[tokio::test]
+    async fn factory_reset_without_saved_settings_clears_the_default_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let default_folder = root.path().join("default-data");
+        let chat = default_folder.join("threads/current-chat.json");
+        fs::create_dir_all(chat.parent().unwrap()).unwrap();
+        fs::write(&chat, b"default chat to reset").unwrap();
+        let configuration_file = root.path().join("no-settings-yet/settings.json");
+        let app = reset_test_app(&default_folder);
+
+        reset_configured_app_data(
+            app.handle(),
+            &app.state::<AppState>(),
+            &configuration_file,
+            &default_folder,
+        )
+        .await
+        .unwrap();
+
+        assert!(!default_folder.join("threads").exists());
+        assert!(!configuration_file.exists());
+        assert_eq!(
+            read_configured_data_folder(&configuration_file, &default_folder).unwrap(),
+            default_folder
+        );
+    }
+
+    #[tokio::test]
+    async fn factory_reset_reads_selection_after_the_relocation_fence() {
+        let root = tempfile::tempdir().unwrap();
+        let original = root.path().join("original-data");
+        let selected = root.path().join("relocated-data");
+        for folder in [&original, &selected] {
+            fs::create_dir_all(folder.join("threads")).unwrap();
+            fs::write(folder.join("threads/chat.json"), b"chat").unwrap();
+        }
+        let configuration_file = root.path().join("settings.json");
+        let write_selection = |folder: &Path| {
+            fs::write(
+                &configuration_file,
+                serde_json::to_vec(&serde_json::json!({ "data_folder": folder })).unwrap(),
+            )
+            .unwrap();
+        };
+        write_selection(&original);
+        let app = reset_test_app(&selected);
+        let state = app.state::<AppState>();
+        let relocation = crate::core::engine_hosts::data_folder_access()
+            .write()
+            .await;
+        let reset = reset_configured_app_data(app.handle(), &state, &configuration_file, &original);
+        tokio::pin!(reset);
+        std::future::poll_fn(|context| {
+            assert!(std::future::Future::poll(reset.as_mut(), context).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+
+        // A move commits its new selection before releasing this same fence.
+        write_selection(&selected);
+        drop(relocation);
+        reset.await.unwrap();
+
+        assert_eq!(
+            fs::read(original.join("threads/chat.json")).unwrap(),
+            b"chat"
+        );
+        assert!(!selected.join("threads").exists());
+        assert_eq!(
+            read_configured_data_folder(&configuration_file, &original).unwrap(),
+            selected
+        );
+    }
+
+    #[tokio::test]
+    async fn factory_reset_does_not_fall_back_from_invalid_saved_settings() {
+        for configuration_kind in ["malformed", "unreadable", "relative"] {
+            let root = tempfile::tempdir().unwrap();
+            let default_folder = root.path().join("default-data");
+            let selected = root.path().join("relocated-data");
+            let old_chat = default_folder.join("threads/retained-chat.json");
+            let current_chat = selected.join("threads/current-chat.json");
+            fs::create_dir_all(old_chat.parent().unwrap()).unwrap();
+            fs::create_dir_all(current_chat.parent().unwrap()).unwrap();
+            fs::write(&old_chat, b"retained default").unwrap();
+            fs::write(&current_chat, b"retained selection").unwrap();
+            let configuration_file = root.path().join("settings.json");
+            match configuration_kind {
+                "malformed" => fs::write(&configuration_file, b"{malformed").unwrap(),
+                "unreadable" => fs::create_dir(&configuration_file).unwrap(),
+                "relative" => {
+                    fs::write(&configuration_file, br#"{"data_folder":"./data"}"#).unwrap();
+                }
+                _ => unreachable!(),
+            }
+            let original_configuration = fs::read(&configuration_file).ok();
+            let app = reset_test_app(&selected);
+
+            let error = reset_configured_app_data(
+                app.handle(),
+                &app.state::<AppState>(),
+                &configuration_file,
+                &default_folder,
+            )
+            .await
+            .expect_err("an unknown or unsafe selection must not reset the fallback");
+
+            assert!(error.contains("Your data has not been deleted"), "{error}");
+            assert_eq!(fs::read(&old_chat).unwrap(), b"retained default");
+            assert_eq!(fs::read(&current_chat).unwrap(), b"retained selection");
+            assert_eq!(fs::read(&configuration_file).ok(), original_configuration);
+            assert_eq!(
+                configuration_file.is_dir(),
+                configuration_kind == "unreadable"
+            );
+            assert!(!default_folder.join("ginfer").exists());
+            assert!(!selected.join("ginfer").exists());
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reveal_item_in_dir_returns_error_without_panicking_on_runtime_worker() {
+        const FIXTURE: &str = "GCHAT_FOLDER_REVEAL_PRIVATE_BUS";
+        if std::env::var_os(FIXTURE).is_none() {
+            // Never ask the test runner's desktop to reveal a folder. A child
+            // gets an unreachable private bus without changing process-global
+            // environment used by other tests.
+            let root = tempfile::tempdir().unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "core::system::commands::tests::reveal_item_in_dir_returns_error_without_panicking_on_runtime_worker",
+                    "--nocapture",
+                ])
+                .env(FIXTURE, "1")
+                .env(
+                    "DBUS_SESSION_BUS_ADDRESS",
+                    format!("unix:path={}/missing-bus", root.path().display()),
+                )
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+            assert!(
+                String::from_utf8_lossy(&output.stdout).contains("test result: ok. 1 passed;")
+            );
+            return;
+        }
+
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let result = tokio::spawn(super::reveal_item_in_dir("private log folder".into()))
+                .await
+                .expect("folder reveal must not panic on a runtime worker");
+            let error = result.expect_err("an unavailable file manager must report an error");
+            assert!(!error.starts_with("Folder reveal task failed:"), "{error}");
+        });
+    }
+
     fn folder_opener_exit_status(code: i32) -> std::process::ExitStatus {
         #[cfg(unix)]
         {
@@ -5101,6 +5493,211 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
+    fn opencode_fixture_executable(path: &Path, script: &str) {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, script).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn opencode_setup_fixture(test_name: &str) -> Option<PathBuf> {
+        const FIXTURE_ROOT: &str = "GCHAT_OPENCODE_SETUP_FIXTURE_ROOT";
+        let root = match std::env::var_os(FIXTURE_ROOT) {
+            Some(root) => PathBuf::from(root),
+            None => {
+                // Keep PATH/HOME private without changing other tests' environment.
+                let root = tempfile::tempdir().unwrap();
+                let tools = root.path().join("tools with spaces");
+                fs::create_dir_all(&tools).unwrap();
+                fs::create_dir_all(root.path().join("home")).unwrap();
+                let result = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        &format!("core::system::commands::tests::{test_name}"),
+                        "--nocapture",
+                    ])
+                    .env(FIXTURE_ROOT, root.path())
+                    .env("PATH", &tools)
+                    .env("HOME", root.path().join("home"))
+                    .output()
+                    .unwrap();
+                assert!(
+                    result.status.success(),
+                    "{}{}",
+                    String::from_utf8_lossy(&result.stdout),
+                    String::from_utf8_lossy(&result.stderr),
+                );
+                assert!(
+                    String::from_utf8_lossy(&result.stdout).contains("test result: ok. 1 passed;")
+                );
+                return None;
+            }
+        };
+        let tools = root.join("tools with spaces");
+        std::os::unix::fs::symlink("/usr/bin/which", tools.join("which")).unwrap();
+        opencode_fixture_executable(&tools.join("node"), "#!/bin/sh\nprintf 'v18.19.1\\n'\n");
+        opencode_fixture_executable(
+            &tools.join("npm"),
+            r##"#!/bin/sh
+if [ "$1" = --version ]; then printf '9.2.0\n'; exit 0; fi
+[ "$1" = install ] && [ "$2" = --global=false ] && [ "$3" = --prefix ] && [ "$5" = --cache ] || exit 8
+prefix="$4"
+[ "$PWD" = "$prefix" ] || exit 8
+IFS= read -r mode < "$GCHAT_OPENCODE_SETUP_FIXTURE_ROOT/install-mode"
+/bin/mkdir -p "$prefix/node_modules/.bin" || exit 9
+if [ "$mode" = broken-version ]; then
+  printf '#!/bin/sh\nexit 29\n' > "$prefix/node_modules/.bin/opencode"
+else
+  printf '#!/bin/sh\nprintf "1.2.3\\n"\n' > "$prefix/node_modules/.bin/opencode"
+fi
+/bin/chmod 700 "$prefix/node_modules/.bin/opencode" || exit 9
+printf '%s\n' "$mode" >> "$GCHAT_OPENCODE_SETUP_FIXTURE_ROOT/npm-install-attempts"
+if [ "$mode" = npm-failure ]; then echo 'fixture npm failed after writing its shim' >&2; exit 23; fi
+"##,
+        );
+        fs::write(root.join("install-mode"), "success\n").unwrap();
+        Some(root)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn opencode_detection_uses_the_selected_managed_root_and_keeps_custom_authoritative() {
+        let Some(root) = opencode_setup_fixture(
+            "opencode_detection_uses_the_selected_managed_root_and_keeps_custom_authoritative",
+        ) else {
+            return;
+        };
+        let data = root.join("selected Code data");
+        let managed = super::super::opencode_runtime::managed_executable(&data);
+        let app = tauri::test::mock_app();
+        app.manage(crate::test_support::TestDataRoot(data));
+        super::install_agent(app.handle().clone(), "opencode".into(), None)
+            .await
+            .unwrap();
+        let installed = fs::read(&managed).unwrap();
+        let found =
+            super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+        assert!(found.installed);
+        assert!(!found.via_wsl);
+        for invalid in [root.join("missing Code"), PathBuf::from("relative Code")] {
+            let found = super::detect_agent_installed(
+                app.handle().clone(),
+                "opencode".into(),
+                Some(invalid.to_string_lossy().into_owned()),
+            )
+            .await;
+            assert!(!found.installed);
+            assert!(!found.via_wsl);
+        }
+        assert_eq!(fs::read(managed).unwrap(), installed);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn opencode_failed_setup_stays_missing_until_an_explicit_successful_retry() {
+        let Some(root) = opencode_setup_fixture(
+            "opencode_failed_setup_stays_missing_until_an_explicit_successful_retry",
+        ) else {
+            return;
+        };
+        for failure in ["npm-failure", "broken-version"] {
+            fs::write(root.join("install-mode"), format!("{failure}\n")).unwrap();
+            let data = root.join(failure).join("selected data");
+            let app = tauri::test::mock_app();
+            app.manage(crate::test_support::TestDataRoot(data.clone()));
+            let error = super::install_agent(app.handle().clone(), "opencode".into(), None)
+                .await
+                .expect_err("a failed setup must not publish its shim");
+            assert!(error.contains("Code"), "{error}");
+            let found =
+                super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+            assert!(!found.installed, "{failure} must remain repairable");
+            assert!(!found.via_wsl);
+            assert!(super::super::opencode_runtime::resolve(&data, None)
+                .unwrap()
+                .is_none());
+
+            fs::write(root.join("install-mode"), "success\n").unwrap();
+            super::install_agent(app.handle().clone(), "opencode".into(), None)
+                .await
+                .expect("an explicit retry must repair the failed setup");
+            let found =
+                super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+            assert!(found.installed);
+            assert!(!found.via_wsl);
+            let resolved = super::super::opencode_runtime::resolve(&data, None)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                resolved.ownership,
+                super::super::opencode_runtime::OpenCodeOwnership::Managed
+            );
+            assert_eq!(
+                resolved.executable,
+                super::super::opencode_runtime::managed_executable(&data)
+            );
+            assert_eq!(
+                super::super::opencode_runtime::version(&resolved.executable, &data).unwrap(),
+                "1.2.3"
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(root.join("npm-install-attempts")).unwrap(),
+            "npm-failure\nsuccess\nbroken-version\nsuccess\n",
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn opencode_failed_managed_adoption_keeps_the_working_native_path_available() {
+        let Some(root) = opencode_setup_fixture(
+            "opencode_failed_managed_adoption_keeps_the_working_native_path_available",
+        ) else {
+            return;
+        };
+        let native = root.join("tools with spaces/opencode");
+        opencode_fixture_executable(&native, "#!/bin/sh\nprintf '9.8.7\\n'\n");
+        let original = fs::read(&native).unwrap();
+        for failure in ["npm-failure", "broken-version"] {
+            fs::write(root.join("install-mode"), format!("{failure}\n")).unwrap();
+            let data = root.join(failure).join("selected data");
+            let app = tauri::test::mock_app();
+            app.manage(crate::test_support::TestDataRoot(data.clone()));
+            assert!(
+                super::install_agent(app.handle().clone(), "opencode".into(), None)
+                    .await
+                    .is_err()
+            );
+            let found =
+                super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+            assert!(
+                found.installed,
+                "{failure} must not hide the PATH installation"
+            );
+            assert!(!found.via_wsl);
+            let resolved = super::super::opencode_runtime::resolve(&data, None)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                resolved.ownership,
+                super::super::opencode_runtime::OpenCodeOwnership::Native
+            );
+            assert_eq!(resolved.executable, native);
+            assert_eq!(
+                super::super::opencode_runtime::version(&resolved.executable, &data).unwrap(),
+                "9.8.7"
+            );
+        }
+        assert_eq!(fs::read(native).unwrap(), original);
+        assert_eq!(
+            fs::read_to_string(root.join("npm-install-attempts")).unwrap(),
+            "npm-failure\nbroken-version\n",
+        );
+    }
+
     #[tokio::test]
     async fn desktop_and_cli_opencode_configuration_use_selected_data_root() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -5242,6 +5839,118 @@ mod tests {
     }
     use super::*;
 
+    fn cli_install_detection_binary(directory: &Path) -> PathBuf {
+        fs::create_dir_all(directory).unwrap();
+        let name = if cfg!(windows) {
+            "gchat-cli.exe"
+        } else {
+            CLI_COMMAND_NAME
+        };
+        let path = directory.join(name);
+        fs::write(&path, b"fixture CLI; never executed").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        path
+    }
+
+    #[test]
+    fn cli_install_detection_does_not_count_the_app_bundle() {
+        let root = tempfile::tempdir().unwrap();
+        let appdir = root.path().join("GChat.AppDir");
+        let app_bin = appdir.join("usr/bin");
+        let resource_bin = appdir.join("usr/lib/GChat/resources/bin");
+        cli_install_detection_binary(&app_bin);
+        cli_install_detection_binary(&resource_bin);
+        let path = std::env::join_paths([&app_bin, &resource_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[appdir]);
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+
+        // Windows/DEB/dev resource binaries are private even without APPDIR.
+        let path = std::env::join_paths([&resource_bin]).unwrap();
+        let status = cli_install_status_on_path(Some(&path), &[resource_bin]);
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+    }
+
+    #[test]
+    fn cli_install_detection_finds_terminal_install_after_app_run_path() {
+        let root = tempfile::tempdir().unwrap();
+        let appdir = root.path().join("GChat.AppDir");
+        let app_bin = appdir.join("usr/bin");
+        let terminal_bin = root.path().join("user/bin");
+        let later_bin = root.path().join("other/bin");
+        cli_install_detection_binary(&app_bin);
+        let expected = cli_install_detection_binary(&terminal_bin);
+        cli_install_detection_binary(&later_bin);
+        let path = std::env::join_paths([&app_bin, &terminal_bin, &later_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[appdir]);
+        assert!(status.installed);
+        assert_eq!(status.path, Some(expected.to_string_lossy().into_owned()));
+    }
+
+    #[test]
+    fn cli_install_detection_keeps_system_install_without_appdir() {
+        let root = tempfile::tempdir().unwrap();
+        let system_bin = root.path().join("usr/bin");
+        let resource_bin = root.path().join("usr/lib/GChat/resources/bin");
+        let expected = cli_install_detection_binary(&system_bin);
+        cli_install_detection_binary(&resource_bin);
+        let path = std::env::join_paths([&resource_bin, &system_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[resource_bin]);
+        assert!(status.installed);
+        assert_eq!(status.path, Some(expected.to_string_lossy().into_owned()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cli_install_detection_distinguishes_bundle_alias_from_installed_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().unwrap();
+        let appdir = root.path().join("GChat.AppDir");
+        let app_bin = appdir.join("usr/bin");
+        let bundled = cli_install_detection_binary(&app_bin);
+        let alias = root.path().join("bundle-bin-alias");
+        symlink(&app_bin, &alias).unwrap();
+        let terminal_bin = root.path().join("user/bin");
+        fs::create_dir_all(&terminal_bin).unwrap();
+        let installed = terminal_bin.join(CLI_COMMAND_NAME);
+        symlink(&bundled, &installed).unwrap();
+        let path = std::env::join_paths([&alias, &terminal_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[appdir]);
+        assert!(status.installed);
+        assert_eq!(status.path, Some(installed.to_string_lossy().into_owned()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cli_install_detection_requires_an_executable_file_on_path() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let non_executable_bin = root.path().join("non-executable");
+        let non_executable = cli_install_detection_binary(&non_executable_bin);
+        fs::set_permissions(&non_executable, fs::Permissions::from_mode(0o644)).unwrap();
+        let directory_bin = root.path().join("directory");
+        fs::create_dir_all(directory_bin.join(CLI_COMMAND_NAME)).unwrap();
+        let missing_bin = root.path().join("missing");
+        let path =
+            std::env::join_paths([&non_executable_bin, &directory_bin, &missing_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[]);
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+        assert!(!cli_install_status_on_path(None, &[]).installed);
+    }
+
     #[test]
     fn installed_desktop_launcher_targets_provider_host_and_can_be_updated() {
         let root = tempfile::tempdir().unwrap();
@@ -5255,6 +5964,7 @@ mod tests {
         assert_eq!(config.host_url, "https://127.0.0.1:7443");
         let desktop = config.desktop.unwrap();
         assert_eq!(desktop.provider, replacement);
+        assert!(desktop.runtime_set);
         let executable = if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" };
         #[cfg(target_os = "linux")]
         let expected = replacement.join("linux/sm120a/bin").join(executable);

@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { useState, type ReactNode } from 'react'
+import { toast } from 'sonner'
 import GbotCompanion from './GbotCompanion'
 import GbotAvatars from '@/components/GbotAvatars'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
@@ -19,6 +20,7 @@ import type { MediaSessionOptions } from '@/vendor/cua-media/mediaSession'
 
 const mocks = vi.hoisted(() => ({
   call: vi.fn(),
+  getTarget: vi.fn(),
   listen: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
@@ -46,7 +48,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: mocks.listen }))
 vi.mock('@/services/gbot', async (original) => ({
   ...(await original<object>()),
   gbot: mocks.call,
-  getGbotServiceTarget: () => Promise.resolve({ kind: 'local' }),
+  getGbotServiceTarget: mocks.getTarget,
 }))
 vi.mock('@/vendor/cua-media/mediaSession', () => ({
   MediaSession: class {
@@ -66,6 +68,7 @@ let tasks: Task[]
 const events = new Map<string, () => void>()
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.getTarget.mockResolvedValue({ kind: 'local' })
   mocks.resources.ready = true
   mocks.resources.error = ''
   useGbotCompanion.getState().reset()
@@ -134,6 +137,516 @@ async function mount() {
   fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
   return view
 }
+
+it.each(['tasks', 'tasks/approvals'] as const)(
+  'recovers a failed %s read without losing the draft or sending task actions',
+  async (failedPath) => {
+    const prompt = 'Read my saved notes'
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'waiting_for_human',
+        messages: [{ role: 'user', content: prompt }],
+        help_requests: [],
+      },
+    ]
+    const approvals = [
+      {
+        id: 'atlas-permission',
+        task_id: 'atlas-task',
+        request: { operation: { kind: 'desktop_input' } },
+      },
+    ]
+    let rejectRetry!: (cause: Error) => void
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(failedPath === 'tasks' ? tasks : approvals)
+      .mockRejectedValueOnce(new Error('Task status unavailable'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<unknown>((_, reject) => {
+            rejectRetry = reject
+          })
+      )
+      .mockResolvedValue(failedPath === 'tasks' ? tasks : approvals)
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) => {
+      if (path === failedPath) return read()
+      if (path === 'tasks/approvals') return Promise.resolve(approvals)
+      return fallback(path, body)
+    })
+    await mount()
+    const conversation = screen.getByRole('region', { name: 'Bot conversation' })
+    expect(within(conversation).getByText(prompt)).toBeVisible()
+    expect(
+      within(conversation).getByRole('article', { name: 'Bot permission request' })
+    ).toBeVisible()
+    const draft = screen.getByRole('textbox', { name: 'Message bot' })
+    fireEvent.change(draft, { target: { value: 'Keep this draft' } })
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
+
+    await act(async () => events.get('gbot-task-update')?.())
+    const retry = await within(conversation).findByRole('button', {
+      name: 'Retry loading tasks',
+    })
+    const alert = within(conversation).getByRole('alert')
+    expect(alert).toHaveTextContent(
+      'Could not load tasks and approval requests. Try again.'
+    )
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(
+      within(alert).getByText('Error: Task status unavailable')
+    ).not.toBeVisible()
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
+    expect(within(conversation).queryByText(prompt)).not.toBeInTheDocument()
+    expect(
+      within(conversation).queryByRole('article', { name: 'Bot permission request' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/Connect this bot and save its model/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Give Atlas a task/)).not.toBeInTheDocument()
+
+    mocks.call.mockClear()
+    act(() => {
+      fireEvent.click(retry)
+      fireEvent.click(retry)
+    })
+    expect(
+      within(conversation).getByRole('button', { name: 'Loading tasks…' })
+    ).toBeDisabled()
+    await waitFor(() => expect(rejectRetry).toBeTypeOf('function'))
+    expect(mocks.call.mock.calls.map(([path]) => path)).toEqual([
+      'state',
+      'tasks',
+      'tasks/approvals',
+    ])
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
+
+    await act(async () => rejectRetry(new Error('Task status still unavailable')))
+    expect(within(conversation).getByRole('alert')).toHaveTextContent(
+      'Could not load tasks and approval requests. Try again.'
+    )
+    expect(
+      within(conversation).getByText('Error: Task status still unavailable')
+    ).not.toBeVisible()
+    expect(
+      within(conversation).getByRole('button', { name: 'Retry loading tasks' })
+    ).toBeEnabled()
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
+    expect(
+      screen.queryByText(/Connect this bot and save its model/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Give Atlas a task/)).not.toBeInTheDocument()
+
+    fireEvent.click(
+      within(conversation).getByRole('button', { name: 'Retry loading tasks' })
+    )
+    expect(await within(conversation).findByText(prompt)).toBeVisible()
+    expect(
+      within(conversation).getByRole('article', { name: 'Bot permission request' })
+    ).toBeVisible()
+    expect(within(conversation).queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      within(conversation).queryByRole('button', {
+        name: /Retry loading tasks|Loading tasks…/,
+      })
+    ).not.toBeInTheDocument()
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
+    expect(mocks.call.mock.calls.map(([path]) => path)).toEqual([
+      'state',
+      'tasks',
+      'tasks/approvals',
+      'state',
+      'tasks',
+      'tasks/approvals',
+    ])
+  }
+)
+
+it.each(['Stop', 'Resume'] as const)(
+  'keeps a failed task action %s inline through refresh and retries it in the companion',
+  async (action) => {
+    const path = action === 'Stop' ? 'tasks/cancel' : 'tasks/resume'
+    const progress =
+      action === 'Stop' ? 'Stopping this task…' : 'Resuming this task…'
+    const message = `Could not ${action.toLowerCase()} this task. Try again.`
+    const outcome = action === 'Stop' ? 'cancelled' : 'running'
+    const prompt = 'Read my saved notes'
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'paused',
+        messages: [{ role: 'user', content: prompt }],
+        help_requests: [],
+      },
+    ]
+    let fail!: (cause: Error) => void
+    let finish!: () => void
+    const request = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((calledPath: string, body?: unknown) =>
+      calledPath === path ? request(body) : fallback(calledPath, body)
+    )
+    await mount()
+    const conversation = screen.getByRole('region', { name: 'Bot conversation' })
+    const card = within(conversation).getByText(prompt).closest('article')!
+    const submit = within(card).getByRole('button', { name: `${action} task` })
+    const opposite = within(card).getByRole('button', {
+      name: action === 'Stop' ? 'Resume task' : 'Stop task',
+    })
+    expect(submit).toBeEnabled()
+    expect(opposite).toBeEnabled()
+    act(() => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      opposite.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const payload = { id: 'atlas-task' }
+    expect(request).toHaveBeenCalledExactlyOnceWith(payload)
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+
+    await act(async () => fail(new Error('Task action unavailable')))
+    const alert = await within(card).findByRole('alert')
+    expect(within(alert).getByText(message)).toBeVisible()
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(within(alert).getByText('Task action unavailable')).not.toBeVisible()
+    expect(within(card).getByText(prompt)).toBeVisible()
+    expect(within(card).getByText('paused', { exact: true })).toBeVisible()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Stop task' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Resume task' })).toBeEnabled()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([calledPath]) => calledPath === 'tasks'
+    ).length
+    await act(async () => events.get('gbot-task-update')?.())
+    expect(
+      mocks.call.mock.calls.filter(([calledPath]) => calledPath === 'tasks')
+    ).toHaveLength(reads + 1)
+    expect(
+      within(within(card).getByRole('alert')).getByText(message)
+    ).toBeVisible()
+    expect(within(card).getByText('paused', { exact: true })).toBeVisible()
+    expect(request).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(within(card).getByRole('button', { name: `${action} task` }))
+    expect(request.mock.calls).toEqual([[payload], [payload]])
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+    tasks = [{ ...tasks[0], state: outcome }]
+    await act(async () => finish())
+    expect(await within(card).findByText(outcome, { exact: true })).toBeVisible()
+    expect(within(card).getByText(prompt)).toBeVisible()
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(
+      within(card).getByRole('button', {
+        name: action === 'Stop' ? 'Resume task' : 'Stop task',
+      })
+    ).toBeEnabled()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([calledPath]) =>
+          calledPath.startsWith('tasks/') && calledPath !== 'tasks/approvals'
+      )
+    ).toEqual([
+      [path, payload],
+      [path, payload],
+    ])
+  }
+)
+
+it('shows the saved interruption cause beside Resume and clears it after completion', async () => {
+  const reason = 'model returned no answer; resume the task to try again'
+  tasks = [
+    {
+      id: 'interrupted-atlas',
+      identity: snapshot.live_sessions[0],
+      state: 'interrupted',
+      messages: [{ role: 'user', content: 'Save my note' }],
+      help_requests: [],
+      history: [{ state: 'interrupted', reason, at: 42 }],
+    },
+  ]
+  await mount()
+  const cause = await screen.findByText(reason)
+  const card = cause.closest('article')!
+  expect(cause).toBeVisible()
+  expect(within(card).getByText('Save my note')).toBeVisible()
+  const resume = within(card).getByRole('button', { name: 'Resume task' })
+  expect(resume).toBeEnabled()
+  fireEvent.click(resume)
+  await waitFor(() => expect(resume).toBeEnabled())
+  expect(mocks.call).toHaveBeenCalledWith('tasks/resume', {
+    id: 'interrupted-atlas',
+  })
+  tasks = [{ ...tasks[0], state: 'completed' }]
+  await act(async () => events.get('gbot-task-update')?.())
+  expect(await within(card).findByText('completed')).toBeVisible()
+  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  tasks = [{ ...tasks[0], state: 'interrupted', history: undefined }]
+  await act(async () => events.get('gbot-task-update')?.())
+  expect(within(card).getByText('Save my note')).toBeVisible()
+  expect(within(card).getByRole('button', { name: 'Resume task' })).toBeEnabled()
+  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+})
+
+it.each([
+  ['Send reply', 'Sending reply…', 'Documents', 'Your reply: Documents'],
+  ['Decline', 'Declining request…', null, 'Request declined'],
+] as const)(
+  'keeps a failed human-help %s inline through refresh and retries the same response',
+  async (action, progress, response, outcome) => {
+    const request = {
+      id: 'atlas-help',
+      question: 'Which folder?',
+      status: 'pending' as const,
+      response: null,
+    }
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'waiting_for_human',
+        messages: [],
+        help_requests: [request],
+      },
+    ]
+    let fail!: (cause: Error) => void
+    let finish!: () => void
+    const reply = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) =>
+      path === 'tasks/help' ? reply(body) : fallback(path, body)
+    )
+    await mount()
+    const card = (await screen.findByText(request.question)).closest('article')!
+    const input = within(card).getByLabelText('Your reply')
+    fireEvent.change(input, { target: { value: 'Documents' } })
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    const body = {
+      id: 'atlas-task',
+      request_id: 'atlas-help',
+      response,
+    }
+    expect(reply).toHaveBeenCalledExactlyOnceWith(body)
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    expect(input).toBeDisabled()
+    await act(async () => fail(new Error('Help reply unavailable')))
+    expect(await within(card).findByRole('alert')).toHaveTextContent(
+      'Help reply unavailable'
+    )
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(input).toHaveValue('Documents')
+    expect(input).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Send reply' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Decline' })).toBeEnabled()
+    expect(within(card).queryByText(outcome)).not.toBeInTheDocument()
+
+    const refreshes = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => events.get('gbot-task-update')?.())
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks')
+    ).toHaveLength(refreshes + 1)
+    expect(within(card).getByRole('alert')).toHaveTextContent(
+      'Help reply unavailable'
+    )
+    expect(input).toHaveValue('Documents')
+
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    expect(reply.mock.calls).toEqual([[body], [body]])
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    tasks = [
+      {
+        ...tasks[0],
+        state: 'interrupted',
+        help_requests: [
+          {
+            ...request,
+            status: response === null ? 'declined' : 'completed',
+            response,
+          },
+        ],
+      },
+    ]
+    await act(async () => finish())
+    expect(await within(card).findByText(outcome)).toBeVisible()
+    expect(within(card).queryByLabelText('Your reply')).not.toBeInTheDocument()
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/approval',
+      expect.anything()
+    )
+  }
+)
+
+it.each([
+  [
+    'Allow',
+    true,
+    'Allowing this action…',
+    'Could not allow this action. Try again.',
+  ],
+  [
+    'Deny',
+    false,
+    'Denying this action…',
+    'Could not deny this action. Try again.',
+  ],
+] as const)(
+  'keeps a failed permission %s inline through refresh and retries it in the companion',
+  async (action, allow, progress, message) => {
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'waiting_for_human',
+        messages: [],
+        help_requests: [],
+      },
+    ]
+    let approvals = [
+      {
+        id: 'atlas-permission',
+        task_id: 'atlas-task',
+        request: { operation: { kind: 'read', path: '/home/bot/notes.txt' } },
+      },
+    ]
+    let fail!: (cause: Error) => void
+    let finish!: () => void
+    const reply = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) => {
+      if (path === 'tasks/approvals') return Promise.resolve(approvals)
+      if (path === 'tasks/approval') return reply(body)
+      return fallback(path, body)
+    })
+    await mount()
+    const card = screen.getByRole('article', { name: 'Bot permission request' })
+    const submit = within(card).getByRole('button', { name: action, exact: true })
+    act(() => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const payload = { id: 'atlas-permission', allow }
+    expect(reply).toHaveBeenCalledExactlyOnceWith(payload)
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    expect(card).toHaveAttribute('aria-busy', 'true')
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+
+    await act(async () => fail(new Error('Permission decision unavailable')))
+    const alert = await within(card).findByRole('alert')
+    expect(within(alert).getByText(message)).toBeVisible()
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(
+      within(alert).getByText('Permission decision unavailable')
+    ).not.toBeVisible()
+    expect(within(card).getByText(/Allow permits this action once/)).toBeVisible()
+    expect(within(card).getByText('/home/bot/notes.txt')).toBeVisible()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(card).toHaveAttribute('aria-busy', 'false')
+    expect(within(card).getByRole('button', { name: 'Allow' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Deny' })).toBeEnabled()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => events.get('gbot-task-update')?.())
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks')
+    ).toHaveLength(reads + 1)
+    expect(
+      within(within(card).getByRole('alert')).getByText(message)
+    ).toBeVisible()
+    expect(within(card).getByText(/Allow permits this action once/)).toBeVisible()
+    expect(reply).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    expect(reply.mock.calls).toEqual([[payload], [payload]])
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+    approvals = []
+    await act(async () => finish())
+    await waitFor(() => expect(card).not.toBeInTheDocument())
+    expect(
+      screen.queryByRole('article', { name: 'Bot permission request' })
+    ).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+      )
+    ).toEqual([
+      ['tasks/approval', payload],
+      ['tasks/approval', payload],
+    ])
+  }
+)
 
 it('sends a permission decision for the selected bot and shows its pending state', async () => {
   tasks = [
@@ -518,6 +1031,121 @@ it('blocks same-tick duplicate companion tasks and keeps a failed draft for retr
   expect(submit).toHaveBeenCalledTimes(2)
 })
 
+it('keeps a failed task submission inline through refresh and isolates its companion bot retry', async () => {
+  snapshot.live_sessions.push({ workspace_id: 'b', session_id: 'sb' })
+  snapshot.assignments.push({ ...snapshot.assignments[0], workspace_id: 'b' })
+  let fail!: (cause: Error) => void
+  let finish!: (value: { id: string }) => void
+  const submit = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<{ id: string }>((_, reject) => {
+          fail = reject
+        })
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise<{ id: string }>((resolve) => {
+          finish = resolve
+        })
+    )
+  const fallback = mocks.call.getMockImplementation()!
+  mocks.call.mockImplementation((path: string, body?: unknown) =>
+    path === 'tasks/start' ? submit(body) : fallback(path, body)
+  )
+  await mount()
+  const input = screen.getByRole('textbox', { name: 'Message bot' })
+  fireEvent.change(input, { target: { value: 'Read the Atlas notes' } })
+  const form = input.closest('form')!
+  const payload = {
+    identity: snapshot.live_sessions[0],
+    prompt: 'Read the Atlas notes',
+  }
+  act(() => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  })
+  expect(submit).toHaveBeenCalledExactlyOnceWith(payload)
+  expect(form).toHaveAttribute('aria-busy', 'true')
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+  expect(screen.getByText('Sending this task to the bot…')).toHaveAttribute(
+    'role',
+    'status'
+  )
+  await act(async () => fail(new Error('Task admission unavailable')))
+  const message = 'Could not send this task. Try again.'
+  const alert = await screen.findByRole('alert')
+  expect(within(alert).getByText(message)).toBeVisible()
+  expect(
+    within(alert).getByText('Details').closest('details')
+  ).not.toHaveAttribute('open')
+  expect(within(alert).getByText('Task admission unavailable')).not.toBeVisible()
+  expect(input).toHaveValue(payload.prompt)
+  expect(form).toHaveAttribute('aria-busy', 'false')
+  expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
+  expect(useGbotCompanion.getState().tasks).toEqual([])
+
+  const reads = mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+  await act(async () => events.get('gbot-task-update')?.())
+  await waitFor(() =>
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+    ).toBeGreaterThan(reads)
+  )
+  expect(screen.getByRole('button', { name: 'Companion bot' })).toHaveTextContent(
+    'Atlas'
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent(message)
+  expect(input).toHaveValue(payload.prompt)
+  expect(submit).toHaveBeenCalledTimes(1)
+
+  fireEvent.click(screen.getByRole('button', { name: /Open Bramble/ }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(input).toHaveValue('')
+  fireEvent.change(input, { target: { value: 'Bramble draft' } })
+  expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
+  expect(input).toHaveValue(payload.prompt)
+  expect(screen.getByRole('alert')).toHaveTextContent(message)
+
+  act(() => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  })
+  expect(submit.mock.calls).toEqual([[payload], [payload]])
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+  tasks = [
+    {
+      id: 'accepted-atlas-task',
+      identity: payload.identity,
+      state: 'running',
+      messages: [{ role: 'user', content: payload.prompt }],
+    },
+  ]
+  await act(async () => finish({ id: tasks[0].id }))
+  await waitFor(() => expect(input).toHaveValue(''))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(form).toHaveAttribute('aria-busy', 'false')
+  expect(
+    within(screen.getByRole('region', { name: 'Bot conversation' })).getByText(
+      payload.prompt
+    )
+  ).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: /Open Bramble/ }))
+  expect(input).toHaveValue('Bramble draft')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(
+    mocks.call.mock.calls.filter(
+      ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+    )
+  ).toEqual([
+    ['tasks/start', payload],
+    ['tasks/start', payload],
+  ])
+})
+
 it('releases desktop input, audio and leases on hide, then reopens without restarting the bot', async () => {
   await mount()
   fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
@@ -645,6 +1273,131 @@ it('closes a late desktop ticket after hiding and never starts its media session
     'Main draft'
   )
 })
+
+it.each([
+  ['Take over', 'control/take-over', 'Could not take over this desktop. Try again.'],
+  ['Hand back', 'control/hand-back', 'Could not hand back control. Try again.'],
+] as const)(
+  'keeps a failed desktop control %s inline and retries its companion session',
+  async (action, path, message) => {
+    const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    try {
+      const identity = snapshot.live_sessions[0]
+      snapshot.live_sessions.push({ workspace_id: 'b', session_id: 'sb' })
+      let human = action === 'Hand back'
+      let fail!: (cause: Error) => void
+      let finish!: () => void
+      const change = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>((_, reject) => {
+          fail = reject
+        }))
+        .mockImplementationOnce(() => new Promise<void>((resolve) => {
+          finish = resolve
+        }))
+      const fallback = mocks.call.getMockImplementation()!
+      mocks.call.mockImplementation((request: string, body?: unknown) => {
+        if (request === 'state') return Promise.resolve({
+          ...snapshot,
+          controls: [{
+            identity: snapshot.live_sessions[0],
+            state: human ? 'human' : 'bot',
+            owner: human ? sessionStorage.getItem('gbot-control-owner') : null,
+          }],
+        })
+        if (request === path) {
+          if (action === 'Hand back') expect(mocks.stop).toHaveBeenCalled()
+          return change(body)
+        }
+        if (request === 'view/open') return Promise.resolve({
+          lease_id: 'control-lease',
+          ws_url: 'ws://127.0.0.1/mock',
+          media_session_id: 'control-media',
+          interactive: (body as { interactive: boolean }).interactive,
+        })
+        return fallback(request, body)
+      })
+      await mount()
+      fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+      fireEvent.click(screen.getByRole('button', { name: 'View bot’s desktop' }))
+      await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(1))
+      const pane = () => within(screen.getByRole('region', { name: 'Bot desktop controls' }))
+      const originalStatus = human ? 'Bot paused · human control' : 'Bot has control'
+      const payload = { identity, owner: sessionStorage.getItem('gbot-control-owner') }
+      const button = pane().getByRole('button', { name: action, exact: true })
+      act(() => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(change).toHaveBeenCalledExactlyOnceWith(payload)
+      expect(button).toBeDisabled()
+      expect(pane().getByText(originalStatus, { exact: true })).toBeVisible()
+      await act(async () => fail(new Error('Desktop control unavailable')))
+      const alert = await pane().findByRole('alert')
+      expect(within(alert).getByText(message)).toBeVisible()
+      expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute('open')
+      expect(within(alert).getByText('Desktop control unavailable')).not.toBeVisible()
+      expect(button).toBeEnabled()
+      expect(pane().getByText(originalStatus, { exact: true })).toBeVisible()
+      expect(errorToast).not.toHaveBeenCalled()
+
+      const reads = mocks.call.mock.calls.filter(([request]) => request === 'tasks').length
+      await act(async () => events.get('gbot-task-update')?.())
+      expect(mocks.call.mock.calls.filter(([request]) => request === 'tasks')).toHaveLength(reads + 1)
+      expect(pane().getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+      fireEvent.click(screen.getByRole('button', { name: /Open Bramble/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+      expect(pane().queryByRole('alert')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
+      expect(pane().getByRole('alert')).toHaveTextContent(message)
+
+      snapshot.live_sessions[0] = { ...identity, session_id: 'replacement' }
+      await act(async () => events.get('gbot-task-update')?.())
+      expect(pane().queryByRole('alert')).not.toBeInTheDocument()
+      snapshot.live_sessions[0] = identity
+      await act(async () => events.get('gbot-task-update')?.())
+      expect(pane().getByRole('alert')).toHaveTextContent(message)
+      mocks.getTarget.mockResolvedValue({ kind: 'paired_host', host_id: 'other-service' })
+      await act(async () => events.get('gbot-task-update')?.())
+      fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+      expect(pane().queryByRole('alert')).not.toBeInTheDocument()
+      mocks.getTarget.mockResolvedValue({ kind: 'local' })
+      await act(async () => events.get('gbot-task-update')?.())
+      fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+      expect(pane().getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+
+      if (action === 'Hand back') {
+        fireEvent.click(pane().getByRole('button', { name: 'View bot’s desktop' }))
+        await waitFor(() => expect(mocks.start).toHaveBeenLastCalledWith(
+          expect.objectContaining({ interactive: true })
+        ))
+      }
+      const retry = pane().getByRole('button', { name: action, exact: true })
+      fireEvent.click(retry)
+      expect(change.mock.calls).toEqual([[payload], [payload]])
+      expect(pane().queryByRole('alert')).not.toBeInTheDocument()
+      expect(retry).toBeDisabled()
+      expect(pane().getByText(originalStatus, { exact: true })).toBeVisible()
+      human = !human
+      await act(async () => finish())
+      expect(await pane().findByRole('button', {
+        name: action === 'Take over' ? 'Hand back' : 'Take over', exact: true,
+      })).toBeEnabled()
+      expect(pane().getByText(human ? 'Bot paused · human control' : 'Bot has control', { exact: true })).toBeVisible()
+      expect(pane().queryByRole('alert')).not.toBeInTheDocument()
+      expect(mocks.call.mock.calls.filter(([request]) =>
+        request.startsWith('control/') || (request.startsWith('tasks/') && request !== 'tasks/approvals')
+      )).toEqual([[path, payload], [path, payload]])
+      expect(errorToast).not.toHaveBeenCalled()
+    } finally {
+      errorToast.mockRestore()
+    }
+  }
+)
 
 it('updates actual tool activity from service events and stops input before hand back', async () => {
   await mount()

@@ -17,9 +17,18 @@ import { formatModelBytes } from '@/lib/model-release'
 
 const advancedFieldLabels = { draft_tokens: 'Draft ahead length (tokens)', draft_tp: 'Drafting graphics cards (TP)', prefill_chunk: 'Input batch size (tokens)' } as const
 const instanceStatusLabels = { starting: 'Starting', ready: 'Ready to chat', stopping: 'Stopping', stopped: 'Stopped', failed: 'Could not start' } as const
+const modelActionMessages = {
+  start: 'Model start requested.',
+  stop: 'Model stop requested.',
+  restart: 'Model restart requested.',
+  reload: 'Model settings saved; restart requested.',
+  launch: 'Model start requested.',
+  profile_launch: 'Model start requested.',
+} as const
 
 export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot?: EngineSnapshot; error?: string }) {
   const refresh = useEngineHosts((s) => s.refresh)
+  const publishSnapshot = useEngineHosts((s) => s.publishSnapshot)
   const [modelId, setModelId] = useState('')
   const [gpus, setGpus] = useState<string[]>([])
   const [context, setContext] = useState(0)
@@ -28,6 +37,16 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [startupQuote, setStartupQuote] = useState<{ key: string; result?: EngineStartupQuote; error?: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<{ message: string; details: string } | null>(null)
+  const [actionResult, setActionResult] = useState<string | null>(null)
+  const actionPending = useRef(false)
+  const [connectionRemoved, setConnectionRemoved] = useState(false)
+  const [connectionCleanupWarning, setConnectionCleanupWarning] = useState<string | null>(null)
+  const [connectionRefreshError, setConnectionRefreshError] = useState<string | null>(null)
+  const [connectionResult, setConnectionResult] = useState(false)
+  const [scanResult, setScanResult] = useState(false)
+  const connectPending = useRef(false)
+  const scanPending = useRef(false)
+  const hostListRefreshPending = useRef(false)
   const [hostStopError, setHostStopError] = useState<string | null>(null)
   const [hostStopping, setHostStopping] = useState(false)
   const profiling = hardwareProfileBlocksLaunch(snapshot?.hardware_profile)
@@ -73,23 +92,26 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const launchError = invalidNumbers ? 'Use whole numbers. Conversation length and model copies must be at least 1. Requests at once must be between 1 and 8. Advanced settings cannot be negative; the graphics-card memory limit must be greater than 0 or left blank.'
     : options.kv_dtype === 'nvfp4' && selected?.metadata.nvfp4_kv_available === false
       ? 'This model cannot use NVFP4 conversation memory. Choose INT8 or BF16, or add a model prepared for NVFP4 memory.' : null
-  const act = async (action: string, args: Record<string, unknown> = {}) => {
+  const act = async (action: keyof typeof modelActionMessages | 'hardware_profile' | 'gbot_grant', args: Record<string, unknown> = {}) => {
+    if (busy || actionPending.current) return false
+    actionPending.current = true
     setBusy(true)
     setActionError(null)
+    setActionResult(null)
+    setConnectionRefreshError(null)
     try {
-      const result = await engineCommand<{ credential_cleanup_warning?: string | null }>(action, { host_id: host.host_id, ...args })
-      if (result?.credential_cleanup_warning) {
-        setActionError({ message: 'The saved connection was removed, but its saved sign-in could not be cleared from this computer.', details: result.credential_cleanup_warning })
-        toast.warning('Connection removed. Its saved sign-in could not be cleared.')
+      if (action === 'start' || action === 'stop' || action === 'restart' || action === 'reload') {
+        const changedSnapshot = await engineCommand<EngineSnapshot>(action, { host_id: host.host_id, ...args })
+        publishSnapshot(host.host_id, changedSnapshot)
+      } else {
+        await engineCommand(action, { host_id: host.host_id, ...args })
       }
-      await refresh()
+      if (action !== 'hardware_profile' && action !== 'gbot_grant') setActionResult(modelActionMessages[action])
+      await refreshHostList()
       return true
     }
     catch (e) {
-      const message = action === 'connect' ? 'Could not connect to this computer. Check that it is on and reachable, then try Connect again.'
-        : action === 'forget' ? 'Could not remove this saved connection. Try again.'
-          : action === 'scan' ? 'Could not refresh the model list. Check that the model files are available, then try again.'
-            : action === 'stop' ? 'Could not stop this model. Check its status and try again.'
+      const message = action === 'stop' ? 'Could not stop this model. Check its status and try again.'
               : action === 'restart' || action === 'reload' ? 'Could not restart this model. Check the settings and try again.'
                 : action === 'hardware_profile' ? 'Could not change the graphics-card setup. Check the connection and try again.'
                   : action === 'gbot_grant' ? 'Could not change this connection’s access. Check the connection and try again.'
@@ -97,14 +119,84 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       setActionError({ message, details: String(e) })
       toast.error(message)
       return false
+    } finally { actionPending.current = false; setBusy(false) }
+  }
+  const refreshHostList = async () => {
+    if (hostListRefreshPending.current) return
+    hostListRefreshPending.current = true
+    setBusy(true)
+    try {
+      await refresh()
+      setConnectionRefreshError(null)
+    } catch (e) { setConnectionRefreshError(String(e)) }
+    finally { hostListRefreshPending.current = false; setBusy(false) }
+  }
+  const connectHost = async () => {
+    if (busy || connectPending.current) return
+    connectPending.current = true
+    setBusy(true)
+    setActionError(null)
+    setConnectionResult(false)
+    setConnectionRefreshError(null)
+    try {
+      const connectedSnapshot = await engineCommand<EngineSnapshot>('connect', { host_id: host.host_id })
+      publishSnapshot(host.host_id, connectedSnapshot)
+      setConnectionResult(true)
+      await refreshHostList()
+    } catch (e) {
+      const message = 'Could not connect to this computer. Check that it is on and reachable, then try Connect again.'
+      setActionError({ message, details: String(e) })
+      toast.error(message)
+    } finally { connectPending.current = false; setBusy(false) }
+  }
+  const scanModels = async () => {
+    if (busy || scanPending.current) return
+    scanPending.current = true
+    setBusy(true)
+    setActionError(null)
+    setScanResult(false)
+    setConnectionRefreshError(null)
+    try {
+      const scannedSnapshot = await engineCommand<EngineSnapshot>('scan', { host_id: host.host_id })
+      publishSnapshot(host.host_id, scannedSnapshot)
+      setScanResult(true)
+      await refreshHostList()
+    } catch (e) {
+      const message = 'Could not refresh the model list. Check that the model files are available, then try again.'
+      setActionError({ message, details: String(e) })
+      toast.error(message)
+    } finally { scanPending.current = false; setBusy(false) }
+  }
+  const removeConnection = async () => {
+    if (busy || connectionRemoved) return
+    setBusy(true)
+    setActionError(null)
+    try {
+      const result = await engineCommand<{ credential_cleanup_warning?: string | null }>('forget', { host_id: host.host_id })
+      setConnectionRemoved(true)
+      setConnectionCleanupWarning(result?.credential_cleanup_warning ?? null)
+      toast.success('Connection removed')
+      if (result?.credential_cleanup_warning) toast.warning('Connection removed. Its saved sign-in could not be cleared.')
+      await refreshHostList()
+    } catch (e) {
+      const message = 'Could not remove this saved connection. Try again.'
+      setActionError({ message, details: String(e) })
+      toast.error(message)
     } finally { setBusy(false) }
   }
+  const connectionRefreshFeedback = connectionRefreshError !== null && <div role="alert" className="space-y-2 text-sm text-destructive"><p>Could not refresh the host list. Choose Refresh host list to try again.</p><details><summary className="cursor-pointer">Host refresh error details</summary><p className="whitespace-pre-wrap break-all">{connectionRefreshError}</p></details><Button variant="outline" disabled={busy} onClick={() => void refreshHostList()}>Refresh host list</Button></div>
+  if (connectionRemoved) return <section className="rounded-xl border p-5 space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{host.name}</h2><Button variant="outline" disabled>Remove connection</Button></div>
+    <p role="status" className="text-sm">The saved connection was removed.</p>
+    {connectionCleanupWarning && <div role="alert" className="text-sm text-destructive"><p>The saved connection was removed, but its saved sign-in could not be cleared from this computer.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{connectionCleanupWarning}</p></details></div>}
+    {connectionRefreshFeedback}
+  </section>
   const hardwareProfileControls = snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} calibrations={snapshot.draft_width_calibrations} gpus={snapshot.gpus} offline={!!error} disabled={busy}
     action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />
   return <section className="rounded-xl border p-5 space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'Computer not reachable' : snapshot ? 'Connected' : host.local ? 'Connecting' : 'Not connected'}</p></div>
-      {!host.local && (error || !snapshot) && <Button variant="outline" disabled={busy} onClick={() => void act('connect')}>Connect</Button>}
+      {!host.local && (error || !snapshot) && <Button variant="outline" disabled={busy} onClick={() => void connectHost()}>Connect</Button>}
       {active && snapshot && <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
         <div className="min-w-0 basis-64 flex-1">
         {snapshot.instances.length > 1 ? <label className="block min-w-0 text-xs font-medium">Model server
@@ -120,7 +212,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         </div>
       </div>}
       {host.local ? <span className="text-sm text-muted-foreground">This computer</span> : <Button variant="outline" disabled={busy} onClick={async () => {
-        if (await confirmAction({ title: `Remove the connection to ${host.name}?`, message: 'GChat will remove this saved connection. Models and downloads on that computer will keep running.', confirmLabel: 'Remove connection', destructive: true })) void act('forget')
+        if (await confirmAction({ title: `Remove the connection to ${host.name}?`, message: 'GChat will remove this saved connection. Models and downloads on that computer will keep running.', confirmLabel: 'Remove connection', destructive: true })) void removeConnection()
       }}>Remove connection</Button>}
       {host.local && snapshot?.can_stop_host && <Button variant="outline" disabled={busy || hostStopping || !!error} onClick={async () => {
         setBusy(true)
@@ -132,6 +224,10 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         finally { setBusy(false) }
       }}>{hostStopping ? 'Quitting…' : 'Stop model service and quit'}</Button>}
     </div>
+    {connectionResult && <p role="status" className="text-sm">Connected to {host.name}.</p>}
+    {scanResult && <p role="status" className="text-sm">Model list refreshed.</p>}
+    {actionResult && <p role="status" className="text-sm">{actionResult}</p>}
+    {connectionRefreshFeedback}
     {actionError && <div role="alert" className="text-sm text-destructive"><p>{actionError.message}</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{actionError.details}</p></details></div>}
     {hostStopError && <div role="alert" className="text-sm text-destructive"><p>Could not stop the model service. Wait for any model loading or other work to finish, then try again.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{hostStopError}</p></details></div>}
     {!error && snapshot?.draft_width_calibrations?.some(job => job.status === 'running') && <p role="status" className="text-sm text-muted-foreground">Finishing graphics-card speed tuning (about 1 minute). Your graphics card is busy until it finishes. Starting a model stops the tuning.</p>}
@@ -178,7 +274,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       <summary className="cursor-pointer font-medium" onClick={event => { event.preventDefault(); setSettingsOpen(!settingsOpen) }}>{editing ? 'Change model settings' : 'Choose model settings'}</summary>
       {editingInstance && <p className="text-sm text-muted-foreground">Changing {hostInstanceLabel(editingInstance, snapshot)}. Save and restart below to apply your choices.</p>}
       <h3 className="font-medium">Installed models</h3>
-      {!!snapshot.inventory_errors?.length && <div role="alert" className="rounded border border-destructive/40 p-3 text-sm"><p className="font-medium">Some model files could not be read. Check that the files are available, then refresh the model list.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary>{snapshot.inventory_errors.map((item, index) => <p key={`${item.path}-${index}`} className="mt-1 break-all">{item.path}: {item.error}</p>)}</details><Button variant="outline" disabled={busy || !!error} onClick={() => void act('scan')}>Refresh model list</Button></div>}
+      {!!snapshot.inventory_errors?.length && <div role="alert" className="rounded border border-destructive/40 p-3 text-sm"><p className="font-medium">Some model files could not be read. Check that the files are available, then refresh the model list.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary>{snapshot.inventory_errors.map((item, index) => <p key={`${item.path}-${index}`} className="mt-1 break-all">{item.path}: {item.error}</p>)}</details><Button variant="outline" disabled={busy || !!error} onClick={() => void scanModels()}>Refresh model list</Button></div>}
       <p className="text-sm text-muted-foreground">Choose an installed model and the graphics cards it will use. Check these settings to confirm which model file will be used and how much memory it needs before starting it.</p>
       <label className="block text-sm">Installed model<ChoiceSelect aria-label="Installed model" className="mt-1 w-full" value={modelId} onValueChange={(value) => {
         setModelId(value)
@@ -232,7 +328,13 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       </>}
       <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={async () => {
         if (editing && !await confirmAction({ title: 'Save and restart this model?', message: 'The model will finish its current replies, then restart with your chosen settings. Other people using it will be affected while it restarts.', confirmLabel: 'Save and restart' })) return
-        if (editing) void act('reload', { instance_id: editing, body: { configuration, expected_session_id: editingSession } })
+        if (editing) {
+          if (await act('reload', { instance_id: editing, body: { configuration, expected_session_id: editingSession } })) {
+            setEditing(null)
+            setEditingSession(null)
+            setSettingsOpen(false)
+          }
+        }
         else void (async () => {
           for (let remaining = instanceCount; remaining > 0; remaining--) {
             if (!await act('launch', { body: { ...configuration, remaining_instances: remaining } })) {
@@ -242,7 +344,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
           }
         })()
       }}>{editing ? 'Save and restart model' : 'Start model with these settings'}</Button>
-        {editing && <Button variant="outline" onClick={() => { setEditing(null); setSettingsOpen(false) }}>Cancel editing</Button>}
+        {editing && <Button variant="outline" onClick={() => { setEditing(null); setEditingSession(null); setSettingsOpen(false) }}>Cancel editing</Button>}
       </div>
       </details>
     </details>}

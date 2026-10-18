@@ -1,5 +1,412 @@
 # GChat installer refresh
 
+## Linux missing-driver guidance — Codex 4, October 18
+
+`fix/c4-cli-driver-guidance-20261018` implements
+`CLI-INSTALL-MISSING-DRIVER-GUIDANCE`. The novice walk's installed runtime failed
+at the ELF loader with exit 127 when `libnvidia-ml.so.1` was unavailable in a
+driver-free container; evidence is `test/c4-cli-first-run-20261018` at
+`16628ae92`, `out/c4-cli-first-run-20261018/novice/error-cases/error-result.json`.
+
+Linux setup now loads only `libcuda.so.1` and `libnvidia-ml.so.1` declared in the
+selected runtime manifest, after complete payload integrity checks and before
+any installation write. Failure names the library and manifest CUDA version,
+explains system-driver repair and `nvidia-smi`, and gives NVIDIA Container
+Toolkit guidance. Preview remains read-only. Driver installation, Engine
+behavior and runtime ownership are unchanged. Library loading does not qualify
+driver-version or live-GPU compatibility. Arch signed this scope at 04:43:46Z.
+
+Focused setup tests passed all four cases, including both missing-library CLI
+failures with existing registration preserved, successful Host handoff, and
+preview/integrity ordering. Package tests passed five cases; five Windows
+PowerShell cases were skipped on Linux. The **single `make verify` passed at
+04:55:01Z**: 3,478 frontend tests and 1,223 Rust tests, with six frontend skips
+and 28 Rust ignores. Lint had five existing warnings and no errors. Source
+mtimes were refreshed before copied cache reuse; the changed tests executed.
+Concise evidence is in [the result](../../out/c4-cli-driver-guidance-20261018/verification-result.json),
+[verification summary](../../out/c4-cli-driver-guidance-20261018/verify-summary.txt)
+and [command receipt](../../out/c4-cli-driver-guidance-20261018/command.json).
+
+The existing packager completed at 04:57:02Z using the accepted original Host
+`36c278f285d1a63f8df9cf813f13d34e1e02cf68`, e2282c336 SM120a runtime and
+175-profile catalog. This preserves the original Host/configuration pairing;
+the newer launcher Host requiring `runtime_set` was not substituted. No Host or
+Engine release rebuild occurred. The refreshed archive is:
+
+```text
+/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/distribution/ginfer-bundle-0.1.0-linux-x86_64.tar.gz
+```
+
+It is 622,161,059 bytes, SHA256
+`a0e9c930493b969b2c4e06da74f3de7ff94f5a7615fd1b092166709eaa2212a4`, with
+member root `ginfer-bundle-0.1.0-linux-x86_64`. Its setup, original Host, runtime
+manifest and guide match their selected inputs; all 178 members and 175
+profiles are accounted for in [the archive receipt](../../out/c4-cli-driver-guidance-20261018/archive-result.json).
+The first metadata extraction used `source_revision`; the manifest's actual
+field is `source_commit`. That receipt-only correction repeated no gate or
+packaging. Native setup acceptance passed at 04:58Z: the real driver-free runc
+container exited 1 with the declared library, bundled CUDA version, driver repair
+and container guidance, before creating any installation target or locator.
+The same archive on S1 with its existing driver completed `--install --no-wizard`
+with exit 0, created its launcher and registered private Host, and reported idle
+hardware preparation. No GPU was selected and no calibration or model ran.
+See [native results](../../out/c4-cli-driver-guidance-20261018/native/result.json).
+
+After the successful driver-present setup, the parent unnecessarily invoked
+`first-run` on this older Host and hit the known standalone runtime-set defect.
+That extra check and failed wrapper are retained and excluded from setup
+acceptance; the independent launcher repair is already merged as `a82f8c1e0`
+with its own native wizard evidence. No installation or passing gate was repeated.
+Future setup-only acceptance must stop at the Host handoff, checking further
+first-run behavior only with the launcher branch's matching Host/configuration.
+All private Host/keyring/DBus processes are terminal; booking 3006 returned at
+04:59Z. Next: merge this isolated setup fix; the model-download/profile journey
+still waits for the separately recorded W12 release-catalog publication.
+
+Owned inventory: local source worktree
+`/ai/gchat-worktrees/c4-cli-driver-guidance-20261018`; S1 source, archive and
+receipts under `/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018`.
+Booking 2995 was canceled and CPUs112–119 **returned at 04:57:55Z**. Verification
+used nice10, eight Cargo jobs and the shared socket1 compile lock in pinned
+bridge image `sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14`.
+After native acceptance, the owned copied Rust/frontend caches were retired at
+05:01:42Z, freeing 23,416,999,936 allocated bytes. The root retains 2,980,278,272
+bytes for source, archive, extracted native copies and receipts until merge;
+[the cleanup receipt](../../out/c4-cli-driver-guidance-20261018/cleanup-inventory.json)
+records the exact scope. Donors and protected inputs are untouched. No GPU or
+model inputs were copied.
+## First-run step guidance — gates and native prompt PASS, October 18
+
+`CLI-FIRST-RUN-STEP-GUIDANCE` changes exactly two CLI wizard messages on
+`fix/c4-cli-first-run-step-guidance-20261018`, based on merged main `84d6b23f0`
+(including launcher repair `a82f8c1e0`). The GPU prompt explains that storage and
+models come next, followed by profiling after selected downloads are verified.
+The profiling page says: “Profiling the selected models before startup.
+Profiling continues if you close this menu.” It removes the obsolete 22–73
+minute full-install estimate, consistent with the
+[selected-artifact decision](../decisions/2026-10-16-profile-selected-artifact-before-idle-format-completion.md).
+Behavior, setup ordering, standalone `runtime_set=false`, and Engine are unchanged.
+
+Existing first-run progression cases passed **2/2**, Host check/clippy passed,
+and the **one `make verify` passed at 05:03:36Z**: root Vitest 3357 passed
+(6 skipped), extension Vitest 121 passed, six critical coverage floors passed,
+and Rust suites totaled 1228 passed (28 ignored). Lint had zero errors and five
+existing warnings. The release Host built at 05:05:04Z; `ldd` has no missing
+dependencies. Its SHA256 is
+`a2920cc133201fc260dc38ea25f9d907c19d3d519bf45273f860748aca06f24e`.
+[Gate and command receipts](../../out/c4-cli-first-run-step-guidance-20261018/gates.json).
+
+The fresh isolated native replay ran **05:06:53–05:07:08Z** with those exact Host
+bytes. It displayed the corrected GPU prompt; selecting GPU 1 advanced to the
+recommended private SSD storage and then the actual empty model catalog. Status
+is `models`, with no models, downloads or startup profiles and hardware profiling
+`idle`. The Host and private keyring stopped; CPU booking **3005** (112–119) was
+canceled at **05:07Z**. No archive rebuild, GPU/model execution or calibration ran.
+The profiling-page message is source/build checked; publication remains necessary
+to reach that page natively. No catalog, model or recommendation was fabricated.
+[Result and native receipt](../../out/c4-cli-first-run-step-guidance-20261018/result.json).
+
+One prompt-only attempt had no keyboard forwarding because a Python heredoc
+occupied subprocess stdin. It was stopped and cleaned up before the fresh replay.
+The corrected launcher uses `python -c` with inherited PTY stdin; no verification
+or build was repeated. Next: parent review/merge; the downstream model/profile
+walk still waits for W12/Ron release-bearing publication.
+
+| Owner / host | Path | State / retention |
+| --- | --- | --- |
+| Codex 4 / local | `/ai/gchat-worktrees/c4-cli-first-run-step-guidance-20261018` | Separate source and concise evidence branch; complete, awaiting review |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018` | No live job/CPU reservation; owned cache, prior accepted archive and native evidence retained temporarily for coordinated merge/cleanup; new outputs use `step-guidance-*` names |
+
+## Linux archive install command — Python 3.11 or newer, October 18
+
+The novice archive walk on S1 found that the delivered guide's literal
+`python3.11 setup.py` command exited 127: this supported installation has
+`python3` 3.12.3 and no executable named `python3.11`. Continuing with
+`python3 setup.py` installed the archive successfully before the separately
+tracked standalone launcher failure. The unchanged setup script already uses
+`#!/usr/bin/env python3` and requires Python 3.11 or newer.
+
+`fix/c4-cli-install-python-command-20261018` corrects the
+[Linux setup instruction](../lan-host-setup.md) to `python3 setup.py` and states
+that prerequisite. The packager copies this guide verbatim into the archive;
+maintainers' selected Python 3.11 build environment is unchanged. Evidence is
+`test/c4-cli-first-run-20261018` at `7f8e9a61e`,
+`out/c4-cli-first-run-20261018/novice/walk-result.json` and its PTY transcript.
+This documentation-only fix needs `git diff --check`. Next: include the corrected
+guide in the standalone-launcher archive refresh and continue that same novice
+walk; there is no new build or model execution for this wording change.
+## Standalone launcher runtime ownership — repaired native install/menu PASS; publication boundary, October 18
+
+The private novice installation at `7f8e9a61e` copied the accepted single-image
+archive and registered its Host, then the first-run wizard and no-argument menu
+failed because they required a desktop runtime-set manifest. The fix on
+`fix/c4-standalone-launcher-20261018`, source `05f60c5d5` after `576449a5c`,
+repairs that installed route. Engine source/runtime `e2282c336` is unchanged.
+
+The installed configuration requires `desktop.runtime_set`: Linux/Windows
+standalone setup writes `false`, desktop installation/repair writes `true`.
+Preparation and menu bootstrap share the declaration and strict reader. Desktop
+manifests stay required; installed configuration cannot be overridden by
+`--runtime-set`. Missing fields report the owning setup/reinstall commands.
+Standalone installers reject existing paths; no overwrite upgrade was added.
+The desktop writer replaces its configuration atomically. Arch conditionally
+signed `576449a5c` at 04:35:34Z and accepted this supported scope at 04:37:07Z.
+See the [decision](../decisions/2026-10-18-declare-installed-launcher-runtime-ownership.md).
+
+The final combined archive was packaged at **04:44:08Z**:
+
+```text
+/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/distribution-actionable-recovery/ginfer-bundle-0.1.0-linux-x86_64.tar.gz
+```
+
+It contains 178 members, the current Host, setup, the accepted SM120a runtime and
+qualified profile catalog. The existing packager verified 171 runtime payloads;
+Host `ldd` has no missing dependency. Archive SHA256 is
+`8239716c9055b9ba210dfb77c9ecf3554fcc6eb455673500f79f81def902f8e0`.
+The packaged guide preserves the runtime-ownership paragraph and combines only
+the Python command/prerequisite correction from `65df08dda`. Its literal
+`python3 setup.py` command succeeded using S1 Python 3.12.3.
+[Archive receipt](../../out/c4-standalone-launcher-20261018/archive-result.json).
+
+The native replay ran **04:45:34–04:46:51Z** in a fresh private HOME/XDG,
+DBus session and unlocked keyring, on CPUs 120–127. It accepted the three default
+private installation paths, selected GPU 1 by UUID, accepted the managed SSD
+model root, and reached the actual model catalog. One Refresh still returned an
+empty catalog. Installed no-argument `ginfer` then opened the real main menu;
+Download models reported no published compatible packages and offered Add a
+local model. Storage showed 1534.5 GiB free. The configuration declares
+`runtime_set=false`, and installed Host bytes match the packaged Host. The exact
+owned Host and keyring are stopped; CPU booking **2986** was canceled at **04:46Z**.
+No model, download, calibration or GPU measurement ran.
+[Native result and transcript links](../../out/c4-standalone-launcher-20261018/novice/result.json).
+
+This establishes the repaired installer/wizard/menu route through the catalog
+boundary. It does **not** establish model recommendation, download admission,
+profiling or Ready. Arch confirmed at 04:45Z that no public release-bearing
+catalog exists and publication waits for W12/Ron. No URL, private fixture or local
+registration was invented to bypass that prerequisite. There is no hardware
+profile: native status has no measured storage candidates/rates, so the shown
+managed-root recommendation is a fallback, not a measured fastest-disk result.
+No-space download admission remains blocked on an actual published release.
+The parent's separate unchanged-runtime no-visible-GPU/driver receipts are at
+`16628ae92`; those checks were not repeated here.
+
+A separate novice wording defect was observed: the GPU prompt says **“Profiling
+starts after selection.”** Selecting the GPU actually advances to storage and
+then the catalog while hardware profiling remains `idle`. This wording was
+reported to the parent and is excluded from the runtime-ownership source fix.
+The profiling page was not reached, so its duration wording has no native result.
+Next: parent reviews/merges this fix; release-bearing publication remains the
+prerequisite for the downstream novice walk. A separate wording branch may use
+the retained owned cache after merge. GPU execution needs its own actual booking.
+
+Verification is complete for this change. The original focused Linux setup,
+installed-launcher, argument-ownership and desktop-writer cases passed. The one
+`make verify` invocation passed lint/typecheck/early contracts, then failed root
+Vitest because archived source lacked generated `core/dist/index.js`. Authorized
+recovery built that prerequisite, ran only the failed/unexecuted stages, and
+passed root coverage (3344 tests, 6 skipped), extension coverage (121), six critical
+coverage floors and Rust (1223 passed, 28 ignored). No full verification or
+previously passing suites were repeated. The two new actionable-reader/preparation
+regressions each executed exactly one case and passed, followed by affected Host
+check/clippy and incremental release. First follow-up epoch mtimes had reused
+stale test binaries and matched zero tests; those invalid receipts remain.
+Recovery advances changed-source mtimes and requires each named one-test result
+before continuation. [Current result](../../out/c4-standalone-launcher-20261018/result.json).
+
+| Owner / host | Path | State / retention |
+| --- | --- | --- |
+| Codex 4 / local | `/ai/gchat-worktrees/c4-standalone-launcher-20261018` | Source, authority and concise tracked archive/native receipts; no active job |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018` | Final archive 594 MiB; native-target 25 GiB, cargo-home 2.3 GiB, source/dependencies 2.2 GiB and private replay 1.7 GiB temporarily retained for parent merge and next wording fix. All jobs terminal; CPU 120–127 returned. Three exact superseded/partial archives retired; shared donor untouched |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-20261018` | Failed baseline install and owned release cache retained until parent cleanup decision; no live job |
+## Standalone Linux CLI novice archive — catalog publication boundary, October 18
+
+The current-source standalone archive is **assembled and integrity-checked** on
+S1 (`ron@192.168.1.109`, `AIS-2-8592-L01`):
+
+```text
+/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-20261018/distribution/ginfer-bundle-0.1.0-linux-x86_64.tar.gz
+```
+
+It is **622,160,226 bytes**, SHA256
+`ae903f3f4c397e132a87c8980fef0d313d4124f7d0f447e0dc08d7fe7e6c22c5`.
+Host and bundled `setup.py` are from main
+`36c278f285d1a63f8df9cf813f13d34e1e02cf68`; their inputs are unchanged from
+`548d73ed8`. The separately retained accepted Engine is clean
+`e2282c336d114b7dcebdfa1a179bfb342731a8b8`, **SM120a only**, with its existing
+CUDA 13.3/Linux runtime manifest. This is an explicit two-component assembly,
+not an Engine rebuild or a multi-architecture release.
+
+The Host build/package job passed at **04:05:09Z** using the retained offline
+image, a private copy of dependency/release caches, eight socket-1 CPUs, nice
+10 and the shared compile lock. Cargo used the unmodified release profile and
+finished its current-source build in 1m27s. The old `ed68c7443` Host was only a
+read-only cache donor. The existing `scripts/package-ginfer-host.py` then
+packaged the new Host, current Linux setup/installer and documentation,
+retained runtime and qualified Linux profile catalog. All **178 archive
+members** match their selected inputs, including every one of the runtime's
+171 files and the unchanged values of all 175 catalog profiles. The Host's
+noninteractive `--help` and dependency check passed; it requires glibc 2.39 and
+system OpenSSL 3. No `make verify` ran for this source-unchanged packaging task.
+
+The CPU-only novice walk completed at **04:13:52Z** in a fresh private S1
+HOME/XDG, DBus session and unlocked test keyring, with recorded interactive
+inputs/output. It used the archive's documented setup path and default locations.
+The literal documented `python3.11 setup.py` first failed because S1 has no
+`python3.11` executable (exit 127); the available `python3` is 3.12.3. Continuing
+with `python3 setup.py` copied the runtime, created the launcher and started a
+private Host. Hardware preparation stayed **idle**, with no selected GPU and no
+calibration. Setup then failed (exit 1) before the GPU-choice prompt:
+
+```text
+GChat linux engine runtime set is unavailable: No such file or directory (os error 2)
+```
+
+The installed no-argument `ginfer` menu failed with the same error (exit 1).
+This is a reproduced **GChat Host installed-launcher/runtime ownership defect**,
+not an Engine inference or no-argument-dispatch defect. The combined standalone
+archive deliberately installs one `ginfer-linux-runtime-v1` image in the selected
+runtime directory. `scripts/setup-ginfer-linux.py` writes a `desktop` launcher
+configuration and omits `--runtime-set`, as the Host's prepare-hardware help
+requires for a single-image install. However,
+`InstalledConfiguration::connect_resolving` in
+`src-tauri/ginfer-host/src/launcher.rs` calls `desktop_runtimes(provider)` before
+resolving the already registered owner. That loader requires GChat's separate
+`provider/linux/runtime-set.json` and all four architecture images. Those files
+are not part of this standalone package. The initial prepare-hardware path had
+already registered the correct single-image owner with an empty runtime map.
+
+Installed CLI, hardware-profile, CPU-phase-profile, server, Host, first-run and
+prepare-hardware help all returned 0; server version matched retained clean
+`e2282c336`. A nonexistent model path returned its precise open-path error and
+exit 1 before device setup. A separate private Host invocation using the public
+`--nvidia-smi` option with a nonexistent executable returned a clear inventory
+error and exit 1. This checks unavailable inventory tooling, **not** a physical
+missing-driver/GPU installation. The passive CUDA-order command rejects a set
+`CUDA_VISIBLE_DEVICES` mask by contract (exit 2); that is not missing-GPU
+qualification. No profile measurement, model load or Engine inference ran.
+
+The Python command correction is merged as `36c0147db`; the separate launcher
+source branch `fix/c4-standalone-launcher-20261018` is completing its accepted
+runtime-ownership fix and fresh archive replay. Do not fabricate a four-image
+runtime set or change GInfer's delegating CLI to mask the original failure.
+The repaired launcher continuation is recorded in the owning source branch
+`fix/c4-standalone-launcher-20261018`: its fresh private archive installation
+reached GPU intent, storage selection, the actual empty catalog and the no-argument
+menu at 04:46:51Z. No hardware profile, calibration or model was started. Its
+recommended storage path is a fallback, not measured fastest-disk evidence.
+
+Arch confirmed at **04:45:01Z** that no public release catalog exists and its
+publication belongs to Ron-gated **W12**. Existing GChat/GInfer/ginfer-tools
+release tools have no writer for the application publication catalog; the
+ginfer-tools release-wave manifest has a different contract. No catalog or URL
+was invented or baked into a build. Download, model/profile recommendations,
+artifact profiling, measured fastest-disk selection and insufficient-space
+admission remain **waiting on W12 publication**. Acceptance of the launcher
+repair does not close these remaining novice-journey gates. The native GPU
+prompt also promises profiling immediately after selection although the actual
+next step is storage; record and fix that wording separately.
+
+The remaining isolated Engine error checks finished at **04:39:56Z**, using the
+same installed, unchanged `e2282c336` runtime and a real registered TP1 artifact.
+With process-local `CUDA_VISIBLE_DEVICES` empty, the ordinary inference command
+returned 1 with `cudaGetDeviceCount: cudaErrorNoDevice: no CUDA-capable device is
+detected`, before model materialization or device allocations. This checks
+no visible GPU, not a physically removed device. In the existing pinned runc
+container with no NVIDIA device/driver injection, the same installed runtime
+returned 127 at ELF loading: `libnvidia-ml.so.1` was unavailable. This is a real
+missing driver-library environment, with the physical host driver untouched;
+it exposes an unhelpful raw loader error without NVIDIA setup guidance. Record
+that separately as `CLI-INSTALL-MISSING-DRIVER-GUIDANCE`. No CUDA calibration,
+model load, source change or verification rerun occurred. The private keyring
+and D-Bus session stopped normally, the container exited, and CPU booking 2987
+was canceled at **04:40Z**. Commands, scope and outcomes are retained in
+`out/c4-cli-first-run-20261018/novice/error-cases/error-result.json`. Native
+insufficient-space admission remains unaccepted; no disk was filled.
+
+Codex 4 owns branch `test/c4-cli-first-run-20261018` and worktree
+`/ai/gchat-worktrees/c4-cli-first-run-20261018`. Concise local receipts are in
+`out/c4-cli-first-run-20261018/` (`build-command.json`, `build.log`,
+`archive-result.json`, member list and Host help/dependency results), with the
+same terminal and archive receipts in the owned S1 root above. The complete
+novice transcript and concise `walk-result.json` are in that local folder's
+`novice/` child; private Host state/credentials stay outside Git. Its `gchat`,
+`cargo-home`, `native-target`, `bin`, `distribution` and isolated `novice` install
+retain **15.61 GB allocated** pending the observed fix; the exact archive and
+tested Host build remain the candidate. No other session's donor, accepted runtime
+or model was changed. The build wrapper/container are terminal; booking 2955 was
+canceled and CPUs 120–127 returned at 04:06Z. The private novice Host, keyring,
+DBus and PTY are also terminal; exact owned PIDs were checked after normal
+SIGTERM shutdown. Booking 2963 was canceled and **CPUs 120–127 returned at
+04:14Z**. Saved private state has no selected GPUs, models or startup profiles.
+
+## Linux RC of record — release Flash High PASS, October 17
+
+The retained unsigned, unpublished Linux release RC is **GChat
+`ed68c7443d3d782869dad89736ca049631f8a157` + Engine
+`e2282c336d114b7dcebdfa1a179bfb342731a8b8`: PASS**. CLI, Host and desktop
+were built with the existing release targets; complete package/archive checks
+passed. This release supersedes the earlier ed68 dev-profile binaries. The
+[final result](../../out/linux-rc-final-20261017/current-ed68c7443-e2282c336-release/result.json)
+and [GUI observations](../../out/linux-rc-final-20261017/local5090-ed68c7443-e2282c336-release-flash-high/gui-dom-evidence.jsonl)
+resolve the older Flash High blockers below for this release and this scope.
+
+The final mounted AppImage used a private HOME/XDG/runtime, DBus and unlocked
+keyring on the local RTX 5090. Custom Flash pure 2-bit
+(`8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`)
+Load used context **8192**, concurrency **1**, speculation **none**, Vision
+**off** and **Automatic KV**. Load was clicked at **19:18:15.682Z**;
+Engine reported loaded in **132.883 seconds**, and the GUI reached Ready.
+One **High** request sent at **19:22:13.798Z** answered exactly **`RC_OK`**.
+Normal GUI Stop followed at **19:22:42.020Z**; the app exited normally and
+private Host, mount and helpers were retired by **19:23:03.089Z**.
+
+This qualifies that retained release AppImage's custom-load/High-request path.
+It does not qualify default Installed Load (no matching RTX 5090 Flash catalog
+profile), other models, current-main Linux bytes, or Windows. Ron's Windows
+installer/sign-in test remains the next release gate; the later Windows RC is
+recorded below. A current-main Linux refresh requires its own assigned build
+and acceptance, rather than inheriting this result.
+
+Both packages remain in
+`E:\gchat-linux-rc-20261017\linux-rc-ed68c7443-e2282c336-release` and on S1 under
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/`:
+
+| Release package | Bytes | SHA256 |
+| --- | ---: | --- |
+| `GChat_2.0.42+rc20261017.release.gchated68c7443.enginee2282c336_amd64.deb` | 2,733,559,300 | `4251e175fe83ec3abfe7f3ab33cbc795f8f2bfe07210376403fbbb2ac24bacc5` |
+| `GChat_2.0.42_rc20261017.release.gchated68c7443.enginee2282c336_amd64.AppImage` | 2,857,138,680 | `f75e612779ba1796447d3a8493652859f1845622e782dbe8655617c878529d4e` |
+
+### Retained donors and historical local cleanup, October 18
+
+Protected S1 inputs remain at
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
+(the release AppDir) and
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/app`
+(the read-only build/cache donor). C3, C4 and C7 have independent-copy grants
+for the app donor; none authorizes donor mutation. C4 completed its read-only
+`runtime-set-e2282c336/sm120a` copy at **06:40Z** and released the donor hold.
+
+The [cleanup result](../../out/linux-rc-final-20261017/cleanup-result-20261018.json)
+and [short cleanup account](../../out/linux-rc-final-20261017/README.md#local-disposable-payload-cleanup--2026-10-18)
+record retirement at **06:42:31Z** of **232 selected historical local files**:
+**19,968,435,665 logical bytes** (**19,969,183,744 allocated bytes**).
+Existing manifests and accepted transfer/source receipts bound literal names
+and sizes; no new large hashing, copy or directory deletion ran. An earlier
+acceptance cleanup had missed detached private desktop helpers. This pass
+verified their PID/start/cwd/private-HOME identities, terminated only the six
+authorized helpers, confirmed them absent, and found no selected-path references
+in readable process metadata before unlinking the selected files.
+
+The mismatched-size d31 Host remains without an exact local-copy binding.
+Generated seed inputs, frontend/asset payload archives and residency libraries
+remain outside the deletion set, as do two stale AppImage FUSE mounts. All S1
+donors/stages/packages, Windows-visible RCs and `/ai/gchat/out/linux` are
+preserved. Unreadable non-dumpable/other-user process metadata limits the
+liveness check; this is scoped local retirement, not a fleet cleanup claim.
+The small JSON receipt and short account retain the disposition; no new build,
+model run or acceptance rerun was needed.
+
 ## Windows RC refresh — release installer delivered, October 18
 
 Bubbs's post-merge refresh is **PASS**. The unsigned Windows release installer
@@ -271,11 +678,11 @@ Linux release `ed68c7443` + Engine `e2282c336` remains the retained Linux PASS
 record. The later Windows release RC `c75096fad` + Engine `b76ce57a3` is now
 delivered as recorded above and awaits Ron's installer/sign-in gate. No refreshed
 Linux qualification is claimed.
-The retained S1 RC donor
-`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
-was offered read-only to Gchat 1; its provider keyboard request was withdrawn
-before any copy or run because retained evidence already qualified that row.
-Preserve this RC donor. Older dated sections below retain their historical scope.
+The protected S1 release AppDir and app-cache donor, current independent-copy
+grants and completed historical local cleanup are recorded in the Linux RC
+section above. Gchat 1's provider-keyboard donor request was withdrawn before
+copy or run because retained evidence already qualified that row. Older dated
+sections below retain their historical scope.
 
 ## Known issues
 
@@ -299,9 +706,13 @@ For the October 17 release candidate:
   The initial [Windows gate](windows-gate-20261016.md) covers a narrower set of
   checks on an RTX 5090; its results do not qualify every Windows feature.
 
-## October 17 current Linux RC — packages verified, Flash High blocked
+## Historical October 17 e9cf Linux RC — packages verified, Flash High blocked
 
-The unsigned, unpublished app-only refresh uses GChat
+This older e9cf/4f attempt remains failed at its recorded scope. The release
+ed68/e228 custom-load and High-request PASS above supersedes it as the Linux
+RC of record; the failure below is not the current release disposition.
+
+The unsigned, unpublished app-only refresh used GChat
 `e9cf3b1a444f6884456bc88ed3ddeacd27b75cb6` with unchanged Engine
 `4f451dded472516ac561b67efdacf9673f776967` (SM80/86/89/120a). It includes the
 merged optional-completion correction: explicit **Cancel profiling** durably
@@ -323,12 +734,12 @@ consumer.
 The corrected e9cf native rebuild, package assembly and complete archive check
 pass, and both NTFS destination SHA256 values match. An earlier attempt used
 stale db670 native outputs and was disqualified before archive checking or
-transfer. Flash High GUI acceptance is **BLOCKED** by Engine startup capacity.
-Gchat 2's current native input-only check **PASSES**, with resources returned at
-11:12Z. Its receipt is
+transfer. Flash High GUI acceptance was **BLOCKED** in this attempt by Engine
+startup capacity. Gchat 2's same-pin native input-only check **PASSES**, with
+resources returned at 11:12Z. Its receipt is
 `/ai/gchat/out/gbot-desktop-keyboard-shortcuts-20261017/native-e9cf3b1a4/result.json`,
 SHA256 `7f52019c6b7e7e25d632e1276ab4e3c7057313390d2a804eb2c13ab637b43ea3`.
-Current RC receipts are under
+This attempt's receipts are under
 `/ai/gchat/out/linux-rc-final-20261017/current-e9cf3b1a4-4f451dded/`.
 
 The exact e9cf/4f AppImage's retained local RTX 5090 fixture now confirms the
@@ -415,9 +826,9 @@ task execution or control transfer.
 
 The packaged Flash pure 2-bit package (SHA256
 `8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`)
-**High-reasoning consumer check remains OPEN**. The c5f/4f attempt was blocked
-before model Start or any request: automatic `complete-remaining-formats`
-profiling disabled Load, and profiling immediately restarted after Cancel.
+**High-reasoning consumer check was not completed in this c5f/4f attempt**.
+It was blocked before model Start or any request: automatic
+`complete-remaining-formats` profiling disabled Load, and profiling immediately restarted after Cancel.
 The merged correction and subsequent capacity-blocked consumer attempt are
 described above; this blocked c5f attempt does not qualify the corrected candidate.
 

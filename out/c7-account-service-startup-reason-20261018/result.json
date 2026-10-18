@@ -1,0 +1,42 @@
+{
+  "task": "GUI-ACCOUNT-SERVICE-ERROR-WORDING",
+  "status": "PASS",
+  "baseline": "89024e1f2242b72d9c676a81fe58dadda24e4bd5",
+  "production_source": "3444ff6d07e8179f1380aac1564c1a285f7ef85d",
+  "test_source": "7dbcecea2",
+  "architecture": "Arch signed typed private startup exit codes 201-205 at04:23Z",
+  "defect_reproduced": {
+    "old_parser": "FAIL expected; 0 passed, 1 failed",
+    "observed_summary": "Account connections could not start: internal panic /private/old-attempt.",
+    "fixture": "current generic child exit1; stale append-only log contains prior secure-storage error and arbitrary internal path"
+  },
+  "focused": {
+    "host_cases": 3,
+    "service_boundary_cases": 1,
+    "rendered_cases": 32,
+    "cargo_check": "PASS",
+    "strict_clippy": "PASS"
+  },
+  "make_verify": {
+    "runs": 1,
+    "status": "PASS",
+    "frontend_summaries": [
+      "Test Files  338 passed | 1 skipped (339)",
+      "Tests  3345 passed | 6 skipped (3351)",
+      "Test Files  5 passed (5)",
+      "Tests  121 passed (121)"
+    ],
+    "rust_passed": 1221,
+    "rust_ignored": 28
+  },
+  "host": "AIS-2-8592-L01",
+  "cpus": "64-71",
+  "jobs": 8,
+  "completed": "2026-10-18T04:38:00Z",
+  "scope": "Linux private tests; no native GUI/Windows/installer/model/GPU acceptance claim",
+  "fixture_corrections": [
+    "Image has no rg: checker continued using grep without repeating baseline.",
+    "Native invoke rejects with strings: rendered mock corrected from JavaScript Error before full gate."
+  ],
+  "retention": "Result JSON and short summary; disposable owned build/cache removed after terminal gate."
+}

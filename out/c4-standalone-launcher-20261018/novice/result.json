@@ -1,0 +1,74 @@
+{
+  "status": "PASS through published-catalog boundary; downstream BLOCKED",
+  "session_start": "2026-10-18T04:45:34Z",
+  "session_end": "2026-10-18T04:46:51Z",
+  "host": "ron@192.168.1.109 / AIS-2-8592-L01",
+  "python": "3.12.3",
+  "installed_from_archive_sha256": "8239716c9055b9ba210dfb77c9ecf3554fcc6eb455673500f79f81def902f8e0",
+  "isolation": {
+    "root": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice",
+    "fresh_home_xdg": true,
+    "private_dbus_and_unlocked_keyring": true,
+    "wayland_display_unset": true,
+    "cpus": "120-127",
+    "nice": 10,
+    "gpu_work": false
+  },
+  "observed": {
+    "literal_command": "python3 setup.py",
+    "default_private_locations_confirmed": true,
+    "installed_runtime_set": false,
+    "installed_host_sha256": "89850bbead4aabac2c88067b8bebbcf9b832913b10f1774d2f27f8b521fdd236",
+    "selected_gpu_uuid": "GPU-bb41307d-6d91-5de3-9e23-a4aec948c49c",
+    "storage_path": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/data/ginfer/models",
+    "storage_available_bytes": 1651868217344,
+    "storage_menu_free_gib": 1534.5,
+    "storage_candidates_or_measured_rates": null,
+    "storage_recommendation_limit": "No hardware profile exists, so first-run status has no measured candidates/recommended_path; CLI falls back to the managed root. No fastest-disk claim.",
+    "catalog_loaded": true,
+    "catalog_models": 0,
+    "catalog_refreshes": 1,
+    "noarg_menu": "Opened real main menu, with download/add local/storage choices; no runtime-manifest failure",
+    "download_menu": "No published compatible models are available in the configured catalog yet. Use Add a local model to register an existing .ginfer package."
+  },
+  "hardware_profile": {
+    "status": "idle",
+    "available": false,
+    "pid": null
+  },
+  "boundaries": {
+    "publication_catalog": "No public release-bearing catalog exists; Arch04:45 requires W12/Ron publication, no URL or private fixture invented.",
+    "download_no_space_admission": "Not executed: requires an actual published release. No disk filling or synthetic capacity.",
+    "model_recommendation_profile_ready": "Not executed: publication prerequisite absent.",
+    "profiling_duration_wording": "Profiling page not reached; generic22-73minutes not claimed as native evidence.",
+    "parent_error_checks": "Separate unchanged-runtime no-visible-GPU/driver receipts at16628ae92; not repeated here."
+  },
+  "separate_observed_defect": {
+    "text": "Choose 1, 2 or 4 matching GPUs. Profiling starts after selection.",
+    "actual_next_step": "After selecting GPU2, wizard immediately asked for storage then model catalog; no profiling started.",
+    "scope": "Reported to parent; no extra source change in launcher fix."
+  },
+  "terminal": {
+    "exact_owned_host_pid": 2781372,
+    "host_stopped": true,
+    "private_keyring_pid": 2780626,
+    "private_keyring_gone": true,
+    "dbus_session_terminal": true,
+    "owned_model_or_profile_processes": 0,
+    "cpu_booking": 2986,
+    "cpus_returned_utc": "2026-10-18T04:46Z"
+  },
+  "receipts": [
+    "terminal-input.log",
+    "terminal-output.log",
+    "terminal-timing.log",
+    "first-run-status.json",
+    "host-process-receipt.json"
+  ],
+  "transcript_representation": {
+    "tracked_output": "Terminal display escapes/carriage returns removed and line-end whitespace trimmed; content otherwise retained.",
+    "raw_output_retained": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/terminal-output.log",
+    "raw_sha256": "dc713b3b6cc632dfc1e2d81271624a9ad59163bbfb972b5d27e001da3223b7e1",
+    "timing": "terminal-timing.log refers to retained raw output"
+  }
+}

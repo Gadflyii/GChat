@@ -22,6 +22,213 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Project dialog keyboard focus — October 18
+
+A private native Linux pass found that cancelling project Edit or Delete left
+keyboard focus on the document body. The next Tab jumped to Downloads instead
+of continuing from the project. The same failure occurred from the project
+page's menu and its direct Edit button. The project dialogs and callers are
+unchanged between retained native source `5dee3689887e` and main `494c561ab`.
+Baseline receipts are in `/ai/gchat/out/gchat-project-dialog-cancel-20261018/`.
+
+Project callers now retain their opening button, and the dialogs return focus
+to that button when it remains connected. Delete still opens with Cancel
+focused. Ten rendered regressions exercise the real menus and dialogs, covering
+Edit cancellation, Delete Escape/Enter cancellation and switching from a menu
+to the direct Edit button. No shared dialog behavior changes. The sidebar
+Edit/Escape regression fails against the parent production files because focus
+lands on the body, then all 28 related tests pass with frozen source `d7de423c2`.
+
+The single `make verify` passes: 3,426 frontend tests, 127 extension tests and
+1,266 Rust tests. The frontend production and offline locked native builds also
+pass. The private Linux native replay of frozen source `d7de423c2` passes all ten
+focus-return cases, including switching from the page menu to direct Edit.
+Cancelled drafts reopen with the original name; Delete opens on Cancel. All 17
+retained data files and the raw project record remain unchanged after shutdown.
+Receipts and the two viewed focus screenshots are in
+`/ai/gchat/out/gchat-project-dialog-focus-return-20261018/`. Windows was not built
+(dev phase).
+
+## Saved-run continuation guidance — October 18
+
+A private native Linux history pass found that finished results described
+**Continue as new run…** although their overview and action menu offered no
+continuation. Failed and incomplete results offered the action with the same
+explanation. The source is unchanged from native source `40573bd8a` through
+main `96172afb5`; the viewed finished/failed screenshots and read-only navigation
+receipt are in `/ai/gchat/out/gchat-agent-history-navigation-20261018/`.
+
+Continuation guidance now uses the same status condition as **Continue as new
+run…**: finished results show neither, while failed and incomplete results show
+both. Two rendered regressions cover selecting finished results, moving to each
+nonfinished status, and returning to finished. They fail against the unchanged
+parent route and pass with the correction; the focused suite passes all 72 tests.
+
+The single `make verify` passes (3,404 frontend tests, 127 extension tests and
+1,262 Rust tests), as do the frontend and offline locked native builds. The
+isolated Linux native replay of frozen source `5dee3689887e` passes finished →
+failed → incomplete → finished navigation, with the three screenshots viewed and
+all 17 retained data files byte-identical after shutdown. No continuation or run
+was started. Receipts are in
+`/ai/gchat/out/gchat-finished-run-continuation-hint-20261018/`. Windows was not
+built (dev phase).
+
+## Unavailable assignment in run setup — October 18
+
+An isolated native Linux **Re-run** pass at 1200×800 reproduced horizontal
+overflow when the saved instance was unavailable. Its long assignment label
+expanded the dialog's implicit grid column to about 836 pixels inside a
+672-pixel dialog, clipping **Browse**, **Cancel** and **Run**. Editing the task,
+cancelling and reopening restored the original task with the save-defaults
+checkbox unchecked; the layout defect was separate. The affected setup, dialog,
+choice and workspace components are unchanged from retained native source
+`f1c7c73b0` through branch base `df96d39bd`.
+
+Run setup now uses one grid column with a zero minimum width, allowing the
+existing assignment-label truncation to constrain the content to the dialog.
+The baseline used a private HOME/XDG, Xvfb, D-Bus and unlocked test keyring,
+without a model or GPU. The viewed screenshot `reopened.png` and DOM bounds
+(`setup-layout-rects`) are in
+`/ai/gchat/out/gchat-agent-rerun-cancel-20261018/`.
+
+All ten existing focused `AgentRunSetup` tests, one `make verify` and the
+frontend/native builds passed on frozen source `2a3ff696b`. The full gate passed
+3,397 app, 127 extension and 1,258 Rust tests (6 skipped, 28 ignored). The
+corrected native replays at 1200×800 and 1024×740 both have matching 670-pixel
+client and scroll widths. Browse, the assignment and footer controls fit
+horizontally; ordinary vertical scrolling exposes the smaller-window footer.
+The complete unavailable identifier remains in the selected-label title and
+keyboard-opened menu. Cancel returns to history, with all 17 saved definition,
+run/context and thread/session/message files byte-identical. The viewed
+screenshots and receipts are in
+`/ai/gchat/out/gchat-agent-run-setup-overflow-20261018/`. This qualifies the Linux
+debug candidate; Windows not built (dev phase).
+
+## Chat creation date during history actions — October 18
+
+An isolated native Linux pass found that favoriting a saved chat, adding it to
+a project, removing it and unfavoriting it overwrote its persisted creation
+date with the update time. All messages and the other saved thread files were
+unchanged. The affected service is identical between native source
+`f1c7c73b0` and main `d4ec7abab`.
+
+Thread updates now preserve the existing creation date and refresh only the
+update date. All 23 focused tests passed, including a persisted favorite/project
+roundtrip regression; the unchanged-source negative control failed that
+regression as expected. One `make verify` passed on frozen source `40573bd8a`
+(3,394 app, 127 extension and 1,252 Rust tests), followed by passing frontend
+and native builds.
+
+The corrected native replay favorited the chat, moved it into and out of a
+project, opened its retained HTML preview and unfavorited it. All four updates
+preserved `created` while advancing `updated`. The seven other saved
+thread/message/session files remained byte-identical. The isolated HOME/XDG,
+Xvfb, D-Bus and unlocked test-keyring replay used no model or GPU; CPUs were
+returned at 06:04Z. Baseline evidence is in
+`/ai/gchat/out/gchat-chat-project-membership-20261018/`; the fix packet is
+`/ai/gchat/out/gchat-chat-created-timestamp-20261018/`. This is a Linux debug
+desktop check; Windows was not built (dev phase), and installer behavior was
+not checked.
+
+## Chat search query selection — October 18
+
+An isolated native Linux pass reproduced a stale keyboard selection when a new
+search query returned the same number of chats. After selecting the second
+match for `a`, replacing the query with `v` kept the second position selected
+even though the matching chats changed. Enter opened that chat instead of the
+first match. The Search dialog and sidebar are unchanged between the observed
+native source `edcd74e49` and main `beee1f2f9`.
+
+Search now resets selection when its items change and scrolls the selected
+item into view when results change. Arrow navigation within the current results
+is preserved. Three focused regressions, one `make verify`, the frontend build
+and the native build passed on frozen source `3c0a8ba45`. The unchanged-source
+negative control failed the selection regression as expected; its other two
+tests passed.
+
+The corrected native Linux replay selected the first `v` result after changing
+an equal-count query, kept it visible, and opened the expected saved HTML chat
+with Enter. Recent-chat reopening and Clear also passed. All eight saved
+thread/session files were unchanged. Candidate SHA256:
+`4b15c5a4df9fd73d581bb931f8de890a74e5425031c5306668315b5a08861e98`.
+The isolated HOME/XDG, Xvfb, D-Bus and unlocked test-keyring replay used no model
+or GPU; CPUs were returned at 04:55Z. Evidence is in
+`/ai/gchat/out/gchat-chat-search-keyboard-20261018/`. This qualifies the Linux
+debug desktop interaction; Windows was not built (dev phase), and installer
+behavior was not checked.
+
+## Archive OpenCode provisioning — C7, October 18
+
+Codex 8's failed-setup P2 is corrected on
+`fix/c7-opencode-atomic-install-20261018`, tested source `e9a5cac36` from
+`e0a67a528`. Setup verifies a private temporary installation before publishing
+its runtime and completion marker. Readiness ignores unpublished shims, permits
+reinstall and retains native PATH fallback. Failed updates preserve the last
+working managed copy. Arch signed this correction at 05:40:41Z.
+
+The new readiness regression fails against the old runtime and all 30 candidate
+focused library/CLI tests, Rust check and strict Clippy pass. The one
+`make verify` invocation passed frontend/coverage but stopped on a fixture
+requiring a network route. A continuation also exposed an empty CUDA mask
+excluding a synthetic GPU. Both exact fixtures and every unreached Rust suite
+passed with private bridge networking and CUDA visibility unset. Source and
+assertions were unchanged, successful stages were not repeated, and the
+original `make verify` exit 2 remains recorded. Completed scope: 3,382 frontend,
+127 extension and 1,251 Rust tests passed; six frontend skips and 28 Rust ignores.
+Future private test containers must retain those fixture-compatible settings.
+
+The [result](../../out/c7-opencode-atomic-install-20261018/result.json) records
+both environment corrections and the passing stages. This is Linux CPU-only
+acceptance; Windows filesystem execution and native GUI replay were not run.
+C7 retains the source worktree and concise result. CPUs were returned at 06:01Z;
+the private 20-GiB S1 build/cache and stopped containers were removed at 06:03Z
+after result inspection. Raw logs were discarded; the concise JSON is retained.
+Downloads native acceptance resumes after this priority handoff.
+
+`GUI-FIRST-USER-OPENCODE-PROVISIONING` is implemented on
+`fix/c7-opencode-private-prefix-20261018`, source `13125b2ab` from main
+`d31e328d6`. Clean archive startup previously ran a global npm installation and
+failed with EACCES creating `/usr/local/lib/node_modules`. C3's original npm
+receipt and donor remain read-only. A private native baseline reproduced the
+same failure using a denied global prefix inside disposable app data.
+
+OpenCode installs with `--global=false` into a temporary prefix inside
+`<selected-data>/code/opencode/`, with cache at
+`<selected-data>/code/opencode/npm-cache`. After npm and runtime verification,
+the complete directory and its verification marker are renamed to
+`<selected-data>/code/opencode/runtime`. One resolver chooses custom, verified
+managed, then native executables for readiness, embedded/external launch, CLI
+and offline session deletion. Unmarked leftovers remain eligible for repair
+and cannot hide a native PATH installation. Existing sessions retain their
+executable. Managed updates use the same staging and publication path; external
+updates show the installation's own command and
+offer explicit **Use managed copy**. Missing or broken Node/npm asks the user to
+install Node.js LTS. GChat does not install system tools for OpenCode. Arch
+[signed this design](../decisions/2026-10-18-install-managed-opencode-in-the-gchat-data-folder.md)
+at 04:58:46Z.
+
+Frozen source passed 39 focused frontend and 32 focused Rust tests, Rust check
+and strict Clippy. The single `make verify` passed at 05:24:32Z: 3,367 app,
+121 extension and 1,241 Rust tests passed, with six app skips and 28 Rust
+ignores; lint, types, quality guards and coverage floors passed. Frontend and
+desktop builds passed. CLI-only check/Clippy explicitly select the library and
+`gchat-cli`; the desktop builds separately with normal features.
+
+The clean native Linux replay automatically installed real OpenCode 1.19.3
+inside its private data folder while OpenCode was absent from the launch PATH.
+The Code page recognized the installed program and asked for a model to be
+selected. The denied global prefix stayed empty. Screenshots and concise
+receipts are in the [same-branch evidence](../../out/c7-opencode-private-prefix-20261018/result.json).
+This qualifies the Linux debug archive-style provisioning path. Model-backed
+Code sessions, installer packaging and Windows are outside this acceptance;
+no model or GPU was used and no installed user profile was touched.
+
+C7 retains this source worktree and concise evidence. All private fixture
+processes stopped and CPUs were returned at 05:31Z. The 25-GiB S1 build, cache
+and profile root `/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018`
+was removed at 05:33Z after checking for live users and mounts. C3's fixture and
+the retained ed68 resource donor remain unchanged.
+
 ## First-use duplicate agent names — October 17
 
 An isolated native Linux pass of main `9e75fc31e` reproduced silent replacement:
@@ -48,6 +255,164 @@ Evidence:
 `/ai/gchat/out/gchat1-chat-agents-pass-20261017/` (launch receipt, duplicate-name
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
+
+## Typing an agent identifier — October 18
+
+An isolated native Linux Studio pass reproduced the main **Identifier** field
+dropping a hyphen during ordinary typing: `keyboard-helper` became
+`keyboardhelper`, in both an existing draft and a new agent. Focus remained in
+the field. The affected editor is byte-identical from retained native source
+`edcd74e49` through main `25459ffc2`.
+
+The field now retains a trailing separator while editing and normalizes it on
+blur, matching the role identifier controls. Native baseline DOM captures and
+the viewed screenshot are in
+`/ai/gchat/out/gchat-agent-identifier-keyboard-20261018/`.
+The focused Studio suite passed 65 tests; the sole `make verify`, frontend
+build and native build passed on frozen source `6e6286019`. The first native
+build linked a stale Host dependency and stopped on missing imports. A bounded
+native-only recovery refreshed two staged source timestamps; all 3,151 frozen
+source hashes remained unchanged, and the rebuilt Host resolved both imports.
+
+The corrected native replay retained `keyboard-helper` and focus in both new
+and existing drafts, kept a trailing `-` while editing, and normalized it on
+Tab. Save and reselect preserved the identifier. All ten prior definitions were
+unchanged; only the private `IdentifierKeyboardProbe` fixture was added.
+Candidate SHA256 is
+`651c447194dcefdb12bd601c7fecbc7c37ec34465072f3807762151b54e8543c`.
+Both passes used a private HOME/XDG profile, authenticated Xvfb, D-Bus and an
+unlocked test keyring, with no model or GPU request. The corrected screenshot
+was viewed and CPUs were returned at 05:08Z. This qualifies the Linux debug
+editor interaction; installer behavior was not checked.
+Windows: not built (dev phase).
+
+## Required numeric keyboard editing — October 18
+
+An isolated native Linux Studio pass reproduced a leading zero while replacing
+required numeric values. Clearing **Maximum tool steps** immediately inserted
+`0`, so typing `12` displayed `012`. Goal Loop **Maximum cycles** similarly
+showed `04`. Saving and reselecting the tool-step limit correctly retained `12`;
+the defect affects editing rather than stored numeric values. The affected
+editor is unchanged from native source `6e6286019` through main `b9a56c96c`.
+The viewed screenshot, DOM captures and stopped private session are in
+`/ai/gchat/out/gchat-agent-numeric-editing-20261018/`.
+
+The required tool-step, cycle, parallel-worker and role-step controls retain
+blank text while editing and normalize on blur. Their numeric validation and
+saved contract remain unchanged. The optional output budget retains its Auto
+behavior. Five regressions cover clear/type/save, blur normalization, role
+limits, external clamping and selecting another saved agent. The focused Studio
+suite passed all 70 tests on frozen source `f1c7c73b0`; the unchanged-source
+negative control failed the four clear-edit cases as expected. The initial
+focused run stopped on four leading-zero assertions caused by the test driver's
+number-input coercion. Those raw-value events now use `fireEvent.change`;
+ordinary keyboard interactions remain covered by `userEvent`.
+
+The first `make verify` stopped at typecheck because the retained staging folder
+contained two settings files deleted from the frozen source. Removing only
+those two stale scratch files restored the exact 3,220-file source manifest.
+The clean-staging `make verify` passed: 3,374 root/web tests, 127 extension tests
+and 1,229 Rust tests, with six JavaScript skips and 28 Rust ignores. The focused
+suite and negative control were not repeated during this environment recovery.
+The frontend and native builds passed. The corrected native replay kept all
+four required controls blank when cleared, accepted replacement values, and
+normalized native `04` and `09` to `4` and `9` on Tab. Save and reselect preserved
+the workflow stage’s `9` steps; clearing the optional output budget reopened as
+Auto. The eleven other definitions were unchanged. The corrected screenshot
+was viewed; the private app stopped and CPUs returned at 05:39Z. Candidate
+SHA256 is
+`ab6efa376859b0ac417b41963ad72a29e42c8554d1fb57f3eb1a9d68c688166f`.
+Evidence is in `/ai/gchat/out/gchat-agent-numeric-keyboard-20261018/`.
+The later main merge did not change the tested editor or regression file.
+This qualifies the frozen Linux debug candidate’s editor interaction; no model
+or agent run was requested.
+Windows: not built (dev phase).
+
+## Skill slash-menu keyboard visibility — October 18
+
+An isolated native Linux Chat pass qualified the pending keyboard interaction
+for `GCHAT-SKILL-SLASH-KEYBOARD-VISIBILITY-20261017`. With 24 enabled private
+`keyboard-01` through `keyboard-24` skills, Up/Down wrapped between the first
+and last entries while keeping the selection visible. Twelve Down presses
+selected `keyboard-13` fully inside the scrolled menu. Filtering to
+`/keyboard-2` selected `keyboard-20` among five matches; adding `4` selected
+the sole `keyboard-24` match. Composer focus remained intact. Tab inserted the
+inline `/keyboard-24` token; Backspace removed it from the empty composer.
+Backspace after a bare `/` closed the menu, and Escape closed the menu while
+preserving the typed query. The private draft was cleared without sending.
+
+The original source stack `4d60afdf1`, merged by `5d153ae12`, passed 62 focused
+tests and one cumulative `make verify`; those existing receipts remain in
+`/ai/gchat/out/skill-slash-keyboard-visibility-20261017/result.json`.
+The native pass used retained binary source `edcd74e49`, SHA256
+`bba3976355aca7a8c8721866f2eb5f3376be33181ae067dc12e4efb82d1a63be`.
+Its four slash-menu surfaces are byte-identical through `59dfad250`.
+Native DOM receipts, the viewed scrolling screenshot and the stopped-session
+record are in `/ai/gchat/out/gchat-skill-slash-native-20261018/`. This qualifies
+the Linux debug interaction with retained sidecars and a private HOME/XDG,
+Xvfb, D-Bus and unlocked test keyring. No model or GPU was used; CPU resources
+were returned at 04:44Z. Installer behavior was not checked.
+Windows: not built (dev phase).
+
+## Adding roles after removal — October 18
+
+An isolated native Linux Studio pass reproduced duplicate generated IDs after
+removing a middle role and adding another: `deliver, stage-2, stage-3` became
+`deliver, stage-3, stage-3`, and the workflow could not save. Coordinator Team
+specialists reproduced the same collision with `specialist-3`. Both Add handlers
+are unchanged between native source `a7debe294` and main `bca080b71`.
+
+Add stage and Add specialist now advance past IDs already in the current draft,
+including manually renamed IDs. Existing role IDs and workflow handoffs remain
+unchanged. Four rendered regressions cover middle removal and manual collisions
+for both kinds. The focused Studio suite passed 63 tests; one `make verify`,
+frontend build and native build passed on frozen source `edcd74e49`.
+
+Native Linux replay created `stage-4` / `specialist-4` after middle removal,
+then skipped manually occupied `*-4` IDs to create `stage-5` / `specialist-5`.
+Both definitions saved and reselected with the expected IDs; the workflow
+retained both handoff edges, and all eight prior definitions were unchanged.
+The candidate SHA256 is
+`bba3976355aca7a8c8721866f2eb5f3376be33181ae067dc12e4efb82d1a63be`.
+The private HOME/XDG, Xvfb, D-Bus and unlocked test keyring replay used no model
+or GPU and returned CPUs at 04:32Z. Evidence is in
+`/ai/gchat/out/gchat-appended-role-identifiers-20261018/`.
+This qualifies the Linux debug desktop interaction; Windows was not built
+(dev phase), and installer behavior was not checked.
+
+## Workflow dependency keyboard entry — October 18
+
+An isolated native Linux Studio pass reproduced a dependency editor that removed
+commas and separators during typing: entering `deliver, stage-2` produced
+`deliverstage2`. The affected Workflow editor is byte-identical between observed
+candidate source `3818d7a2` and main `548d73ed8`.
+
+The correction keeps the typed dependency text until blur and updates canonical
+workflow edges on every edit, so saving uses the current dependencies. External
+stage renames, removals and workflow selection refresh the displayed values.
+Rendered regressions cover per-character punctuation and focus, blur formatting,
+exact saved edges, removal and selection. The revised focused suite passed 52
+tests; its sole `make verify`, frontend build and native build passed. The first
+coverage attempt timed out the new test; the revised test uses a direct fixture
+and fewer repeated queries, retaining the unchanged five-second limit. The typing
+case then took 1.32 seconds under coverage.
+
+Native Linux replay retained `deliver, stage-2` and focus, saved both expected
+edges while the field was focused, and preserved a trailing `-` until Tab.
+Renaming the upstream stage refreshed the dependent field; removing the first
+stage, saving and reselecting the workflow retained only
+`research-stage` → `stage-3`. All seven existing definitions remained unchanged.
+Candidate SHA256 is
+`b5ece4cc00fd09d6fcb2d380ac65cd9777c0525a1b2b89d95313de9a4a0d3162`
+(source `a7debe294`). Main `3bbea776c` was subsequently merged without conflicts;
+the corrected dependency input remained byte-identical, and all 59 composed
+Agent Studio tests passed. The native binary predates that merge.
+
+Baseline, gate, native DOM and saved-definition receipts, plus the viewed typing
+screenshot, are in `/ai/gchat/out/gchat-workflow-dependency-keyboard-20261018/`.
+This is an isolated Linux debug editor check with retained sidecars and no GPU or
+model request. CPU resources were returned at 04:15Z.
+Windows: not built (dev phase).
 
 ## Untouched Coordinator Team defaults — October 18
 

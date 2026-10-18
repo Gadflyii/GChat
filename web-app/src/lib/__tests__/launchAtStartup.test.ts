@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  getLaunchAtStartup,
   reconcileLaunchAtStartup,
   setLaunchAtStartup,
 } from '../launchAtStartup'
@@ -9,9 +10,10 @@ const autostart = vi.hoisted(() => ({
   disable: vi.fn(),
   enable: vi.fn(),
   isEnabled: vi.fn(),
+  invoke: vi.fn(),
 }))
 
-vi.mock('@tauri-apps/plugin-autostart', () => autostart)
+vi.mock('@tauri-apps/api/core', () => ({ invoke: autostart.invoke }))
 
 const createPreferenceStore = (
   preference: Awaited<ReturnType<AppService['getAutostartPreference']>>
@@ -22,16 +24,39 @@ const createPreferenceStore = (
 
 describe('launch at startup', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
+    autostart.invoke.mockImplementation((command, args) => {
+      if (command === 'is_launch_at_startup_enabled') {
+        return autostart.isEnabled()
+      }
+      if (command === 'set_launch_at_startup_enabled') {
+        return args.enabled ? autostart.enable() : autostart.disable()
+      }
+      throw new Error(`Unexpected native command: ${command}`)
+    })
   })
 
-  it('enables autostart for a clean installation exactly once', async () => {
+  it('reads startup state from the same native owner used by the toggle', async () => {
+    autostart.isEnabled.mockResolvedValue(true)
+
+    await expect(getLaunchAtStartup()).resolves.toBe(true)
+
+    expect(autostart.invoke).toHaveBeenCalledExactlyOnceWith(
+      'is_launch_at_startup_enabled'
+    )
+  })
+
+  it('completes a saved pending-default preference exactly once', async () => {
     const store = createPreferenceStore('pending_default_on')
     autostart.isEnabled.mockResolvedValueOnce(false).mockResolvedValueOnce(true)
 
     await expect(reconcileLaunchAtStartup(store)).resolves.toBe(true)
 
     expect(autostart.enable).toHaveBeenCalledOnce()
+    expect(autostart.invoke).toHaveBeenCalledWith(
+      'set_launch_at_startup_enabled',
+      { enabled: true }
+    )
     expect(store.setAutostartPreference).toHaveBeenCalledWith('enabled')
   })
 
@@ -83,6 +108,10 @@ describe('launch at startup', () => {
     await expect(setLaunchAtStartup(store, false)).resolves.toBe(false)
 
     expect(autostart.disable).toHaveBeenCalledOnce()
+    expect(autostart.invoke).toHaveBeenCalledWith(
+      'set_launch_at_startup_enabled',
+      { enabled: false }
+    )
     expect(store.setAutostartPreference).toHaveBeenCalledWith('disabled')
   })
 
@@ -93,6 +122,33 @@ describe('launch at startup', () => {
     await expect(setLaunchAtStartup(store, false)).rejects.toThrow(
       'Operating system did not apply launch-at-startup setting'
     )
+    expect(store.setAutostartPreference).not.toHaveBeenCalled()
+  })
+
+  it('does not persist success when native startup registration fails', async () => {
+    const store = createPreferenceStore('disabled')
+    autostart.enable.mockRejectedValue(
+      new Error('Could not create startup directory')
+    )
+
+    await expect(setLaunchAtStartup(store, true)).rejects.toThrow(
+      'Could not create startup directory'
+    )
+
+    expect(store.setAutostartPreference).not.toHaveBeenCalled()
+    expect(autostart.isEnabled).not.toHaveBeenCalled()
+  })
+
+  it('does not replace the saved preference when startup state cannot be read', async () => {
+    const store = createPreferenceStore('enabled')
+    autostart.isEnabled.mockRejectedValue(new Error('Could not read startup entry'))
+
+    await expect(reconcileLaunchAtStartup(store)).rejects.toThrow(
+      'Could not read startup entry'
+    )
+
+    expect(autostart.enable).not.toHaveBeenCalled()
+    expect(autostart.disable).not.toHaveBeenCalled()
     expect(store.setAutostartPreference).not.toHaveBeenCalled()
   })
 })

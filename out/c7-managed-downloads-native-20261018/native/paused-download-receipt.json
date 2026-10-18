@@ -1,0 +1,26 @@
+{
+  "at": "2026-10-18T06:37:44.816081+00:00",
+  "jobs": {
+    "1f4e3355-13a2-4dd9-85b1-a8edd7182157": {
+      "id": "1f4e3355-13a2-4dd9-85b1-a8edd7182157",
+      "status": "paused",
+      "received": 155975468,
+      "bytes_per_second": 0,
+      "error": "Download paused; partial bytes are retained.",
+      "path": null,
+      "storage_root": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/native-home/.local/share/GChat/data/ginfer/models",
+      "release": {
+        "name": "Muse Glimmer 30B INT DFlash2",
+        "url": "http://192.168.1.109:18761/muse_glimmer_30b_int_df2.ginfer",
+        "sha256": "46b5d54ee64ccd278f2a1a4d2c6d5aa9fc9097e8db0c3d165179aee5f2cb5b66",
+        "bytes": 19776776704
+      }
+    }
+  },
+  "partial_files": [
+    {
+      "name": "1f4e3355-13a2-4dd9-85b1-a8edd7182157.part",
+      "bytes": 155975468
+    }
+  ]
+}

@@ -4,7 +4,7 @@ import SettingsMenu from '@/containers/SettingsMenu'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { buildApiKeyUpdate } from '@/lib/provider-api-key'
 import { getProviderTitle, getModelDisplayName, isGinferProvider } from '@/lib/utils'
-import { ginferAdvancedKeys, ginferSettingLabels } from '@/lib/ginfer-settings-labels'
+import { ginferSettingLabels } from '@/lib/ginfer-settings-labels'
 import {
   createFileRoute,
   Link,
@@ -55,7 +55,6 @@ import { EMBEDDING_MODEL_ID } from '@/constants/models'
 import { getModelCapabilities } from '@/lib/models'
 import { useModelLoad } from '@/hooks/useModelLoad'
 import { switchToModel } from '@/utils/switchModel'
-import { afterGinferSettingSaved } from '@/utils/ginferSettingChange'
 import { restartLocalModel } from '@/utils/restartLocalModel'
 import { useAppState } from '@/hooks/useAppState'
 import { useShallow } from 'zustand/shallow'
@@ -485,7 +484,7 @@ function ProviderDetail() {
                 ...updateObj,
               })
 
-              const saved = serviceHub
+              serviceHub
                 .providers()
                 .updateSettings(
                   providerName,
@@ -493,28 +492,8 @@ function ProviderDetail() {
                 )
 
               if (isGinferProvider(providerName)) {
-                // Live settings save and leave the running model alone;
-                // start-argument settings ask before restarting it.
-                const providerModelIds = new Set(
-                  provider.models.map((m) => m.id)
-                )
-                void Promise.resolve(saved).then(() =>
-                  afterGinferSettingSaved({
-                    key: setting.key,
-                    activeModelIds: useAppState
-                      .getState()
-                      .activeModels.filter((id) => providerModelIds.has(id)),
-                    restart: (id) =>
-                      restartLocalModel(serviceHub, providerName, id),
-                    onError: (error) =>
-                      toast.error(t('providers:stop'), {
-                        description:
-                          error instanceof Error
-                            ? error.message
-                            : String(error),
-                      }),
-                  })
-                )
+                // Application settings apply to future work. Hosts owns the
+                // startup settings of running instances.
                 return
               }
 
@@ -601,25 +580,26 @@ function ProviderDetail() {
             <div className="flex flex-col gap-3">
               {/* Settings */}
               <Card>
+                {provider && isGinferProvider(providerName) && (
+                  <CardItem
+                    title="Models and startup settings"
+                    description="Use Models to download, load or stop a model. Open GInfer Hosts to change a model’s startup settings or manage tested profiles."
+                    actions={
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Button variant="secondary" onClick={() => navigate({ to: route.hub.index })}>
+                          Open Models
+                        </Button>
+                        <Button variant="secondary" onClick={() => navigate({ to: route.engines.index })}>
+                          Open GInfer Hosts
+                        </Button>
+                      </div>
+                    }
+                  />
+                )}
                 {provider?.settings.map((setting, settingIndex) =>
-                  isGinferProvider(providerName) && ginferAdvancedKeys.has(setting.key)
+                  isGinferProvider(providerName) && !ginferSettingLabels[setting.key]
                     ? null
                     : renderSetting(setting, settingIndex)
-                )}
-                {provider && isGinferProvider(providerName) && (
-                  <details className="mt-2 rounded-lg border p-3">
-                    <summary className="cursor-pointer text-sm font-medium">
-                      {t('providers:ginferAdvanced')}
-                    </summary>
-                    <p className="my-2 text-xs text-muted-foreground">
-                      {t('providers:ginferAdvancedDesc')}
-                    </p>
-                    {provider.settings.map((setting, settingIndex) =>
-                      ginferAdvancedKeys.has(setting.key)
-                        ? renderSetting(setting, settingIndex)
-                        : null
-                    )}
-                  </details>
                 )}
 
                 <DeleteProvider provider={provider} />

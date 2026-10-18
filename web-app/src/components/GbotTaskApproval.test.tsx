@@ -1,9 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
-import { toast } from 'sonner'
 import GbotTaskApproval from './GbotTaskApproval'
-
-vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 
 const approval = {
   id: 'permission-one',
@@ -193,12 +190,18 @@ it('retains a failed request for an explicit retry', async () => {
   const allow = screen.getByRole('button', { name: 'Allow', exact: true })
   fireEvent.click(allow)
   await waitFor(() => expect(allow).toBeEnabled())
-  expect(toast.error).toHaveBeenCalledWith('Error: Permission reply failed')
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent('Could not allow this action. Try again.')
+  expect(screen.getByText('Details').closest('details')).not.toHaveAttribute(
+    'open'
+  )
+  expect(screen.getByText('Permission reply failed')).not.toBeVisible()
   fireEvent.click(screen.getByText('Action details'))
   expect(screen.getByText(/desktop_input/)).toBeVisible()
   fireEvent.click(allow)
   await waitFor(() => expect(reply).toHaveBeenCalledTimes(2))
   expect(reply.mock.calls).toEqual([[true], [true]])
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 it('respects another pending action without submitting a permission reply', () => {

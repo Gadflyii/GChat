@@ -6,6 +6,10 @@ controls say Update Code, never Update OpenCode. Updater output goes to a local
 diagnostic log rather than the terminal. Settings, session history and workspace
 are not reset; normal launch reapplies the GChat theme and startup plugin.
 
+The [October 18 decision](2026-10-18-install-managed-opencode-in-the-gchat-data-folder.md)
+restricts in-app updates to GChat-managed copies and displays a manual update
+command for external/custom installs. The original updater contract follows.
+
 Resolve the stable opencode-ai package version, run the installed executable's
 official `upgrade <version>` route, and verify that exact installed version.
 Exit code alone is insufficient: upstream's upgrade handler can return normally

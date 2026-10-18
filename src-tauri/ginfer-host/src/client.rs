@@ -196,6 +196,30 @@ pub struct LocalReset<'a> {
     _ownership: Option<crate::service_owner::ServiceOwner>,
     _selection: tokio::sync::MutexGuard<'a, LocalOwnerSelection>,
     _attachment: tokio::sync::MutexGuard<'a, bool>,
+    client: &'a Client,
+    directory: PathBuf,
+    identity: Option<(Uuid, String)>,
+}
+
+impl LocalReset<'_> {
+    /// Retire only the identity deleted by this reset. The shared client
+    /// registry lives outside App Data and must preserve every other Host.
+    pub async fn complete(self) -> Result<(), String> {
+        if self.directory.join("host.json").try_exists().map_err(|e| e.to_string())? {
+            return Err("Local Host identity was not deleted; its saved connection was preserved".into());
+        }
+        let Some((id, fingerprint)) = &self.identity else { return Ok(()); };
+        let _operation = self.client.operation.lock().await;
+        let _registry = self.client.lock_registry().await?;
+        let mut state = self.client.state.lock().await;
+        // Another Manager may have saved or re-paired a Host during deletion.
+        reload(&mut state)?;
+        if state.saved.get(id).is_some_and(|host| host.certificate_sha256 == *fingerprint) {
+            let removed = remove_registration(&mut state, *id)?;
+            state.local_credentials.remove(&removed.client_id);
+        }
+        Ok(())
+    }
 }
 
 fn relocation_identity(directory: &Path) -> Result<Option<(Uuid, String)>, String> {
@@ -646,12 +670,16 @@ impl Client {
         } else {
             None
         };
+        let identity = relocation_identity(directory)?;
         *selection = (Some(directory.to_owned()), None);
         *attachment = true;
         Ok(LocalReset {
             _ownership: ownership,
             _selection: selection,
             _attachment: attachment,
+            client: self,
+            directory: directory.to_owned(),
+            identity,
         })
     }
 

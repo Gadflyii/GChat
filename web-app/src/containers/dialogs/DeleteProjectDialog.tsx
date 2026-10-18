@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState } from 'react'
+import { useRef, useMemo, useState, type RefObject } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -18,6 +18,7 @@ interface DeleteProjectDialogProps {
   onOpenChange: (open: boolean) => void
   projectId?: string
   projectName?: string
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 export function DeleteProjectDialog({
@@ -25,6 +26,7 @@ export function DeleteProjectDialog({
   onOpenChange,
   projectId,
   projectName,
+  returnFocusRef,
 }: DeleteProjectDialogProps) {
   const { t } = useTranslation()
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
@@ -82,6 +84,12 @@ export function DeleteProjectDialog({
       <DialogContent
         aria-busy={isDeleting}
         showCloseButton={!isDeleting}
+        onCloseAutoFocus={(event) => {
+          if (returnFocusRef?.current?.isConnected) {
+            event.preventDefault()
+            returnFocusRef.current.focus()
+          }
+        }}
         onOpenAutoFocus={(e) => {
           e.preventDefault()
           cancelButtonRef.current?.focus()

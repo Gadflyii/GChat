@@ -183,6 +183,219 @@ it('attributes saved task messages to you or the selected bot in conversation or
   await expectConversation()
 })
 
+it.each(['Stop', 'Resume'] as const)(
+  'keeps a failed task action %s inline through refresh and retries it in settings',
+  async (action) => {
+    const [identity] = readyTaskBots()
+    const call = mocks.call.getMockImplementation()!
+    const path = action === 'Stop' ? 'tasks/cancel' : 'tasks/resume'
+    const progress =
+      action === 'Stop' ? 'Stopping this task…' : 'Resuming this task…'
+    const message = `Could not ${action.toLowerCase()} this task. Try again.`
+    const outcome = action === 'Stop' ? 'cancelled' : 'running'
+    const prompt = 'Read my saved notes'
+    const task = {
+      id: 'writer-task',
+      identity,
+      state: 'paused',
+      messages: [{ role: 'user', content: prompt }],
+      help_requests: [],
+    }
+    const updates = new Set<() => void>()
+    mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+      if (event === 'gbot-task-update') updates.add(update)
+      return () => updates.delete(update)
+    })
+    let fail!: (cause: string) => void
+    let finish!: () => void
+    const request = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    mocks.call.mockImplementation(
+      async (calledPath: string, body: Record<string, unknown>) => {
+        if (calledPath === 'tasks') return [task]
+        if (calledPath === path) return request(body)
+        return call(calledPath, body)
+      }
+    )
+    render(<Page />)
+    const card = (await screen.findByText(prompt)).closest('article')!
+    const submit = within(card).getByRole('button', { name: action, exact: true })
+    const opposite = within(card).getByRole('button', {
+      name: action === 'Stop' ? 'Resume' : 'Stop',
+      exact: true,
+    })
+    expect(submit).toBeEnabled()
+    expect(opposite).toBeEnabled()
+    act(() => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      opposite.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const payload = { id: 'writer-task' }
+    expect(request).toHaveBeenCalledExactlyOnceWith(payload)
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+
+    await act(async () => fail('Task action unavailable'))
+    const alert = await within(card).findByRole('alert')
+    expect(within(alert).getByText(message)).toBeVisible()
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(within(alert).getByText('Task action unavailable')).not.toBeVisible()
+    expect(within(card).getByText(prompt)).toBeVisible()
+    expect(within(card).getByText('paused', { exact: true })).toBeVisible()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(
+      within(card).getByRole('button', { name: 'Stop', exact: true })
+    ).toBeEnabled()
+    expect(
+      within(card).getByRole('button', { name: 'Resume', exact: true })
+    ).toBeEnabled()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([calledPath]) => calledPath === 'tasks'
+    ).length
+    await act(async () => updates.forEach((update) => update()))
+    await waitFor(() =>
+      expect(
+        mocks.call.mock.calls.filter(([calledPath]) => calledPath === 'tasks')
+          .length
+      ).toBeGreaterThan(reads)
+    )
+    expect(
+      within(within(card).getByRole('alert')).getByText(message)
+    ).toBeVisible()
+    expect(within(card).getByText('paused', { exact: true })).toBeVisible()
+    expect(request).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    expect(request.mock.calls).toEqual([[payload], [payload]])
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+    task.state = outcome
+    await act(async () => finish())
+    expect(await within(card).findByText(outcome, { exact: true })).toBeVisible()
+    expect(within(card).getByText(prompt)).toBeVisible()
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(
+      within(card).getByRole('button', {
+        name: action === 'Stop' ? 'Resume' : 'Stop',
+        exact: true,
+      })
+    ).toBeEnabled()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([calledPath]) =>
+          calledPath.startsWith('tasks/') && calledPath !== 'tasks/approvals'
+      )
+    ).toEqual([
+      [path, payload],
+      [path, payload],
+    ])
+  }
+)
+
+it('shows the latest interruption reason after reopening and resumes that task', async () => {
+  const [identity] = readyTaskBots()
+  const call = mocks.call.getMockImplementation()!
+  const reason = 'model returned no answer; resume the task to try again'
+  const previousReason = 'previous connection failed'
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) =>
+      path === 'tasks'
+        ? [
+            {
+              id: 'interrupted-task',
+              identity,
+              state: 'interrupted',
+              messages: [{ role: 'user', content: 'Write the saved note' }],
+              history: [
+                { state: 'interrupted', reason: previousReason, at: 42 },
+                { state: 'running', reason: 'started', at: 42 },
+                { state: 'interrupted', reason, at: 42 },
+              ],
+            },
+          ]
+        : call(path, body)
+  )
+  const expectInterruption = async () => {
+    const message = await screen.findByText(reason)
+    const card = message.closest('article')!
+    expect(message).toBeVisible()
+    expect(within(card).getByText('Write the saved note')).toBeVisible()
+    expect(within(card).getByRole('button', { name: 'Resume' })).toBeEnabled()
+    expect(screen.queryByText(previousReason)).not.toBeInTheDocument()
+    return card
+  }
+
+  render(<Page />)
+  await expectInterruption()
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+  await expectInterruption()
+  cleanup()
+  render(<Page />)
+  const card = await expectInterruption()
+  fireEvent.click(within(card).getByRole('button', { name: 'Resume' }))
+  await waitFor(() =>
+    expect(mocks.call).toHaveBeenCalledWith('tasks/resume', {
+      id: 'interrupted-task',
+    })
+  )
+})
+
+it('does not show an old interruption reason after a task completes', async () => {
+  const [identity] = readyTaskBots()
+  const call = mocks.call.getMockImplementation()!
+  const reason = 'model returned no answer; resume the task to try again'
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) =>
+      path === 'tasks'
+        ? [
+            {
+              id: 'completed-task',
+              identity,
+              state: 'completed',
+              messages: [{ role: 'assistant', content: 'Saved the note' }],
+              history: [
+                { state: 'interrupted', reason, at: 42 },
+                { state: 'running', reason: 'started', at: 43 },
+                { state: 'completed', reason: 'completed', at: 44 },
+              ],
+            },
+          ]
+        : call(path, body)
+  )
+  render(<Page />)
+  const reply = await screen.findByText('Saved the note')
+  const card = reply.closest('article')!
+  expect(reply).toBeVisible()
+  expect(within(card).getByText('completed')).toBeVisible()
+  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  expect(
+    within(card).queryByRole('button', { name: 'Resume' })
+  ).not.toBeInTheDocument()
+})
+
 it('explains that a disconnected bot must connect before a task can run', async () => {
   readyTaskBots(undefined, { live_sessions: [] })
   render(<Page />)
@@ -413,6 +626,134 @@ it('explains empty, ready and busy task states without changing task submission'
   )
   expect(await screen.findByText('Enter a task, then choose Run.')).toBeVisible()
 })
+
+it.each(['Error', 'native string'] as const)(
+  'keeps a failed desktop recovery %s inline until its explicit retry succeeds',
+  async (failureKind) => {
+    const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    try {
+      const owner = 'durable-current-owner'
+      const previousOwner = 'previous-app-owner'
+      localStorage.setItem('gbot-control-owner', owner)
+      const [identity, other] = readyTaskBots()
+      let session = identity
+      let expectedOwner = previousOwner
+      let recovered = false
+      let accepted = false
+      let fail!: (cause: unknown) => void
+      let finish!: () => void
+      let finishRefresh!: (state: BotState) => void
+      const refreshedState = new Promise<BotState>((resolve) => { finishRefresh = resolve })
+      const change = vi.fn()
+        .mockImplementationOnce(() => new Promise<void>((_, reject) => { fail = reject }))
+        .mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
+      const fallback = mocks.call.getMockImplementation()!
+      const snapshot = async (): Promise<BotState> => {
+        const control = { identity: session, owner: recovered ? owner : expectedOwner, state: 'paused' as const }
+        return {
+          ...await fallback('state', undefined) as BotState,
+          live_sessions: [session, other],
+          controls: [control],
+          recoverable_controls: recovered ? [] : [control],
+        }
+      }
+      mocks.call.mockImplementation(async (request: string, body: Record<string, unknown>) => {
+        if (request === 'state') return accepted ? refreshedState : snapshot()
+        if (request === 'control/recover') return change(body)
+        return fallback(request, body)
+      })
+      const updates = new Set<() => void>()
+      mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+        if (event === 'gbot-task-update') updates.add(update)
+        return () => updates.delete(update)
+      })
+      render(<Page />)
+      const recovery = await screen.findByRole('button', { name: 'Recover control' })
+      expect(recovery.closest('fieldset')).toBeNull()
+      fireEvent.click(recovery)
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel recovery' }))
+      expect(change).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('button', { name: 'Recover control' }))
+      const confirm = screen.getByRole('button', { name: 'Confirm recovery' })
+      const payload = { identity, expected_owner: previousOwner, owner }
+      act(() => {
+        confirm.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        confirm.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(change).toHaveBeenCalledExactlyOnceWith(payload)
+      expect(confirm).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Cancel recovery' })).toBeDisabled()
+      await act(async () => fail(failureKind === 'Error'
+        ? new Error('Media close failed') : 'Media close failed'))
+      const message = 'Could not recover control of this desktop. Try Confirm recovery again.'
+      const alert = await screen.findByRole('alert')
+      expect(within(alert).getByText(message)).toBeVisible()
+      expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute('open')
+      expect(within(alert).getByText('Media close failed')).not.toBeVisible()
+      expect(confirm).toBeEnabled()
+      expect(screen.getByText('Bot paused', { exact: true })).toBeVisible()
+      expect(expectedOwner).toBe(previousOwner)
+      expect(recovered).toBe(false)
+      expect(errorToast).not.toHaveBeenCalled()
+
+      const reads = mocks.call.mock.calls.filter(([request]) => request === 'tasks').length
+      await act(async () => updates.forEach((update) => update()))
+      expect(mocks.call.mock.calls.filter(([request]) => request === 'tasks').length).toBeGreaterThan(reads)
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+      fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      session = { ...identity, session_id: 'replacement' }
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      session = identity
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expectedOwner = 'another-previous-owner'
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expectedOwner = previousOwner
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      mocks.getTarget.mockResolvedValue({ kind: 'paired_host', host_id: 'other-service' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      mocks.getTarget.mockResolvedValue({ kind: 'local' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+
+      const retry = screen.getByRole('button', { name: 'Confirm recovery' })
+      fireEvent.click(retry)
+      expect(change.mock.calls).toEqual([[payload], [payload]])
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(retry).toBeDisabled()
+      expect(screen.getByText('Bot paused', { exact: true })).toBeVisible()
+      recovered = true
+      accepted = true
+      await act(async () => finish())
+      const pendingRefresh = screen.getByRole('button', { name: 'Recover control' })
+      expect(pendingRefresh).toBeDisabled()
+      fireEvent.click(pendingRefresh)
+      expect(change).toHaveBeenCalledTimes(2)
+      expect(screen.getByText('Bot paused', { exact: true })).toBeVisible()
+      await act(async () => finishRefresh(await snapshot()))
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Recover control' })).not.toBeInTheDocument())
+      expect(screen.getByRole('button', { name: 'Hand back' })).toBeEnabled()
+      expect(screen.getByText('Bot paused', { exact: true })).toBeVisible()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(mocks.call.mock.calls.filter(([request]) =>
+        request.startsWith('control/') || request.startsWith('view/') || request === 'connect' || request === 'disconnect' ||
+        request === 'setup/kvm/start' || (request.startsWith('tasks/') && request !== 'tasks/approvals')
+      )).toEqual([['control/recover', payload], ['control/recover', payload]])
+      expect(errorToast).not.toHaveBeenCalled()
+    } finally {
+      errorToast.mockRestore()
+    }
+  }
+)
 
 it('explicitly recovers an orphaned paused owner while keeping hand-back and setup resume separate', async () => {
   const identity = { workspace_id: 'orphaned-kvm', session_id: 'saved-session' }
@@ -1221,6 +1562,124 @@ it('imports an SSH workspace and preserves setup identity on retry', async () =>
   expect(JSON.stringify(sessionStorage)).not.toContain('private-key')
 })
 
+it.each([
+  ['Connect', 'connect', 'Could not connect this bot’s computer. Try Connect again.'],
+  ['Disconnect', 'disconnect', 'Could not disconnect this bot’s computer. Try Disconnect again.'],
+] as const)(
+  'keeps a failed computer connection %s inline and retries its original bot',
+  async (action, path, message) => {
+    const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    try {
+      const [identity, other] = readyTaskBots()
+      let connected = action === 'Disconnect'
+      let session = identity
+      let fail!: (cause: unknown) => void
+      let finish!: () => void
+      const change = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>((_, reject) => {
+          fail = reject
+        }))
+        .mockImplementationOnce(() => new Promise<void>((resolve) => {
+          finish = resolve
+        }))
+      const fallback = mocks.call.getMockImplementation()!
+      mocks.call.mockImplementation(async (request: string, body: Record<string, unknown>) => {
+        if (request === 'state') return {
+          ...await fallback(request, body) as BotState,
+          live_sessions: connected ? [session, other] : [other],
+        }
+        if (request === path) return change(body)
+        return fallback(request, body)
+      })
+      const updates = new Set<() => void>()
+      mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+        if (event === 'gbot-task-update') updates.add(update)
+        return () => updates.delete(update)
+      })
+      render(<Page />)
+      await screen.findByRole('heading', { name: 'Writer' })
+      const originalStatus = connected ? 'Connected' : 'Disconnected'
+      const button = screen.getByRole('button', { name: action, exact: true })
+      act(() => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(change).toHaveBeenCalledTimes(1)
+      const firstPayload = change.mock.calls[0][0]
+      expect(firstPayload).toEqual(action === 'Disconnect' ? identity : {
+        workspace_id: identity.workspace_id, session_id: expect.any(String),
+      })
+      expect(button).toBeDisabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      await act(async () => fail(action === 'Connect'
+        ? new Error('Computer connection unavailable')
+        : 'Computer connection unavailable'))
+      const alert = await screen.findByRole('alert')
+      expect(within(alert).getByText(message)).toBeVisible()
+      expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute('open')
+      expect(within(alert).getByText('Computer connection unavailable')).not.toBeVisible()
+      expect(button).toBeEnabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      expect(errorToast).not.toHaveBeenCalled()
+
+      const reads = mocks.call.mock.calls.filter(([request]) => request === 'tasks').length
+      await act(async () => updates.forEach((update) => update()))
+      expect(mocks.call.mock.calls.filter(([request]) => request === 'tasks').length).toBeGreaterThan(reads)
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+      fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      if (action === 'Disconnect') {
+        session = { ...identity, session_id: 'replacement' }
+        await act(async () => updates.forEach((update) => update()))
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+        session = identity
+        await act(async () => updates.forEach((update) => update()))
+        expect(screen.getByRole('alert')).toHaveTextContent(message)
+      }
+      mocks.getTarget.mockResolvedValue({ kind: 'paired_host', host_id: 'other-service' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      mocks.getTarget.mockResolvedValue({ kind: 'local' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+
+      const retry = screen.getByRole('button', { name: action, exact: true })
+      fireEvent.click(retry)
+      expect(change).toHaveBeenCalledTimes(2)
+      const retryPayload = change.mock.calls[1][0]
+      expect(retryPayload).toEqual(action === 'Disconnect' ? identity : {
+        workspace_id: identity.workspace_id, session_id: expect.any(String),
+      })
+      if (action === 'Connect') {
+        expect(retryPayload.session_id).not.toBe(firstPayload.session_id)
+      }
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(retry).toBeDisabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      connected = !connected
+      if (action === 'Connect') session = retryPayload
+      await act(async () => finish())
+      expect(await screen.findByRole('button', {
+        name: connected ? 'Disconnect' : 'Connect', exact: true,
+      })).toBeEnabled()
+      expect(screen.getByText(connected ? 'Connected' : 'Disconnected', { exact: true })).toBeVisible()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(mocks.call.mock.calls.filter(([request]) =>
+        request === 'connect' || request === 'disconnect' || request.startsWith('control/') ||
+        (request.startsWith('tasks/') && request !== 'tasks/approvals')
+      )).toEqual([[path, firstPayload], [path, retryPayload]])
+      expect(errorToast).not.toHaveBeenCalled()
+    } finally {
+      errorToast.mockRestore()
+    }
+  }
+)
+
 it.each([false, true])(
   'holds connection controls through the status refresh (initially connected: %s)',
   async (initiallyConnected) => {
@@ -1534,6 +1993,124 @@ it('blocks same-tick duplicate tasks, then restores the failed draft for retry',
   expect(submit).toHaveBeenCalledTimes(2)
 })
 
+it('keeps a failed task submission inline through refresh and isolates its settings bot retry', async () => {
+  let fail!: (cause: string) => void
+  let finish!: () => void
+  let accepted = false
+  const submit = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          fail = reject
+        })
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        })
+    )
+  const [identity] = readyTaskBots(submit)
+  const fallback = mocks.call.getMockImplementation()!
+  mocks.call.mockImplementation((path: string, body: Record<string, unknown>) =>
+    path === 'tasks'
+      ? Promise.resolve(
+          accepted
+            ? [
+                {
+                  id: 'accepted-writer-task',
+                  identity,
+                  state: 'running',
+                  messages: [{ role: 'user', content: 'Write the saved note' }],
+                },
+              ]
+            : []
+        )
+      : fallback(path, body)
+  )
+  const updates = new Set<() => void>()
+  mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+    if (event === 'gbot-task-update') updates.add(update)
+    return () => updates.delete(update)
+  })
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  const input = screen.getByLabelText('Bot task')
+  fireEvent.change(input, { target: { value: 'Write the saved note' } })
+  const form = input.closest('form')!
+  const payload = { identity, prompt: 'Write the saved note' }
+  act(() => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  })
+  expect(submit).toHaveBeenCalledExactlyOnceWith(payload)
+  expect(form).toHaveAttribute('aria-busy', 'true')
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+  expect(screen.getByText('Sending this task to the bot…')).toHaveAttribute(
+    'role',
+    'status'
+  )
+  await act(async () => fail('Task admission unavailable'))
+  const message = 'Could not send this task. Try again.'
+  const alert = await screen.findByRole('alert')
+  expect(within(alert).getByText(message)).toBeVisible()
+  expect(
+    within(alert).getByText('Details').closest('details')
+  ).not.toHaveAttribute('open')
+  expect(within(alert).getByText('Task admission unavailable')).not.toBeVisible()
+  expect(input).toHaveValue(payload.prompt)
+  expect(form).toHaveAttribute('aria-busy', 'false')
+  expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+  expect(screen.queryByText(payload.prompt)).not.toBeInTheDocument()
+
+  const reads = mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+  await act(async () => updates.forEach((update) => update()))
+  await waitFor(() =>
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+    ).toBeGreaterThan(reads)
+  )
+  expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+  expect(screen.getByRole('alert')).toHaveTextContent(message)
+  expect(input).toHaveValue(payload.prompt)
+  expect(submit).toHaveBeenCalledTimes(1)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(input).toHaveValue('')
+  fireEvent.change(input, { target: { value: 'Researcher draft' } })
+  expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+  expect(input).toHaveValue(payload.prompt)
+  expect(screen.getByRole('alert')).toHaveTextContent(message)
+
+  act(() => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  })
+  expect(submit.mock.calls).toEqual([[payload], [payload]])
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+  accepted = true
+  await act(async () => finish())
+  await waitFor(() => expect(input).toHaveValue(''))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(form).toHaveAttribute('aria-busy', 'false')
+  expect(screen.getByText(payload.prompt)).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  expect(input).toHaveValue('Researcher draft')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(
+    mocks.call.mock.calls.filter(
+      ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+    )
+  ).toEqual([
+    ['tasks/start', payload],
+    ['tasks/start', payload],
+  ])
+})
+
 it('keeps a rejected task draft available for retry', async () => {
   const submit = vi
     .fn()
@@ -1695,6 +2272,243 @@ it.each(['success', 'failure'] as const)(
   }
 )
 
+it.each([
+  [
+    'Allow',
+    true,
+    'Allowing this action…',
+    'Could not allow this action. Try again.',
+  ],
+  [
+    'Deny',
+    false,
+    'Denying this action…',
+    'Could not deny this action. Try again.',
+  ],
+] as const)(
+  'keeps a failed permission %s inline through refresh and retries it in settings',
+  async (action, allow, progress, message) => {
+    const [identity] = readyTaskBots()
+    const call = mocks.call.getMockImplementation()!
+    const task = {
+      id: 'writer-task',
+      identity,
+      state: 'waiting_for_human',
+      messages: [],
+      help_requests: [],
+    }
+    let approvals = [
+      {
+        id: 'writer-permission',
+        task_id: task.id,
+        request: { operation: { kind: 'read', path: '/home/bot/notes.txt' } },
+      },
+    ]
+    const updates = new Set<() => void>()
+    mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+      if (event === 'gbot-task-update') updates.add(update)
+      return () => updates.delete(update)
+    })
+    let fail!: (cause: string) => void
+    let finish!: () => void
+    const reply = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'tasks') return [task]
+        if (path === 'tasks/approvals') return approvals
+        if (path === 'tasks/approval') return reply(body)
+        return call(path, body)
+      }
+    )
+    render(<Page />)
+    const card = await screen.findByRole('article', {
+      name: 'Bot permission request',
+    })
+    const submit = within(card).getByRole('button', { name: action, exact: true })
+    act(() => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const payload = { id: 'writer-permission', allow }
+    expect(reply).toHaveBeenCalledExactlyOnceWith(payload)
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    expect(card).toHaveAttribute('aria-busy', 'true')
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+
+    await act(async () => fail('Permission decision unavailable'))
+    const alert = await within(card).findByRole('alert')
+    expect(within(alert).getByText(message)).toBeVisible()
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(
+      within(alert).getByText('Permission decision unavailable')
+    ).not.toBeVisible()
+    expect(within(card).getByText(/Allow permits this action once/)).toBeVisible()
+    expect(within(card).getByText('/home/bot/notes.txt')).toBeVisible()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(card).toHaveAttribute('aria-busy', 'false')
+    expect(within(card).getByRole('button', { name: 'Allow' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Deny' })).toBeEnabled()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => updates.forEach((update) => update()))
+    await waitFor(() =>
+      expect(
+        mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+      ).toBeGreaterThan(reads)
+    )
+    expect(
+      within(within(card).getByRole('alert')).getByText(message)
+    ).toBeVisible()
+    expect(within(card).getByText(/Allow permits this action once/)).toBeVisible()
+    expect(reply).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    expect(reply.mock.calls).toEqual([[payload], [payload]])
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+    approvals = []
+    await act(async () => finish())
+    await waitFor(() => expect(card).not.toBeInTheDocument())
+    expect(
+      screen.queryByRole('article', { name: 'Bot permission request' })
+    ).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+      )
+    ).toEqual([
+      ['tasks/approval', payload],
+      ['tasks/approval', payload],
+    ])
+  }
+)
+
+it.each(['Send reply', 'Decline'])(
+  'keeps a failed human-help %s visible and retryable in settings',
+  async (action) => {
+    const [identity] = readyTaskBots()
+    const call = mocks.call.getMockImplementation()!
+    const request = {
+      id: 'help',
+      question: 'Which folder?',
+      status: 'pending',
+      response: null as string | null,
+    }
+    const task = {
+      id: 'help-task',
+      identity,
+      state: 'waiting_for_human',
+      messages: [],
+      help_requests: [request],
+    }
+    const updates = new Set<() => void>()
+    mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+      if (event === 'gbot-task-update') updates.add(update)
+      return () => updates.delete(update)
+    })
+    let rejectReply!: (cause: string) => void
+    const pending = new Promise<void>((_, reject) => {
+      rejectReply = reject
+    })
+    let attempts = 0
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'tasks') return [task]
+        if (path === 'tasks/help') {
+          if (++attempts === 1) return pending
+          task.state = 'interrupted'
+          request.status = body.response === null ? 'declined' : 'completed'
+          request.response = body.response as string | null
+          return {}
+        }
+        return call(path, body)
+      }
+    )
+    render(<Page />)
+    const card = (await screen.findByText('Which folder?')).parentElement!
+    const reply = within(card).getByLabelText('Your reply')
+    fireEvent.change(reply, { target: { value: 'Use Documents' } })
+    const submit = within(card).getByRole('button', { name: action })
+    act(() => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(within(card).getByRole('status')).toHaveTextContent(
+      action === 'Send reply' ? 'Sending reply…' : 'Declining request…'
+    )
+    expect(reply).toBeDisabled()
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+    const payload = {
+      id: 'help-task',
+      request_id: 'help',
+      response: action === 'Send reply' ? 'Use Documents' : null,
+    }
+    expect(attempts).toBe(1)
+    expect(mocks.call).toHaveBeenCalledWith('tasks/help', payload)
+
+    await act(async () => rejectReply('Gbot service unavailable. Try again.'))
+    expect(await within(card).findByRole('alert')).toHaveTextContent(
+      'Gbot service unavailable. Try again.'
+    )
+    expect(reply).toHaveValue('Use Documents')
+    expect(reply).toBeEnabled()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(within(card).queryByText('Request declined')).not.toBeInTheDocument()
+    expect(
+      within(card).queryByText('Your reply: Use Documents')
+    ).not.toBeInTheDocument()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => updates.forEach((update) => update()))
+    await waitFor(() =>
+      expect(
+        mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+      ).toBeGreaterThan(reads)
+    )
+    expect(within(card).getByRole('alert')).toHaveTextContent(
+      'Gbot service unavailable. Try again.'
+    )
+    fireEvent.click(within(card).getByRole('button', { name: action }))
+    expect(
+      await within(card).findByText(
+        action === 'Send reply' ? 'Your reply: Use Documents' : 'Request declined'
+      )
+    ).toBeVisible()
+    expect(attempts).toBe(2)
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks/help')
+    ).toEqual([
+      ['tasks/help', payload],
+      ['tasks/help', payload],
+    ])
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+  }
+)
+
 it('sends task-bound human replies and declines, retaining them after reload', async () => {
   const identity = { workspace_id: 'one', session_id: 'session' }
   const tasks = [
@@ -1786,6 +2600,124 @@ it('sends task-bound human replies and declines, retaining them after reload', a
   expect(screen.getByText('Request declined')).toBeInTheDocument()
   expect(screen.queryByLabelText('Your reply')).not.toBeInTheDocument()
 })
+
+it.each([
+  ['Take over', 'control/take-over', 'Could not take over this desktop. Try again.'],
+  ['Hand back', 'control/hand-back', 'Could not hand back control. Try again.'],
+] as const)(
+  'keeps a failed desktop control %s inline and retries its settings session',
+  async (action, path, message) => {
+    const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    try {
+      const [identity, other] = readyTaskBots()
+      let session = identity
+      let human = action === 'Hand back'
+      let fail!: (cause: string) => void
+      let finish!: () => void
+      const change = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>((_, reject) => {
+          fail = reject
+        }))
+        .mockImplementationOnce(() => new Promise<void>((resolve) => {
+          finish = resolve
+        }))
+      const fallback = mocks.call.getMockImplementation()!
+      mocks.call.mockImplementation(async (request: string, body: Record<string, unknown>) => {
+        if (request === 'state') return {
+          ...await fallback(request, body) as BotState,
+          live_sessions: [session, other],
+          controls: [{
+            identity: session,
+            state: human ? 'human' : 'bot',
+            owner: human ? sessionStorage.getItem('gbot-control-owner') : null,
+          }],
+        }
+        if (request === path) {
+          if (action === 'Hand back') expect(mocks.mediaStop).toHaveBeenCalled()
+          return change(body)
+        }
+        if (request === 'view/open') return {
+          lease_id: 'control-lease',
+          ws_url: 'ws://127.0.0.1/mock',
+          media_session_id: 'control-media',
+          interactive: body.interactive,
+        }
+        return fallback(request, body)
+      })
+      const updates = new Set<() => void>()
+      mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+        if (event === 'gbot-task-update') updates.add(update)
+        return () => updates.delete(update)
+      })
+      render(<Page />)
+      await screen.findByRole('heading', { name: 'Writer' })
+      fireEvent.click(screen.getByRole('button', { name: 'View bot’s desktop' }))
+      await waitFor(() => expect(mocks.mediaStart).toHaveBeenCalled())
+      const originalStatus = human ? 'Bot paused · you have control' : 'Connected'
+      const payload = { identity, owner: sessionStorage.getItem('gbot-control-owner') }
+      const button = screen.getByRole('button', { name: action, exact: true })
+      act(() => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(change).toHaveBeenCalledExactlyOnceWith(payload)
+      expect(button).toBeDisabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      await act(async () => fail('Desktop control unavailable'))
+      const alert = await screen.findByRole('alert')
+      expect(within(alert).getByText(message)).toBeVisible()
+      expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute('open')
+      expect(within(alert).getByText('Desktop control unavailable')).not.toBeVisible()
+      expect(button).toBeEnabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      expect(errorToast).not.toHaveBeenCalled()
+
+      const reads = mocks.call.mock.calls.filter(([request]) => request === 'tasks').length
+      await act(async () => updates.forEach((update) => update()))
+      expect(mocks.call.mock.calls.filter(([request]) => request === 'tasks').length).toBeGreaterThan(reads)
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+      fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      session = { ...identity, session_id: 'replacement' }
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      session = identity
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      mocks.getTarget.mockResolvedValue({ kind: 'paired_host', host_id: 'other-service' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      mocks.getTarget.mockResolvedValue({ kind: 'local' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+
+      const retry = screen.getByRole('button', { name: action, exact: true })
+      fireEvent.click(retry)
+      expect(change.mock.calls).toEqual([[payload], [payload]])
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(retry).toBeDisabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      human = !human
+      await act(async () => finish())
+      expect(await screen.findByRole('button', {
+        name: action === 'Take over' ? 'Hand back' : 'Take over', exact: true,
+      })).toBeEnabled()
+      expect(screen.getByText(human ? 'Bot paused · you have control' : 'Connected', { exact: true })).toBeVisible()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(mocks.call.mock.calls.filter(([request]) =>
+        request.startsWith('control/') || (request.startsWith('tasks/') && request !== 'tasks/approvals')
+      )).toEqual([[path, payload], [path, payload]])
+      expect(errorToast).not.toHaveBeenCalled()
+    } finally {
+      errorToast.mockRestore()
+    }
+  }
+)
 
 it('opens view-only and closes interactive input before handing back to the bot', async () => {
   const identity = { workspace_id: 'one', session_id: 'session' }
@@ -2217,6 +3149,156 @@ it('links existing accounts per bot without inherited selection', async () => {
     account_ids: ['microsoft-b'],
   })
 })
+
+it.each([
+  ['local', true, 'Start', 'Could not start Gbot on this computer. Try Start Gbot service again.'],
+  ['local', false, 'Quit', 'Could not stop Gbot on this computer. Try Quit Gbot service again.'],
+  ['paired_host', true, 'Connect', 'Could not connect to the Gbot service on your LAN computer. Try Connect Gbot service again.'],
+  ['paired_host', false, 'Disconnect', 'Could not disconnect from the Gbot service on your LAN computer. Try Disconnect Gbot service again.'],
+] as const)(
+  'keeps a failed service action %s %s %s inline until its explicit retry succeeds',
+  async (kind, start, action, message) => {
+    const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    try {
+      readyTaskBots()
+      const target = kind === 'local' ? { kind } : { kind, host_id: 'paired-host' }
+      mocks.getTarget.mockResolvedValue(target)
+      mocks.startService.mockReset().mockResolvedValue(undefined)
+      mocks.quitService.mockReset().mockResolvedValue(undefined)
+      const updates = new Set<() => void>()
+      mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+        if (event === 'gbot-task-update') updates.add(update)
+        return () => updates.delete(update)
+      })
+      const fallback = mocks.call.getMockImplementation()!
+      const snapshot = await fallback('state', {}) as BotState
+      let holdRefresh = false
+      let finishRefresh!: (state: BotState) => void
+      const refreshed = new Promise<BotState>((resolve) => {
+        finishRefresh = resolve
+      })
+      mocks.call.mockImplementation((request: string, body: Record<string, unknown>) =>
+        request === 'state' && holdRefresh ? refreshed : fallback(request, body)
+      )
+      render(<Page />)
+      await screen.findByRole('heading', { name: 'Writer' })
+      const stopLabel = kind === 'local' ? 'Quit Gbot service' : 'Disconnect Gbot service'
+      const startLabel = kind === 'local' ? 'Start Gbot service' : 'Connect Gbot service'
+      const stoppedMessage = kind === 'local'
+        ? 'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+        : 'Disconnected from the LAN Gbot service. Tasks and schedules continue on that computer.'
+      if (start) {
+        fireEvent.click(await screen.findByRole('button', { name: stopLabel }))
+        await screen.findByText(stoppedMessage)
+        await waitFor(() => expect(screen.getByRole('button', { name: startLabel })).toBeEnabled())
+      }
+      const invoke = start ? mocks.startService : mocks.quitService
+      invoke.mockClear()
+      let fail!: (cause: unknown) => void
+      let finish!: () => void
+      invoke.mockImplementationOnce(() => new Promise<void>((_, reject) => {
+        fail = reject
+      })).mockImplementationOnce(() => new Promise<void>((resolve) => {
+        finish = resolve
+      }))
+      const original = screen.getByRole('button', { name: `${action} Gbot service` })
+      act(() => {
+        original.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        original.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(invoke).toHaveBeenCalledTimes(1)
+      expect(original).toBeDisabled()
+      const progressMessage = start
+        ? kind === 'local'
+          ? 'Starting Gbot on this computer. First-time setup or an update may need several minutes to prepare files. The service will start automatically when preparation finishes. You can keep using GChat.'
+          : 'Connecting to the Gbot service on your selected LAN computer. Please wait.'
+        : kind === 'local'
+          ? 'Stopping the Gbot service. Tasks and schedules will resume when you start it again.'
+          : 'Disconnecting from the LAN Gbot service. Tasks and schedules continue on that computer.'
+      expect(screen.getByText(progressMessage)).toHaveAttribute('role', 'status')
+      expect(screen.getByText(progressMessage)).toBeVisible()
+      if (!start) {
+        expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+        expect(screen.queryByText(stoppedMessage)).not.toBeInTheDocument()
+      }
+      const cause = 'Service operation refused'
+      await act(async () => fail(kind === 'local' ? new Error(cause) : cause))
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveAttribute('id', 'gbot-service-action-error')
+      expect(within(alert).getByText(message)).toBeVisible()
+      expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute('open')
+      expect(within(alert).getByText(cause)).not.toBeVisible()
+      expect(original).toBeEnabled()
+      expect(errorToast).not.toHaveBeenCalled()
+      if (start) {
+        expect(screen.getByText(stoppedMessage)).toBeVisible()
+        expect(screen.queryByRole('heading', { name: 'Writer' })).not.toBeInTheDocument()
+      } else {
+        expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+        expect(screen.queryByText(stoppedMessage)).not.toBeInTheDocument()
+        const reads = mocks.call.mock.calls.filter(([request]) => request === 'tasks').length
+        await act(async () => updates.forEach((update) => update()))
+        expect(mocks.call.mock.calls.filter(([request]) => request === 'tasks').length).toBeGreaterThan(reads)
+        expect(screen.getByRole('alert')).toHaveTextContent(message)
+        mocks.getTarget.mockResolvedValue({ kind: 'paired_host', host_id: 'other-service' })
+        await act(async () => updates.forEach((update) => update()))
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+        mocks.getTarget.mockResolvedValue(target)
+        await act(async () => updates.forEach((update) => update()))
+        expect(screen.getByRole('alert')).toHaveTextContent(message)
+      }
+      expect(invoke).toHaveBeenCalledTimes(1)
+      const retry = screen.getByRole('button', { name: `${action} Gbot service` })
+      fireEvent.click(retry)
+      expect(invoke).toHaveBeenCalledTimes(2)
+      expect(retry).toBeDisabled()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      fireEvent.click(retry)
+      expect(invoke).toHaveBeenCalledTimes(2)
+      if (start) {
+        holdRefresh = true
+        await act(async () => finish())
+        const progress = screen.getByRole('button', {
+          name: kind === 'local' ? 'Starting Gbot service…' : 'Connecting Gbot service…',
+        })
+        expect(progress).toBeDisabled()
+        fireEvent.click(progress)
+        expect(invoke).toHaveBeenCalledTimes(2)
+        await act(async () => finishRefresh(snapshot))
+        await waitFor(() => expect(screen.getByRole('button', { name: stopLabel })).toBeEnabled())
+        expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+        expect(screen.queryByText(stoppedMessage)).not.toBeInTheDocument()
+      } else {
+        expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+        expect(screen.queryByText(stoppedMessage)).not.toBeInTheDocument()
+        // The companion independently reads state/tasks after service actions.
+        // The stopped Settings route must not restart its setup/status refresh.
+        const setupReads = () => mocks.call.mock.calls.filter(([request]) =>
+          request === 'setup/cloud/status' || request === 'setup/m365/status' ||
+          request === 'setup/kvm/status'
+        ).length
+        const reads = setupReads()
+        await act(async () => finish())
+        await waitFor(() => expect(screen.getByRole('button', { name: startLabel })).toBeEnabled())
+        expect(screen.getByText(stoppedMessage)).toBeVisible()
+        expect(screen.queryByRole('heading', { name: 'Writer' })).not.toBeInTheDocument()
+        expect(setupReads()).toBe(reads)
+      }
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(invoke).toHaveBeenCalledTimes(2)
+      expect(mocks.selectService).not.toHaveBeenCalled()
+      expect(mocks.call.mock.calls.filter(([request]) =>
+        request === 'connect' || request === 'disconnect' || request.startsWith('control/') ||
+        (request.startsWith('tasks/') && request !== 'tasks/approvals')
+      )).toEqual([])
+      expect(errorToast).not.toHaveBeenCalled()
+    } finally {
+      mocks.startService.mockReset().mockResolvedValue(undefined)
+      mocks.quitService.mockReset().mockResolvedValue(undefined)
+      errorToast.mockRestore()
+    }
+  }
+)
 
 it.each(['local', 'paired_host'] as const)(
   'keeps %s service startup progress visible until connection completes',

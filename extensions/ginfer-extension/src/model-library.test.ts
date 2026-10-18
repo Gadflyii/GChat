@@ -49,11 +49,19 @@ vi.mock('./session-metadata', () => ({ countTokens: vi.fn(), loadedContext: vi.f
 vi.mock('../../../src-tauri/plugins/tauri-plugin-ginfer/guest-js/index', () => ({
   findSessionByModel: vi.fn().mockResolvedValue(undefined),
   getLoadedModels: vi.fn().mockResolvedValue([]),
+  getAllSessions: vi.fn().mockResolvedValue([]),
   loadGinferModel: loadModel,
+  unloadGinferModel: vi.fn().mockResolvedValue({ success: true }),
 }))
 
 import GinferExtension from './index'
-import { findSessionByModel } from '../../../src-tauri/plugins/tauri-plugin-ginfer/guest-js/index'
+import { resolveBinaryPath } from './util'
+import {
+  findSessionByModel,
+  getAllSessions,
+  getLoadedModels,
+  unloadGinferModel,
+} from '../../../src-tauri/plugins/tauri-plugin-ginfer/guest-js/index'
 
 describe('GInfer library model context and names', () => {
   beforeEach(() => {
@@ -64,6 +72,9 @@ describe('GInfer library model context and names', () => {
     downloadFiles.mockResolvedValue(undefined)
     loadModel.mockResolvedValue({ pid: 1, port: 8080 })
     vi.mocked(findSessionByModel).mockResolvedValue(null)
+    vi.mocked(getLoadedModels).mockResolvedValue([])
+    vi.mocked(getAllSessions).mockResolvedValue([])
+    vi.mocked(unloadGinferModel).mockResolvedValue({ success: true })
     window.core.extensionManager.getByName = vi.fn().mockReturnValue({ downloadFiles })
     config.value = {}
     config.manifests = {}
@@ -208,24 +219,100 @@ describe('GInfer library model context and names', () => {
     }))
   })
 
-  it('forwards Installed profile intent and GPU choice without changing custom defaults', async () => {
+  it.each([
+    undefined,
+    { max_context: 262_144, use_profile_defaults: false },
+    {
+      max_context: 262_144,
+      use_profile_defaults: true,
+      gpu_uuids: ['GPU-selected', 'GPU-second'],
+      load_operation_id: 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c',
+    },
+  ])('uses the tested Host profile and ignores stale startup overrides for load settings %j', async (settings) => {
     config.value = { model_path: '/linux/models/custom/package.ginfer' }
     const extension = new GinferExtension()
     Object.assign(extension, { config: {
-      vision: true, max_context: 262144, max_concurrency: 0, kv_arena_bytes: 'custom-arena',
+      vision: false,
+      spec: 'none',
+      draft_tokens: 7,
+      draft_tp: 2,
+      kv_dtype: 'bf16',
+      max_context: 8_192,
+      kv_arena_bytes: '12345678',
+      prefill_chunk: 256,
+      max_concurrency: 8,
+      no_cuda_graph: true,
     } })
-    const operationId = 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c'
-    await extension.load('custom', { use_profile_defaults: true, gpu_uuids: ['selected'], load_operation_id: operationId })
+    await extension.load('custom', settings)
     expect(loadModel).toHaveBeenLastCalledWith(expect.objectContaining({
-      config: expect.objectContaining({ use_profile_defaults: true, gpu_uuids: ['selected'], load_operation_id: operationId }),
+      config: {
+        use_profile_defaults: true,
+        vision: true,
+        spec: 'auto',
+        draft_tokens: 0,
+        draft_tp: 0,
+        kv_dtype: 'auto',
+        max_context: 0,
+        kv_arena_bytes: 'auto',
+        prefill_chunk: 0,
+        max_concurrency: 0,
+        no_cuda_graph: false,
+        ...(settings?.gpu_uuids === undefined ? {} : { gpu_uuids: settings.gpu_uuids }),
+        ...(settings?.load_operation_id === undefined ? {} : { load_operation_id: settings.load_operation_id }),
+      },
     }))
-    await extension.load('custom')
-    const custom = loadModel.mock.calls.at(-1)![0].config
-    expect(custom).toMatchObject({
-      vision: true, max_context: 262144, max_concurrency: 0, kv_arena_bytes: 'custom-arena',
-    })
-    expect(custom).not.toHaveProperty('use_profile_defaults')
-    expect(custom).not.toHaveProperty('load_operation_id')
+  })
+
+  it.each([undefined, { max_context: 262_144 }])('keeps an attached custom Host session untouched for ordinary load settings %j', async (settings) => {
+    const resident = {
+      pid: 2, port: 8081, vision: false, spec: 'none', max_context: 65_536,
+      max_concurrency: 3, kv_arena_bytes: '12345678', no_cuda_graph: true,
+    } as any
+    vi.mocked(findSessionByModel).mockResolvedValue(resident)
+    const extension = new GinferExtension()
+    Object.assign(extension, { config: { max_context: 8_192, max_concurrency: 8 } })
+
+    expect(await extension.load('custom', settings)).toBe(resident)
+    expect(hardware).not.toHaveBeenCalled()
+    expect(getLoadedModels).not.toHaveBeenCalled()
+    expect(loadModel).not.toHaveBeenCalled()
+    expect(unloadGinferModel).not.toHaveBeenCalled()
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [true, false, true],
+    [false, false, false],
+    [true, true, false],
+  ])('preserves storage, binary, timeout and unload policy (auto unload %s, bypass %s)', async (autoUnload, bypassAutoUnload, shouldUnload) => {
+    config.value = { model_path: '/chosen/provider/models/custom/package.ginfer' }
+    vi.mocked(getLoadedModels).mockResolvedValue(['other'])
+    vi.mocked(getAllSessions).mockResolvedValue([{ model_id: 'other', pid: 2 } as any])
+    vi.mocked(resolveBinaryPath).mockResolvedValueOnce('/chosen/bin/ginfer-serve')
+    const extension = new GinferExtension()
+    Object.assign(extension, { config: {} })
+    extension.onSettingUpdate('model_path', '/chosen/provider')
+    extension.onSettingUpdate('binary_path', '/chosen/bin/ginfer-serve')
+    extension.onSettingUpdate('timeout', '137')
+    extension.onSettingUpdate('auto_unload', autoUnload)
+
+    await extension.load('custom', undefined, undefined, bypassAutoUnload)
+
+    expect(invoke).toHaveBeenCalledWith('ginfer_model_locations', { modelsRoot: '/chosen/provider/models' })
+    expect(resolveBinaryPath).toHaveBeenCalledWith('/data', '/chosen/bin/ginfer-serve')
+    expect(loadModel).toHaveBeenCalledWith(expect.objectContaining({
+      binaryPath: '/chosen/bin/ginfer-serve',
+      hostDirectory: '/chosen/provider/host',
+      modelPath: '/chosen/provider/models/custom/package.ginfer',
+      timeout: 137,
+      config: expect.objectContaining({ use_profile_defaults: true }),
+    }))
+    if (shouldUnload) {
+      expect(unloadGinferModel).toHaveBeenCalledExactlyOnceWith(2)
+    } else {
+      expect(getLoadedModels).not.toHaveBeenCalled()
+      expect(unloadGinferModel).not.toHaveBeenCalled()
+    }
   })
 
   it('does not join another resident session for a scoped load operation', async () => {
@@ -327,7 +414,7 @@ describe('GInfer library model context and names', () => {
     const session = await new GinferExtension().load('custom', { gpu_uuids: ['GPU-one'] })
     expect(session).toEqual({ pid: 1, port: 8080 })
     expect(loadModel).toHaveBeenCalledWith(expect.objectContaining({
-      config: expect.objectContaining({ gpu_uuids: ['GPU-one'] }),
+      config: expect.objectContaining({ use_profile_defaults: true, gpu_uuids: ['GPU-one'] }),
     }))
   })
 
