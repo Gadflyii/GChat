@@ -3503,6 +3503,19 @@ If GChat cannot read your workspace folder, the **Files** panel opens so you
 can see the problem. Choose **Retry folder** to try again. You can close the
 panel while you work; another failed check will not keep reopening it.
 
+The same recovery works for a folder inside the workspace. Expand **Details**
+to see the underlying error, restore access to the folder, then choose
+**Retry folder**. A failed retry leaves the control available. Recovered
+contents remain available when you collapse and reopen that folder.
+
+Private native Linux acceptance on 2026-10-18 covered a nested permission
+error, another failed retry, permission restoration and keyboard activation of
+**Retry folder**, then collapse/reopen of the recovered listing. The temporary
+external-folder reference was removed through **Remove from Agent**; its files
+were retained. All 17 saved records, 45 Skills and two existing workspace inputs
+remained byte unchanged. The app stopped at 08:15Z. Evidence:
+`/ai/gchat/out/gchat-agent-nested-folder-read-native-20261018/summary.json`.
+
 ## Choosing image or audio attachments
 
 If the image or audio file window fails, GChat shows an error and keeps your
