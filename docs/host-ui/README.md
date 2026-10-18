@@ -67,44 +67,36 @@ S1 scratch and relay are removed, booking canceled: returned02:06Z. The retained
 read-only donor remains with Gchat 3; only result JSON and short summary remain.
 
 ## Models plain wording — C7 retained native scopes, October 18
+## Models plain wording — source fix, October 18
 
-`GUI-MODELS-PLAIN-WORDING` source `d913fe639` is merged. Its remaining native
-leaf is **partially qualified** using retained evidence, without another app
-launch. Installed shows the graphics-card helper and the saved hardware profile
-guidance pointing to GInfer Hosts (`out/claude-gui-models-20261017/ld1.png`).
-Downloads shows the plain summary, **Installed → Show in Installed**, and
-**Paused → Resume download / Delete partial download** (`pz.png`). That
-screenshot includes a test-only slow-download fixture; it supports visible copy,
-not package or download-lifecycle qualification. The separate historical
-missing-profile error in `ld1.png` is outside this wording fix.
+C7 rewrites the remaining Models states, errors and actions for a first-time
+user: recommendations, download recovery, startup, remote model servers,
+graphics-card setup, saved memory/settings, sharing/access and removal.
+Primary errors explain recovery; original diagnostics remain in closed details.
+Refresh downloads now refreshes transfer jobs rather than rescanning installed
+models. Source and evidence share `fix/c7-models-plain-wording-20261018`,
+baseline `19e9064ab`.
 
-Retained ed68 native keyboard evidence in
-`out/c7-models-tabs-installed-20261018/result.json` also records Installed's
-helper, Recommended's no-published-recommendation explanation and Downloads'
-summary/empty state. Earlier `rec.png`, `dl.png` and `dl2.png` predate the copy
-fix and are not after-fix evidence. All reviewed d913 copy survives through
-main `c0df88d14`; the status map moved unchanged to `model-release.ts`. Later
-model-name/capability, GPU-legend, import and confirmation changes are outside
-retained-ed68 acceptance.
+245 focused frontend cases, 54 manager cases, typecheck and lint pass. The one
+`make verify` stopped at four old-label benchmark assertions. Correcting those
+expectations preserved behavior/payload/session checks; the failed and remaining
+stages then passed: 3,256 frontend, 121 extension and 1,210 Rust tests, all six
+coverage floors. The original command remains exit2. Two final computer-location
+text changes passed 79 affected cases and final frontend/native builds.
 
-The original 23 focused cases and one combined `make verify` at `c48538a27`
-passed (3,060 frontend,119 extension and Rust; exit0), as recorded in
-`/ai/coordination/mailbox/bubbs.log` at17:17:55Z and17:24:55Z on October17.
-This evidence-only update uses `git diff --check`; no source gate was repeated.
-Result and short summary:
-`out/c7-models-plain-wording-native-20261018/{result.json,summary.md}`.
+Seven checked native Linux screenshots cover Installed/removal, recommendations,
+paused/interrupted/full-disk downloads, optional diagnostics, setup and saved
+settings. Native pointer input used isolated HOME/XDG, X11, dbus and keyring.
+Catalog and saved transfer fixtures establish presentation; transient/older-Host
+states have rendered tests. No payload download, model load or GPU work;
+Windows and installers remain unqualified. Evidence:
+`out/c7-models-plain-wording-20261018/{result.json,summary.md}` and PNGs.
 
-Keep the native row open: release-card graphics-card counts, older remote-Host
-update guidance and queued/downloading/pausing/verifying/failed labels still
-need their corresponding real states. Windows is unqualified. No synthetic
-backend state or fresh download was created to manufacture this evidence.
-Continue another eligible row while those fixtures are unavailable.
-
-C7 owns worktree `/ai/gchat-worktrees/c7-models-plain-wording-native-20261018`,
-branch `docs/c7-models-plain-wording-native-20261018`, baseline `c0df88d14`.
-No build, runtime or booking was allocated; original evidence and the retained
-read-only release donor remain with their owners. Only result JSON and short
-summary are newly retained.
+Owned source worktree remains `/ai/gchat-worktrees/c7-models-plain-wording-20261018`.
+The 41.2 GB S1 build/runtime and nine terminal containers were removed; all
+private processes stopped and CPUs0–7 returned02:32Z, booking canceled.
+Read-only donors and the external model package were preserved. No live job
+or booking remains; only concise evidence and screenshots are newly retained.
 
 ## Sidebar transfer count — C7 closure, October 18
 

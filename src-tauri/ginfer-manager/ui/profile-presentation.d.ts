@@ -1,4 +1,4 @@
-export function profileEvidenceLabel(tier: string): 'Tested' | 'Estimated' | 'Untested'
+export function profileEvidenceLabel(tier: string): 'Full conversations tested' | 'Short conversations tested' | 'Memory estimated; short conversations tested' | 'Not yet tested'
 
 export function profileOptionLabel(profile: {
   qualification: { tier: string }

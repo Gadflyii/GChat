@@ -46,23 +46,26 @@ export function DeleteModelAction({
 
   const [open, setOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleDelete = useCallback(async () => {
     setDeleting(true)
+    setError(null)
     try {
       await deleteLocalModel(serviceHub, modelId, provider)
       onDeleted?.()
-      toast.success(externalReference ? 'Model removed' : t('common:deleteModel.title', { modelId: label ?? modelId }), {
+      toast.success(externalReference ? 'Model removed' : 'Model deleted', {
         id: `delete-model-${modelId}`,
         description: externalReference ? 'Removed from Models. The original file remains in place.' : t('common:deleteModel.success', { modelId: label ?? modelId }),
       })
       setOpen(false)
     } catch (error) {
       console.error('[DeleteModelAction] deleteModel failed:', error)
-      toast.error(t('common:deleteModel.title', { modelId: label ?? modelId }), {
-        id: `delete-model-${modelId}`,
-        description: error instanceof Error ? error.message : String(error),
-      })
+      const message = externalReference
+        ? 'Could not remove this model from Models. Stop it if it is running, then try again.'
+        : 'Could not delete this model. Stop it if it is running, then try again.'
+      setError(error instanceof Error ? error.message : String(error))
+      toast.error(message, { id: `delete-model-${modelId}` })
     } finally {
       setDeleting(false)
     }
@@ -74,7 +77,7 @@ export function DeleteModelAction({
         type="button"
         variant="ghost"
         size="icon-sm"
-        onClick={() => setOpen(true)}
+        onClick={() => { setError(null); setOpen(true) }}
         title={externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
         aria-label={externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
         className="shrink-0 text-muted-foreground hover:text-destructive"
@@ -90,6 +93,10 @@ export function DeleteModelAction({
             {externalReference ? 'The original model file will remain in place. Only its Models entry will be removed.' : t('common:deleteModel.description')}
           </DialogDescription>
         </DialogHeader>
+        {error && <div role="alert" className="space-y-2 text-sm text-destructive">
+          <p>{externalReference ? 'Could not remove this model from Models. Stop it if it is running, then try again.' : 'Could not delete this model. Stop it if it is running, then try again.'}</p>
+          <details><summary className="cursor-pointer">Technical details</summary><p className="mt-2 whitespace-pre-wrap break-words">{error}</p></details>
+        </div>}
         <DialogFooter className="mt-2">
           <Button
             variant="ghost"
@@ -106,7 +113,7 @@ export function DeleteModelAction({
             disabled={deleting}
             onClick={handleDelete}
           >
-            {externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
+            {deleting ? (externalReference ? 'Removing model…' : 'Deleting model…') : externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
           </Button>
         </DialogFooter>
       </DialogContent>

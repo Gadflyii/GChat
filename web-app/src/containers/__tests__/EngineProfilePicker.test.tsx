@@ -5,7 +5,7 @@ import { EngineProfilePicker } from '../EngineProfilePicker'
 import type { EngineSnapshot } from '@/services/engines'
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
-const visibleProfileIds = () => Array.from((screen.getByLabelText('Hardware profile') as HTMLSelectElement).options)
+const visibleProfileIds = () => Array.from((screen.getByLabelText('Saved model settings') as HTMLSelectElement).options)
   .filter(option => option.value).map(option => JSON.parse(option.value)[1])
 const snapshot = (): EngineSnapshot => ({
   host_id: 'host', display_name: 'Host', revision: 1,
@@ -20,21 +20,21 @@ const snapshot = (): EngineSnapshot => ({
 it('reserves other instances GPUs and requires confirmation before switching their profile', async () => {
   const launch = vi.fn().mockResolvedValue(undefined)
   render(<EngineProfilePicker snapshot={snapshot()} disabled={false} launch={launch} />)
-  expect(screen.getByLabelText('Hardware profile')).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
-  fireEvent.change(screen.getByLabelText('Server Host'), { target: { value: 'existing' } })
-  expect(screen.getByLabelText('Hardware profile')).toBeEnabled()
-  expect(screen.getByLabelText('GPU / GPU group')).toBeDisabled()
-  const option = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
+  expect(screen.getByLabelText('Saved model settings')).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Start model' })).toBeDisabled()
+  fireEvent.change(screen.getByLabelText('Model server'), { target: { value: 'existing' } })
+  expect(screen.getByLabelText('Saved model settings')).toBeEnabled()
+  expect(screen.getByLabelText('Graphics cards')).toBeDisabled()
+  const option = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
   const confirm = spyConfirm().mockReturnValue(false)
-  fireEvent.click(screen.getByRole('button', { name: 'Apply profile and restart' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Apply settings and restart' }))
   expect(launch).not.toHaveBeenCalled()
   confirm.mockReturnValue(true)
-  fireEvent.click(screen.getByRole('button', { name: 'Apply profile and restart' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Apply settings and restart' }))
   await waitFor(() => expect(launch).toHaveBeenCalledWith({ profile_id: 'fixture-c4', model_id: 'model',
     gpu_uuids: ['GPU-one'], instance_id: 'existing', force: false, structured_outputs: true, expected_session_id: 'session' }))
-  expect(screen.getByLabelText('Server Host')).toHaveValue('existing')
+  expect(screen.getByLabelText('Model server')).toHaveValue('existing')
 })
 
 it('keeps offline snapshots read-only and does not invent missing profiles', () => {
@@ -43,8 +43,8 @@ it('keeps offline snapshots read-only and does not invent missing profiles', () 
   data.models = []
   render(<EngineProfilePicker snapshot={data} disabled launch={vi.fn()} />)
   expect(screen.getByText(/No installed models were found/)).toBeInTheDocument()
-  expect(screen.getByLabelText('Server Host')).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
+  expect(screen.getByLabelText('Model server')).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Start model' })).toBeDisabled()
 })
 
 it('preserves saved structured-output OFF when applying a qualified profile', async () => {
@@ -57,14 +57,14 @@ it('preserves saved structured-output OFF when applying a qualified profile', as
   const launch = vi.fn().mockResolvedValue(undefined)
   spyConfirm().mockReturnValue(true)
   render(<EngineProfilePicker snapshot={data} instanceId="existing" disabled={false} launch={launch} />)
-  const structured = screen.getByRole('checkbox', { name: 'Structured outputs' })
+  const structured = screen.getByRole('checkbox', { name: 'Follow a response format' })
   expect(structured).not.toBeChecked()
-  const option = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
-  fireEvent.click(screen.getByRole('button', { name: 'Apply profile and restart' }))
+  const option = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  fireEvent.click(screen.getByRole('button', { name: 'Apply settings and restart' }))
   await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ structured_outputs: false })))
   fireEvent.click(structured)
-  fireEvent.click(screen.getByRole('button', { name: 'Apply profile and restart' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Apply settings and restart' }))
   await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ structured_outputs: true })))
 })
 
@@ -76,9 +76,9 @@ it('defaults a new profile launch to ON and distinguishes recorded structured-ou
     data.launch_profiles![0].profile.options.structured_outputs = enabled
     const launch = vi.fn().mockResolvedValue(undefined)
     const view = render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-    expect(screen.getByRole('checkbox', { name: 'Structured outputs' })).toBeChecked()
-    expect(screen.getByText(/this launch custom and unqualified/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
+    expect(screen.getByRole('checkbox', { name: 'Follow a response format' })).toBeChecked()
+    expect(screen.getByText(/These settings have not been tested together/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
     await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ structured_outputs: true })))
     view.unmount()
   }
@@ -89,22 +89,25 @@ it('distinguishes calculated smoke evidence from full-context testing', () => {
   data.instances = []
   data.launch_profiles![0].profile.qualification.tier = 'calculated-startup-smoke'
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
-  expect(screen.getByText('No tested profile is available for this GPU group.')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
-  const option = screen.getByRole('option', { name: /Estimated/ }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
-  expect(screen.getByText(/Full-length requests have not been tested/)).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeEnabled()
+  expect(screen.getByText('No settings with full-length conversation tests are available for these cards.')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Show all settings' }))
+  const option = screen.getByRole('option', { name: /Memory estimated/ }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  expect(screen.getByText(/Full-length conversations have not been tested/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Start model' })).toBeEnabled()
 })
 
 it('identifies the Engine recorded by full-context evidence without claiming a newer runtime passed', () => {
   const data = snapshot()
   data.instances = []
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
-  const option = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
-  expect(screen.getByText(/Evidence applies to the recorded options and Engine 922e5a87/)).toBeInTheDocument()
-  expect(screen.getByText(/A changed option or Engine needs separate validation/)).toBeInTheDocument()
+  const option = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  expect(screen.getByText(/Changed settings or another GInfer version need their own tests/)).toBeVisible()
+  const revision = screen.getByText('GInfer revision used for testing: 922e5a87')
+  expect(revision).not.toBeVisible()
+  fireEvent.click(screen.getByText('Saved settings technical details'))
+  expect(revision).toBeVisible()
 })
 
 it('defaults new instances to an available Vision profile without starting it', () => {
@@ -116,13 +119,13 @@ it('defaults new instances to an available Vision profile without starting it', 
   data.launch_profiles!.push(vision)
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  const selected = screen.getByRole('option', { name: /Vision \+ text$/ }) as HTMLOptionElement
-  expect(screen.getByLabelText('Hardware profile')).toHaveValue(selected.value)
+  const selected = screen.getByRole('option', { name: /Images and text$/ }) as HTMLOptionElement
+  expect(screen.getByLabelText('Saved model settings')).toHaveValue(selected.value)
   expect(launch).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Show all settings' }))
   const text = screen.getByRole('option', { name: /Text only/ }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: text.value } })
-  expect(screen.getByLabelText('Hardware profile')).toHaveValue(text.value)
+  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: text.value } })
+  expect(screen.getByLabelText('Saved model settings')).toHaveValue(text.value)
 })
 
 it('keeps pending Vision profiles selectable and warns about unverified startup', () => {
@@ -131,9 +134,9 @@ it('keeps pending Vision profiles selectable and warns about unverified startup'
   data.launch_profiles![0].profile.options.vision = true
   data.launch_profiles![0].profile.qualification.tier = 'calculated-pending-validation'
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
-  expect(screen.getByText(/Startup, memory margin and inference are unverified/)).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeEnabled()
-  expect(screen.getByRole('option', { name: /Untested/ })).toBeInTheDocument()
+  expect(screen.getByText(/Starting the model, available memory and replies have not been tested/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Start model' })).toBeEnabled()
+  expect(screen.getByRole('option', { name: /Not yet tested/ })).toBeInTheDocument()
   expect(screen.queryByRole('option', { name: /Recommended/ })).not.toBeInTheDocument()
 })
 
@@ -148,9 +151,9 @@ it('keeps the existing untested Vision default alongside a tested text recommend
   data.launch_profiles!.push(vision)
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  const selected = screen.getByRole('option', { name: 'Untested · C4 · 32K context · Vision + text' }) as HTMLOptionElement
-  expect(screen.getByLabelText('Hardware profile')).toHaveValue(selected.value)
-  expect(screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' })).toBeInTheDocument()
+  const selected = screen.getByRole('option', { name: 'Not yet tested · 4 replies at once · 32K tokens · Images and text' }) as HTMLOptionElement
+  expect(screen.getByLabelText('Saved model settings')).toHaveValue(selected.value)
+  expect(screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' })).toBeInTheDocument()
   expect(launch).not.toHaveBeenCalled()
 })
 
@@ -178,18 +181,18 @@ it('shows one tested recommendation and preserves an alternate selection when co
   const launch = vi.fn().mockResolvedValue(undefined)
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
   expect(screen.getAllByRole('option', { name: /Recommended/ })).toHaveLength(1)
-  expect(screen.queryByRole('option', { name: /^(Tested · C4|Estimated · C2|Untested · C8)/ })).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
-  expect(screen.getByRole('option', { name: 'Tested · C4 · 32K context · Vision + text' })).toBeInTheDocument()
-  expect(screen.getByRole('option', { name: 'Estimated · C2 · 32K context · Vision + text' })).toBeInTheDocument()
-  const alternate = screen.getByRole('option', { name: 'Untested · C8 · 32K context · Vision + text' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: alternate.value } })
-  fireEvent.click(screen.getByRole('button', { name: 'Show less' }))
-  expect(screen.getByLabelText('Hardware profile')).toHaveValue(alternate.value)
-  expect(screen.queryByRole('option', { name: /^(Tested · C4|Estimated · C2)/ })).not.toBeInTheDocument()
-  expect(screen.getByText(/Startup, memory margin and inference are unverified/)).toBeInTheDocument()
+  expect(screen.queryByRole('option', { name: /^(Full conversations tested · 4|Memory estimated; short conversations tested · 2|Not yet tested · 8)/ })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Show all settings' }))
+  expect(screen.getByRole('option', { name: 'Full conversations tested · 4 replies at once · 32K tokens · Images and text' })).toBeInTheDocument()
+  expect(screen.getByRole('option', { name: 'Memory estimated; short conversations tested · 2 replies at once · 32K tokens · Images and text' })).toBeInTheDocument()
+  const alternate = screen.getByRole('option', { name: 'Not yet tested · 8 replies at once · 32K tokens · Images and text' }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: alternate.value } })
+  fireEvent.click(screen.getByRole('button', { name: 'Show fewer settings' }))
+  expect(screen.getByLabelText('Saved model settings')).toHaveValue(alternate.value)
+  expect(screen.queryByRole('option', { name: /^(Full conversations tested · 4|Memory estimated; short conversations tested · 2)/ })).not.toBeInTheDocument()
+  expect(screen.getByText(/Starting the model, available memory and replies have not been tested/)).toBeInTheDocument()
   expect(launch).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
   await waitFor(() => expect(launch).toHaveBeenCalledWith({ profile_id: 'untested', model_id: 'model', gpu_uuids: ['GPU-one'],
     instance_id: null, force: false, structured_outputs: true }))
 })
@@ -213,14 +216,14 @@ it('filters profiles by model and assigned hardware and clears a previous model 
   data.launch_profiles!.push(qwen, otherGpu, unsupported)
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} instanceId="existing" disabled={false} launch={launch} />)
-  const profile = screen.getByLabelText('Hardware profile')
-  const initial = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
+  const profile = screen.getByLabelText('Saved model settings')
+  const initial = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
   fireEvent.change(profile, { target: { value: initial.value } })
   expect(visibleProfileIds()).toEqual(['fixture-c4'])
   fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'qwen' } })
   expect(profile).toHaveValue('')
   expect(visibleProfileIds()).toEqual(['qwen-c4'])
-  expect(screen.getByRole('button', { name: 'Apply profile and restart' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Apply settings and restart' })).toBeDisabled()
   expect(launch).not.toHaveBeenCalled()
 })
 
@@ -235,18 +238,18 @@ it('selects physical GPUs separately and filters profiles before launching', asy
   data.launch_profiles!.push(second)
   const launch = vi.fn().mockResolvedValue(undefined)
   render(<EngineProfilePicker snapshot={data} instanceId="" disabled={false} launch={launch} />)
-  const gpu = screen.getByLabelText('GPU / GPU group')
+  const gpu = screen.getByLabelText('Graphics cards')
   expect(gpu).toHaveValue(JSON.stringify(['GPU-one']))
-  expect(screen.getByRole('option', { name: 'GPU 2: NVIDIA CMP 170HX · 64 GB' })).toHaveValue(JSON.stringify(['GPU-two']))
+  expect(screen.getByRole('option', { name: 'Graphics card 2: NVIDIA CMP 170HX · 64 GiB' })).toHaveValue(JSON.stringify(['GPU-two']))
   expect(visibleProfileIds()).toEqual(['fixture-c4'])
-  const first = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: first.value } })
+  const first = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: first.value } })
   fireEvent.change(gpu, { target: { value: JSON.stringify(['GPU-two']) } })
-  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Start model' })).toBeDisabled()
   expect(visibleProfileIds()).toEqual(['second'])
-  const option = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
-  fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
+  const option = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
   await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ gpu_uuids: ['GPU-two'], profile_id: 'second' })))
 })
 
@@ -258,12 +261,12 @@ it('offers declared TP groups and explains cards without a matching profile', ()
   data.launch_profiles![0].compatible_gpu_groups = [['GPU-one', 'GPU-two']]
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  const gpu = screen.getByLabelText('GPU / GPU group')
+  const gpu = screen.getByLabelText('Graphics cards')
   expect(gpu).toHaveValue(JSON.stringify(['GPU-one', 'GPU-two']))
   fireEvent.change(gpu, { target: { value: JSON.stringify(['GPU-three']) } })
-  expect(screen.getByLabelText('Hardware profile')).toBeDisabled()
-  expect(screen.getByText(/No saved profile fits this model on the selected graphics cards/)).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
+  expect(screen.getByLabelText('Saved model settings')).toBeDisabled()
+  expect(screen.getByText(/No saved settings fit this model on the selected graphics cards/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Start model' })).toBeDisabled()
   expect(launch).not.toHaveBeenCalled()
 })
 
@@ -276,9 +279,9 @@ it('holds profile launches when the Host reports hardware profiling in progress'
     checkpoint_available: false, diagnostic_tail: '', error: null, available: true }
   const launch = vi.fn().mockResolvedValue(undefined)
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
-  expect(screen.getByLabelText('Hardware profile')).toBeDisabled()
-  fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
+  expect(screen.getByRole('button', { name: 'Start model' })).toBeDisabled()
+  expect(screen.getByLabelText('Saved model settings')).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
   expect(launch).not.toHaveBeenCalled()
 })
 
@@ -296,12 +299,12 @@ it.each(['running', 'cancelling'] as const)('launches a selected profile during 
     }] }} disabled={false} launch={launch} />)
   })
   const view = render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  expect(screen.getByLabelText('Hardware profile')).toBeEnabled()
-  const option = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
-  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeEnabled()
-  fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
-  expect(await screen.findByRole('option', { name: /Muse.*ready/ })).toBeInTheDocument()
+  expect(screen.getByLabelText('Saved model settings')).toBeEnabled()
+  const option = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  expect(screen.getByRole('button', { name: 'Start model' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
+  expect(await screen.findByRole('option', { name: /Muse.*Ready to chat/ })).toBeInTheDocument()
   expect(launch).toHaveBeenCalledWith({ profile_id: 'fixture-c4', model_id: 'model', gpu_uuids: ['GPU-one'],
     instance_id: null, force: false, structured_outputs: true })
 })
@@ -316,11 +319,11 @@ it('labels screened PRO settings without recommending or increasing their witnes
   entry.profile.qualification.tier = 'screened-startup'
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  expect(screen.getByRole('option', { name: 'Screened, not full-context qualified · C8 · 128K context · Vision + text' })).toBeInTheDocument()
-  expect(screen.getByText(/Startup and short requests were checked; full-context capacity is unverified/)).toBeInTheDocument()
+  expect(screen.getByRole('option', { name: 'Short conversations tested · 8 replies at once · 128K tokens · Images and text' })).toBeInTheDocument()
+  expect(screen.getByText(/Starting the model and short conversations were tested. Full-length conversations and whether they fit in memory have not been tested/)).toBeInTheDocument()
   expect(screen.queryByRole('option', { name: /Recommended/ })).not.toBeInTheDocument()
   expect(launch).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
   expect(launch).toHaveBeenCalledWith(expect.objectContaining({ profile_id: 'fixture-c4', gpu_uuids: ['GPU-one'] }))
   expect(screen.queryByText(/256K/)).not.toBeInTheDocument()
 })
@@ -330,6 +333,20 @@ it('explains a missing profile in plain words and points to the next step', () =
   data.instances = []
   data.launch_profiles = []
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
-  expect(screen.getByText(/No saved hardware profile fits this exact model on this computer yet/)).toBeInTheDocument()
+  expect(screen.getByText(/No saved settings fit this model on this computer yet/)).toBeInTheDocument()
   expect(document.body).not.toHaveTextContent(/draft format and TP degree/)
+})
+
+it('explains unreadable saved settings and keeps the original error available on request', () => {
+  const data = snapshot()
+  data.launch_profiles = []
+  data.profile_error = 'profile schema version 99 is not supported'
+  const launch = vi.fn()
+  render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
+  expect(screen.getByRole('alert')).toHaveTextContent('Could not read the saved model settings. Refresh the model list and try again.')
+  const diagnostic = screen.getByText(data.profile_error)
+  expect(diagnostic).not.toBeVisible()
+  fireEvent.click(screen.getByText('Saved settings technical details'))
+  expect(diagnostic).toBeVisible()
+  expect(launch).not.toHaveBeenCalled()
 })

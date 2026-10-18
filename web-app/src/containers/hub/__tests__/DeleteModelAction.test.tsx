@@ -131,7 +131,7 @@ describe('DeleteModelAction', () => {
       ).toHaveLength(0)
     )
     expect(useFavoriteModel.getState().favoriteModels).toHaveLength(0)
-    expect(toastSuccess).toHaveBeenCalled()
+    expect(toastSuccess).toHaveBeenCalledWith('Model deleted', expect.any(Object))
   })
 
   it('preserves a running model when the backend refuses removal', async () => {
@@ -156,6 +156,10 @@ describe('DeleteModelAction', () => {
     await user.click(confirm)
 
     await waitFor(() => expect(toastError).toHaveBeenCalled())
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not delete this model. Stop it if it is running, then try again.')
+    expect(screen.getByText('Model does not exist')).not.toBeVisible()
+    await user.click(screen.getByText('Technical details'))
+    expect(screen.getByText('Model does not exist')).toBeVisible()
     expect(getProviders).not.toHaveBeenCalled()
     expect(
       useModelProvider.getState().providers[0].models.map((m) => m.id)

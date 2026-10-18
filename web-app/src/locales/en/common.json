@@ -289,11 +289,11 @@
     "alwaysAllow": "Always Allow"
   },
   "deleteModel": {
-    "title": "Delete Model: {{modelId}}",
-    "description": "Are you sure you want to delete this model? This action cannot be undone.",
+    "title": "Delete {{modelId}}?",
+    "description": "This deletes the model file from this computer. You will need to download it again to use it.",
     "success": "Model {{modelId}} has been permanently deleted.",
     "cancel": "Cancel",
-    "delete": "Delete"
+    "delete": "Delete model"
   },
   "deleteProvider": {
     "title": "Delete Provider",
