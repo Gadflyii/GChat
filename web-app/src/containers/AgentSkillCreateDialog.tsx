@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,6 +19,7 @@ type AgentSkillCreateDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreate: (request: CreateAgentSkillRequest) => Promise<void>
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 function normalizeSkillName(value: string) {
@@ -33,6 +34,7 @@ export function AgentSkillCreateDialog({
   open,
   onOpenChange,
   onCreate,
+  returnFocusRef,
 }: AgentSkillCreateDialogProps) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
@@ -77,7 +79,15 @@ export function AgentSkillCreateDialog({
         if (!pending.current) onOpenChange(nextOpen)
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        className="max-w-2xl"
+        onCloseAutoFocus={(event) => {
+          if (returnFocusRef?.current?.isConnected) {
+            event.preventDefault()
+            returnFocusRef.current.focus()
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{t('common:writeSkillInstructions')}</DialogTitle>
           <DialogDescription>

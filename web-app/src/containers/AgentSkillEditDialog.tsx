@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,6 +23,7 @@ type AgentSkillEditDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onUpdate: (request: UpdateAgentSkillRequest) => Promise<void>
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 export function AgentSkillEditDialog({
@@ -30,6 +31,7 @@ export function AgentSkillEditDialog({
   open,
   onOpenChange,
   onUpdate,
+  returnFocusRef,
 }: AgentSkillEditDialogProps) {
   const { t } = useTranslation()
   const [description, setDescription] = useState('')
@@ -70,7 +72,15 @@ export function AgentSkillEditDialog({
         if (!pending.current) onOpenChange(nextOpen)
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        className="max-w-2xl"
+        onCloseAutoFocus={(event) => {
+          if (returnFocusRef?.current?.isConnected) {
+            event.preventDefault()
+            returnFocusRef.current.focus()
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{t('common:editSkill')}</DialogTitle>
           <DialogDescription>
