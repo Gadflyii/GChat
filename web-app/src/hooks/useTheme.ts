@@ -25,7 +25,7 @@ export const useTheme = create<ThemeState>()(
   persist(
     (set) => {
       // Initialize isDark based on OS preference if theme is auto
-      const initialState = {
+      const initialState: ThemeState = {
         activeTheme: DEFAULT_APP_THEME,
         isDark: true,
         setTheme: async (activeTheme: AppTheme) => {

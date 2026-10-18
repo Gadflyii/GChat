@@ -25,9 +25,15 @@ the alert can commit before the folder hydration effect. This branch includes
 only the same one-line `waitFor` before Retry, preserving all assertions; the
 unrelated folder-reveal runtime fix is excluded.
 
-Next: focused Interface hook/route/theme and first-run suites, lint, ONE
-`make verify`, then Vite and default desktop/custom-protocol debug build in the
-existing owned S1 stage. No Rust source is changed by this row; separate native
+Focused Interface hook/route/theme and first-run suites passed 60 cases;
+lint passed with zero errors and five existing warnings. The first and only
+`make verify` stopped at typecheck: the new default constant narrowed
+`initialState.activeTheme` to literal Dark, making the existing Auto comparison
+fail TS2367. The original failure is retained. The bounded correction annotates
+`initialState: ThemeState`, preserving the supported theme union. Next: affected
+theme tests, failed typecheck, the original unrun quality/hardening/manager UI/
+asset/coverage/native stages, then Vite and default desktop/custom-protocol debug
+build. Passed lint and focused stages are reused; no second full verify runs. No Rust source is changed by this row; separate native
 check/clippy is not required. Parent owns ordinary native Reset acceptance in
 Light/Dark and narrow/wide layouts. Packet:
 `out/c3-interface-reset-theme-20261018/{result.json,summary.md}`. Shared source,
