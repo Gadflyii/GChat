@@ -106,6 +106,10 @@ function GbotPage() {
   const [controlErrors, setControlErrors] = useState<
     Record<string, { returning: boolean; details: string } | undefined>
   >({})
+  const connectionChange = useRef(false)
+  const [connectionErrors, setConnectionErrors] = useState<
+    Record<string, { disconnecting: boolean; details: string } | undefined>
+  >({})
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({})
   const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
   const setGbotEnabled = useGeneralSetting((state) => state.setGbotEnabled)
@@ -377,6 +381,45 @@ function GbotPage() {
     identity?.session_id,
   ])
   const controlError = controlErrors[controlErrorKey]
+  const connectionErrorKey = JSON.stringify([
+    serviceTarget,
+    workspaceId,
+    identity?.session_id,
+  ])
+  const connectionError = connectionErrors[connectionErrorKey]
+  const changeConnection = () => {
+    if (busy || connectionChange.current || !bot || setupBlocked) return
+    connectionChange.current = true
+    const key = connectionErrorKey
+    const disconnecting = Boolean(identity)
+    setConnectionErrors((previous) => ({ ...previous, [key]: undefined }))
+    void perform(
+      () =>
+        gbot(
+          disconnecting ? 'disconnect' : 'connect',
+          identity ||
+            (control && control.state !== 'bot'
+              ? control.identity
+              : {
+                  workspace_id: bot.id,
+                  session_id: crypto.randomUUID(),
+                })
+        ),
+      true
+    )
+      .catch((cause) =>
+        setConnectionErrors((previous) => ({
+          ...previous,
+          [key]: {
+            disconnecting,
+            details: cause instanceof Error ? cause.message : String(cause),
+          },
+        }))
+      )
+      .finally(() => {
+        connectionChange.current = false
+      })
+  }
   const recoverControl = () => {
     if (!recoverableControl || recoveryConfirmation !== recoveryKey) return
     void perform(async () => {
@@ -997,20 +1040,12 @@ function GbotPage() {
                     <Button
                       variant="outline"
                       disabled={busy}
-                      onClick={() =>
-                        void perform(() =>
-                          gbot(
-                            identity ? 'disconnect' : 'connect',
-                            identity ||
-                              (control && control.state !== 'bot'
-                                ? control.identity
-                                : {
-                                    workspace_id: bot.id,
-                                    session_id: crypto.randomUUID(),
-                                  })
-                          )
-                        )
+                      aria-describedby={
+                        connectionError
+                          ? 'gbot-settings-connection-error'
+                          : undefined
                       }
+                      onClick={changeConnection}
                     >
                       {identity ? 'Disconnect' : 'Connect'}
                     </Button>
@@ -1032,6 +1067,23 @@ function GbotPage() {
                       </Button>
                     )}
                   </div>
+                  {connectionError && (
+                    <div
+                      id="gbot-settings-connection-error"
+                      role="alert"
+                      className="space-y-1 text-sm"
+                    >
+                      <p>
+                        {connectionError.disconnecting
+                          ? 'Could not disconnect this bot’s computer. Try Disconnect again.'
+                          : 'Could not connect this bot’s computer. Try Connect again.'}
+                      </p>
+                      <details className="text-muted-foreground">
+                        <summary className="cursor-pointer">Details</summary>
+                        <p className="break-words">{connectionError.details}</p>
+                      </details>
+                    </div>
+                  )}
                   {bot.bot_pc?.kind === 'lan' && (
                     <GbotLanBot
                       key={bot.id}
