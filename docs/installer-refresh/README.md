@@ -1,52 +1,213 @@
 # GChat installer refresh
 
-## WINDOWS-MULTIARCH — active implementation
+## WINDOWS-MULTIARCH — accepted, merge-ready
 
 Gchat 3 owns `fix/windows-multiarch-20261017`, based on GChat main `9e75fc31e`.
-Deliverable: the Windows installer carries separate SM86, SM89 and SM120a
-Engine runtimes from one current Engine revision, and the Host selects the
-runtime matching the selected GPU. Use the existing native Windows publisher
-and desktop packaging tooling. Acceptance requires a native Windows package
-build, dispatch checks covering all three supported capabilities and rejection
-of unsupported/mixed groups, full GChat verification, and Codex 8 review before
-reporting merge-ready. Native compilation is explicitly authorized; Ron's
-installed app, settings and sign-in session are excluded. Compilation and
-mocked dispatch do not establish physical inference qualification on RTX 30/40.
+The deliverable is one Windows installer carrying separate SM86, SM89 and
+SM120a runtimes from the same current Engine revision, selected by the Host
+for the chosen GPU. Use the existing native Windows publisher and desktop
+packaging tooling. Acceptance requires native NSIS/MSI packages, dispatch
+checks for all three capabilities and rejection of unsupported/mixed groups,
+full GChat verification, Codex 8 review, and the private installed-request gate
+below before reporting merge-ready. Native compilation is authorized; Ron's
+installed app, settings and sign-in session are excluded.
 
-Implementation covers three-archive validation/staging, verified atomic
-installation under `ginfer/windows`, and GPU-selected Host dispatch. Codex 8
-found a P1 in the two CLI/menu cold-Host bootstrap paths: Linux-only runtime-map
-loading would leave Windows using the SM120a seed. Both paths and the real
-bootstrap regression test are being corrected before final review. Native
-PowerShell 5.1 archive-input tests pass (5 tests, including rejection cases).
+Candidate pins are GChat `102253c526f791aacbb5a347498eeeb7c396b029`
+(tree `2950769f96f8f481d50f430c870765e7c02dd891`) and Engine
+`b76ce57a3cc4823f127a1ce718da454ef1f3510f`. Three-archive validation/staging,
+verified atomic installation under `ginfer/windows`, and GPU-selected Host
+dispatch are implemented. Codex 8's P1 in the CLI/menu cold-Host bootstrap
+paths is fixed: both now load the complete Windows runtime map instead of
+retaining only the SM120a seed. Both bootstrap regressions pass on Linux.
+Architecture signed the startup design at `48d690ce8` (23:43Z); Codex 8
+re-reviewed `ff980aa7a` clean at 23:53Z and matched final verification and both
+bootstrap PASS receipts at 00:01Z. The original P1 is closed.
+
+Current state: all three native Engine images passed build, staging, both
+executable help checks and complete ZIP verification (`runtime-result-sm86.json`,
+`runtime-result-sm89.json`, `runtime-result-sm120a.json` under the owned native
+Engine receipts). Each ZIP has 124 hashed payloads and its manifest, 125
+entries total. These builds remain accepted and will not be rerun. App
+source/cache preparation passed at 01:02Z; current frontend bundling passed in
+15.39 seconds. The focused repair `276d89183` makes the shared schedule guard
+platform-neutral and enables its existing semantic regression on Windows and
+Linux, preserving the workspace-removal fence. S1 focused and full verification
+passed at 01:33Z (3,177 frontend, 120 extension and 1,204 Rust tests, no failures);
+Codex 8 approved the repair at 01:34Z. Native source fast-forwarded cleanly,
+reusing the prepared app cache and accepted Engine archives.
+
+The native CLI/Host and desktop builds passed; the desktop build took
+6 minutes 41 seconds. NSIS and MSI builds passed at 01:45:44Z on `276d89183`.
+Native installation (two cases) and the real cold-CLI bootstrap (one case)
+passed at 01:59Z. The first Host dispatch/bootstrap commands selected `--bin`
+and each matched zero tests; those printed PASS lines are invalid evidence.
+The job then stopped because the offline cache lacked the locked Gbot test
+source `axum 0.8.9`, before that test executed. Its guard recorded exit 1,
+empty owned Job and no cleanup error. Preserve that incomplete run and the recovery selected
+only the three unexecuted cases with owning `--lib` targets and explicit
+named-test/count checks after repairing the owned cache from existing locked
+crate sources. Engine images, packages and the three passing cases are reused.
+The owned offline cache is now complete: 310 existing crate archives (49,011,977
+bytes) were checked against Cargo.lock and copied without dependency changes.
+The corrected Host library compile then found an unrelated Unix-only Python
+executable fixture importing `std::os::unix` on Windows. Test-only repair
+`5c1124847` gates that fixture on Unix; production code is byte-for-byte the
+reviewed `276d89183` source, so accepted packages are reused. The remaining
+Host dispatch and installed-bootstrap library cases passed on native Windows at
+02:07Z. The Gbot library compile then found its Linux setup-readiness regression
+referencing the Linux-only KVM module. Test-only `102253c52` gates that existing
+test on Linux; production packages remain unchanged. The final schedule-removal case passed natively at 02:11:46Z. All six
+actual named Windows cases now pass; `app-result.json` binds those results to
+the two hashed packages. Codex 8 approved final source `102253c52` at 02:19Z,
+including both test-only repairs. The private request and final architecture
+sign-off passed at 02:26Z. MSI extraction and complete packaged inventory
+validation passed (three images, 124 hashed payloads plus manifest each).
+The private bundled Host started at 02:16Z with all three runtime arguments
+and its isolated desktop owner. Artifact-scoped profiling selected packaged
+SM120a and completed in 51.021 seconds at 02:18Z. The subsequent live quote
+rejected the catalog's explicit 6,726,919,936-byte KV pool: Windows allowed
+5,340,511,228 bytes after non-KV ownership and headroom. No Engine instance or
+inference request started. Normal Host Stop completed; the guard exited PASS
+with an empty owned Job at 02:20Z, and the booking was returned.
+
+Arch at 02:20:36Z approved Automatic KV for both ID-only arms, preserving
+context 262,144 and the exact C1 request, initially requesting exact KV bytes;
+display VRAM can make those capacities differ without changing this short
+request's math. The private Windows Automatic-KV Engine reached Ready at 02:23Z, selected
+the packaged SM120a executable as a child of the private Host, and completed
+the single C1 request at 02:23:17Z. All four token lists contain 500 IDs.
+Engine Stop followed by Host Stop completed normally; the guard returned
+PASS/empty Job at 02:23:41Z. The matching Linux request completed at 02:26:15Z: all four 500-token lists
+match Windows exactly (2,000/2,000 IDs). Its Engine exited 0; the existing
+resident runner exited 3 only because its performance-report validator excludes
+context 262,144. The raw request/response and lifecycle result establish this
+ID-only gate; no performance claim is made. Both arms used the same artifact,
+C1 request, context, concurrency, Vision, DFlash2/fixed-four resolution, NVFP4 KV
+and CUDA Graph settings. Automatic KV logged 5.05 GiB on each arm; exact bytes
+were not retained and cannot be inferred from metadata slot counts. Arch
+accepted the gate and rounded-capacity limitation at 02:26:37Z, explicitly
+requiring no duplicate request. No AllFormats preparation or model rebuild
+was needed.
+
+Gate evidence is retained under
+`out/windows-multiarch-20261017/app-installer/` (Windows request/response,
+redacted Ready process, runtime inventory, private Host log and guard results)
+and `out/windows-multiarch-20261017/linux-qwen-id-gate/` (Linux request/response,
+effective command, memory telemetry and normal server-exit result). Exact ID
+equality passed for cold-prefill warmup/measured and warm-generation
+warmup/measured, 500 IDs each. The retained Linux ELF was source-bound to
+`b76ce57a3` by its existing SHA receipt; its embedded revision is unknown.
+The temporary local ELF was removed after exit. Native SM86/SM89 requests
+remain physically unqualified, and the separate Windows Flash qualification
+row remains open.
+
+Accepted, unsigned installers are retained under
+`E:\gchat3-windows-multiarch-20261017\accepted\packages`:
+
+| Package | Bytes | SHA256 |
+| --- | ---: | --- |
+| `GChat_2.0.42_x64-setup.exe` | 1,481,906,920 | `9589f9a7719409d662639a0ffb38b62d44a82068660610429c45b5f71f40c28c` |
+| `GChat_2.0.42_x64_en-US.msi` | 1,559,887,418 | `1eb115aa88972417859314691bcb7b2e4a189a7f3abc1bb529a8765c88dff2b6` |
+
+The three accepted Engine ZIPs are retained under the sibling
+`accepted\runtimes` folder. These are the tested artifacts, moved within the
+same volume after shutdown; no package was rebuilt. Build-generated plugin
+JavaScript and the local core tarball lock hashes were preserved in
+`app-installer/native-generated-build.patch` before removing the native source
+copy; no authored source change was discarded.
+
+The prior candidate `ff980aa7a` passed `make verify` on S1 at 23:59Z: 3,177 frontend, 120
+extension and 1,204 Rust tests passed (27 Rust tests ignored). Packaging tests
+passed five cases; five Windows-only cases were skipped on Linux and passed
+on native PowerShell 5.1, including archive-input rejection cases. The earlier
+`48d690ce8` full verification also passed. Evidence is retained locally in
+`out/windows-multiarch-20261017/s1-verification/{final-verify-result.json,final-verify.log}`.
 The prepared-toolchain option avoids workstation bootstrap/settings changes.
 
-Current inventory (Gchat 3 owns these candidate paths):
+Gchat 3 owns this inventory:
 
-| Host | Path / purpose | Status |
+| Host | Path / purpose | Current status and retention |
 | --- | --- | --- |
-| Local WSL | `/ai/gchat-worktrees/windows-multiarch-20261017`, source branch | Implementation; review pending |
-| S1 `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-windows-multiarch-20261017`, verification source/logs | Focused tests + full `make verify` running from 23:42Z, CPUs112–119; container `gchat3-windows-multiarch-verify-20261017`, `verify.log` |
-| Native `RON-9950X3D2` | `E:\gchat3-windows-multiarch-20261017`, Engine source/build/stage and GChat package | Planned; awaits Codex 4 GPU return before WSL-quiet build |
+| Local WSL | `/ai/gchat-worktrees/windows-multiarch-20261017`, source and receipts | Reviewed candidate and completed acceptance; `out/windows-multiarch-20261017` retains 2.7 MiB of receipts. Temporary `/dev/shm` ELF and copied Linux profile removed after normal server exit; retained S1 ELF and protected model untouched |
+| S1 `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-windows-multiarch-20261017`, verification receipts | Repair `276d89183` focused and full verification PASS at 01:33Z; `repair-{source,verify-result,verify-command,verify-launch}.json` and `repair-verify.log` copied locally; owned source/caches and exited repair container removed, 26 root receipts remain (1.49 MB); returned 01:34Z, SSD free 1.84 TB; RC donor untouched |
+| Native `RON-9950X3D2` | `E:\gchat3-windows-multiarch-20261017`, accepted packages/runtimes and concise receipts | Three Engine images, NSIS/MSI and six actual named tests PASS; private Qwen C1/normal shutdown and Arch acceptance PASS. Source/build/stage/vcpkg caches, app build/dependency caches and private fixture removed after exit. Five accepted artifacts retained in `accepted` (4.3 GiB); `app/app-installer` and Engine result folders retain 3.6 MiB. E: free 2.19 TB. No live job; native returned 02:23Z, Linux returned 02:26Z |
 
-All three Engine images are pinned to current recovered Engine
-`b76ce57a3cc4823f127a1ce718da454ef1f3510f`. Reuse the existing native publisher,
-prepared CUDA/MSVC/vcpkg dependencies and durable memory guard, with builds on
-E:. The existing Ninja compile pool bounds compiler memory while retaining
-`cmake --build … -j`. Next: native three-image/package build and native dispatch
-test, then Codex 8 review and architecture startup-path sign-off.
+The completed merge gate used one real request through the private packaged
+Windows Host on the 5090, proving SM120a dispatch and exact Linux token-ID equality.
+Arch at 02:05:54Z approved direct bundled Host launch: extract the actual MSI
+payload, verify its complete runtime-set manifests, then run its packaged
+`ginfer-host` with a private data root and runtime map. This supersedes the
+23:49Z `prepare-hardware` route, which always requests AllFormats and would
+recalibrate unrelated CPU/Flash formats because the retained seed identity is
+stale. That preparation defect and native MSVC Flash qualification belong in
+separate open-work rows `GCHAT-PREPARE-SELECTED-ARTIFACT` and
+`WINDOWS-FLASH-CPU-QUALIFICATION` (shared ledger commit `b8d38059c3`).
+The MSI payload extraction passed at 02:12:43Z: 422 files reconstructed with cached WiX dark, without custom actions, system installation, registry writes or desktop launch. Both direct-Host command and model guard parse on native PowerShell 5.1; the guard requires available memory after the 30,357,242,112-byte Qwen planning estimate to exceed its 17,131,606,528-byte emergency floor. This estimate is not a measured bound. Complete runtime inventory/hash validation precedes bundled Host startup.
 
-Architecture startup design is signed at `48d690ce8` (23:43Z). Its merge gate
-also requires one real request through a private installed Windows 5090 app,
-showing SM120a dispatch and output token IDs matching the Linux image for the
-same request. This must use an isolated fixture, preserving Ron's installation.
-Windows SM86/SM89 remain physically unqualified until requests run on the
-laptop/Ada hardware; compilation and mocked dispatch alone do not qualify them.
+The private fixture used
+`E:\gchat3-windows-multiarch-20261017\fixture` with private APPDATA. Direct
+`--ensure-running` did not register a locator; control read only this fixture’s
+`data/ginfer/host/host.json`. Its disposable data is removed after shutdown.
+Ron's account, settings and installation remain untouched. Native SM86/SM89
+physical requests remain outstanding; builds/mocked dispatch do not qualify them.
+
+At 01:58Z Arch changed this ID-only gate to a registered GPU-resident
+Qwen3.8-27B NVFP4/DFlash2 package. The earlier Flash plan left only 9.32 GB
+against the 17.13 GB emergency floor and is not authorized to launch.
+Flash on native Windows (MSVC CPU experts) is a separate qualification row,
+to run when native available memory covers its plan. That Flash plan was not launched; the approved GPU-resident Qwen gate passed.
+
+Reuse the verified retained Windows Qwen package
+`C:\Users\Ron\AppData\Local\GInfer\release-1003\artifacts\qwen38_27b_nvfp4_dflash2_nvfp4.ginfer`
+(21,767,307,520 bytes; SHA256
+`4689bdc908d989170106b07e91d81e0898bfe5c5e2cca98ae1d7350276d715a6`).
+Its adjacent `verified-native.json` and GInfer `docs/release-1003/README.md`
+record the copy. Historical native admission shows GPU-resident weights,
+256 MiB peak staging and no host KV cache; staging is not a total host-RAM
+bound. Before launch record native available/physical memory and preserve
+actual native admission accounting. Do not reuse the Flash 64 GiB estimate.
+
+The bounded retained-evidence search found no matching Engine `b76ce57a3`
+Linux Qwen request/IDs. Arch's revised gate therefore used one new matching
+Linux request and the private installed Windows request, comparing exact token IDs,
+with shared artifact, request and runtime configuration. Exact equality passed;
+no performance claim is made. Shared Host headroom/LFU
+controls remain the separate `GCHAT-HOST-RESIDENCY-CONTROLS` row. The model
+phase had no elapsed-time kill and finished through normal Host APIs after
+the corrected native checks. Direct bundled Host startup used the normal
+artifact-scoped Qwen Ensure; no AllFormats request was made.
+
+Native builds reuse prepared CUDA/MSVC/vcpkg on E:, with a three-worker Ninja
+compile pool and one-worker linker pool while retaining `cmake --build … -j`.
+The durable guard uses exact Job/PID/start ownership, initial identity-bound
+permit and lease, a short hash-checked loader, and full effective-command hash.
+Native AvailableBytes and WSL RSS are sampled every 10 seconds; short-lived
+children may escape sampling but remain Job-contained. The emergency floor is
+17,131,606,528 bytes (12.5% of physical memory); the retained 211 Engine samples
+had at least 59.7 GB available. Compiler bookings have a cutoff; the private
+model guard does not add an elapsed-time cutoff.
+
+Retained execution failures and corrections:
+
+| Cause | Prevention and evidence |
+| --- | --- |
+| WSL RSS pipeline truncation caused a broken pipe before compilation | Capture all rows before selecting the top rows and validate the original exit code; `engine/engine-release/failed-preflight-2351/` |
+| Successful Engine publisher left an owned VCTIP helper with intermittent CPU activity; the full 30-second idle comparison failed and the result counter incorrectly read zero | Job emptied without cleanup error after root exit 0. App guard now requires five continuously quiet seconds from only exact owned VS compiler servers after successful root exit; active descendants prevent that cleanup. Script-scoped counters are fixed in app/model guards. Original regex patterns were valid; native parser/hash/path checks pass. Original Engine telemetry remains intact in `engine/engine-release-resume/` |
+| Native Git rejected the WSL clone remote before cache preparation | Exact process-scoped `safe.directory` for that remote only, with no global Git/settings change; `app/app-installer/failed-preflight-0058/` |
+| Windows LAN workspace removal called a Linux-only schedule guard at 01:21Z | Platform-neutral guard/regression repair `276d89183` approved by Codex 8 at 01:34Z; same prepared cache reused. Prior build outputs retained in `app/app-installer/failed-gbot-cfg-0121/` |
+| Host test commands selected `--bin` and exited 0 after matching zero dispatch/bootstrap cases | Select owning Cargo `--lib` targets and require each named test and count; preserve the invalid zero-case output and run only the unexecuted cases, without rebuilding Engine/packages |
+| Offline prepared cache omitted Gbot dev dependency `axum 0.8.9` | Copied 310 missing locked archives (49,011,977 bytes), validating source and destination against Cargo.lock; `locked-source-cache-repair.json` PASS, dependency versions unchanged |
+| Host/Gbot library test compilation included platform-specific fixtures on Windows | Test-only `5c1124847` gates the Unix Python fixture; the Linux KVM readiness regression receives its owning Linux gate. Both Host cases and the Gbot schedule-removal case actually passed. No production/package rebuild |
+| Builder preflight compared the LF Git blob hash with its correct native CRLF checkout after preparation had passed | Normalized content and clean pinned tree match. Check the native CRLF hash and hash-bound completed preparation, then reuse owned source/cache without clone/copy or Engine rebuild; `app/app-installer/failed-builder-hash-0102/` and `native-prepared-reuse-validation.json` |
 
 The RC of record remains Linux release `ed68c7443` + Engine `e2282c336` PASS,
 with its Windows installer built and awaiting Ron's Windows sign-in result.
 Refresh both RCs after that report; this candidate does not replace that record.
-Older dated sections below retain their historical scope.
+The retained S1 RC donor
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
+was offered read-only to Gchat 1; its provider keyboard request was withdrawn
+before any copy or run because retained evidence already qualified that row.
+Preserve this RC donor. Older dated sections below retain their historical scope.
 
 ## Known issues
 
