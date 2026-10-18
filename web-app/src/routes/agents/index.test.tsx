@@ -16,6 +16,7 @@ import type { Task } from '@/services/gbot'
 const AgentStudioPage = Route.options.component!
 
 const navigate = vi.hoisted(() => vi.fn())
+const blockNavigation = vi.hoisted(() => vi.fn())
 const listAgentTemplates = vi.hoisted(() => vi.fn())
 const listAgentRuns = vi.hoisted(() => vi.fn())
 const listAgentModelInstances = vi.hoisted(() => vi.fn())
@@ -42,13 +43,15 @@ const definitionState = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@tanstack/react-router', () => ({
+vi.mock('@tanstack/react-router', async (original) => ({
+  ...(await original<object>()),
   Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
   createFileRoute: () => (config: object) => ({
     options: config,
     useSearch: () => ({}),
   }),
   useNavigate: () => navigate,
+  useBlocker: blockNavigation,
 }))
 
 vi.mock('@/containers/HeaderPage', () => ({
@@ -168,6 +171,7 @@ function deferred<T>() {
 }
 
 describe('AgentStudioPage', () => {
+  const navigableHistories: { destroy: () => void }[] = []
   beforeEach(() => {
     vi.spyOn(toast, 'error').mockReturnValue('test-error')
     useGbotPage.setState({ page: null, sharing: null, requests: {} })
@@ -176,6 +180,7 @@ describe('AgentStudioPage', () => {
     skillState.value = []
     botCall.mockReset()
     navigate.mockReset()
+    blockNavigation.mockReset()
     listAgentTemplates.mockReset().mockResolvedValue([])
     listAgentRuns.mockReset().mockResolvedValue([])
     getAgentDefinition.mockReset().mockResolvedValue(firstAgent)
@@ -202,6 +207,7 @@ describe('AgentStudioPage', () => {
   afterEach(() => {
     act(() => settleConfirm(false))
     vi.mocked(toast.error).mockRestore()
+    navigableHistories.splice(0).forEach((history) => history.destroy())
   })
 
   async function renderSavedAgents() {
@@ -209,6 +215,107 @@ describe('AgentStudioPage', () => {
     render(<AgentStudioPage />)
     await screen.findByDisplayValue(firstAgent.name)
   }
+
+  async function renderNavigableStudio() {
+    const api = await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
+    blockNavigation.mockImplementation(api.useBlocker)
+    definitionState.value.definitions = [firstAgent, secondAgent]
+    const root = api.createRootRoute({
+      component: () => <>
+        <button onClick={() => void router.navigate({ to: '/' })}>New Chat</button>
+        <api.Outlet />
+      </>,
+    })
+    const agents = api.createRoute({ getParentRoute: () => root, path: '/agents/', component: AgentStudioPage })
+    const chat = api.createRoute({ getParentRoute: () => root, path: '/', component: () => <p>Chat destination</p> })
+    window.history.replaceState({}, '', '/agents/')
+    const history = api.createBrowserHistory()
+    navigableHistories.push(history)
+    const router = api.createRouter({
+      routeTree: root.addChildren([agents, chat]),
+      history,
+    })
+    render(<><api.RouterProvider router={router} /><ConfirmDialogHost /></>)
+    await screen.findByDisplayValue(firstAgent.name)
+    return router
+  }
+
+  it.each(['saved', 'new', 'template'] as const)(
+    'guards navigation away from an edited %s draft until discard is explicit', async (source) => {
+      listAgentTemplates.mockResolvedValue([{
+        id: 'review-template', name: 'Review template', description: '', definition: firstAgent,
+      }])
+      const router = await renderNavigableStudio()
+      const user = userEvent.setup()
+      if (source === 'new') {
+        await user.click(screen.getByTitle('New agent'))
+        await screen.findByDisplayValue(editableDraft.name)
+      } else if (source === 'template') {
+        await user.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+        await user.click(await screen.findByRole('button', { name: 'Use template' }))
+        await screen.findByDisplayValue(`${firstAgent.name} Copy`)
+      }
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Keep my navigation draft' } })
+      fireEvent.change(screen.getByLabelText('Agent role and operating instructions'), {
+        target: { value: 'Keep my instructions too.' },
+      })
+      await user.click(screen.getByRole('button', { name: 'New Chat' }))
+      let dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      expect(dialog).toHaveTextContent('leave Agent Studio')
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      await user.keyboard('{Enter}')
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(router.state.location.pathname).toBe('/agents/')
+      expect(screen.getByLabelText('Name')).toHaveValue('Keep my navigation draft')
+      await user.click(screen.getByRole('button', { name: 'New Chat' }))
+      await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      await user.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(screen.getByLabelText('Agent role and operating instructions')).toHaveValue('Keep my instructions too.')
+      expect(screen.queryByText('Chat destination')).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'New Chat' }))
+      dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+      await screen.findByText('Chat destination')
+      await act(() => router.navigate({ to: '/agents/' }))
+      await screen.findByDisplayValue(firstAgent.name)
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+    }
+  )
+
+  it('keeps a hidden edited draft across Studio routes and permits leaving after saving', async () => {
+    definitionState.value.save.mockImplementation(async (value: AgentDefinition) => value)
+    const router = await renderNavigableStudio()
+    const user = userEvent.setup()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Saved navigation name' } })
+    await user.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+    await act(() => router.navigate({ to: '/agents/', search: { view: 'templates' } }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'New Chat' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'Agents & flows', exact: true }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Saved navigation name')
+    await user.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'New Chat' }))
+    await screen.findByText('Chat destination')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith({ ...firstAgent, name: 'Saved navigation name' })
+  })
+
+  it('blocks a stale navigation approval after the draft changes again', async () => {
+    const router = await renderNavigableStudio()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'First navigation edit' } })
+    fireEvent.click(screen.getByRole('button', { name: 'New Chat' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Newer navigation edit' } })
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+    expect(router.state.location.pathname).toBe('/agents/')
+    expect(screen.getByLabelText('Name')).toHaveValue('Newer navigation edit')
+    expect(screen.queryByText('Chat destination')).not.toBeInTheDocument()
+  })
 
   it.each(['library', 'new', 'template'] as const)(
     'confirms replacing saved-agent edits from %s and keeps Cancel as the keyboard default', async (destination) => {
