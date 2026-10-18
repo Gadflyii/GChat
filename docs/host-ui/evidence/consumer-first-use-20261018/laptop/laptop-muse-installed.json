@@ -1,0 +1,916 @@
+{
+  "boot_id": "75bb3b61-12ab-4c10-9941-7ebbbf8d6a8a",
+  "can_stop_host": false,
+  "clients": [
+    {
+      "active_instances": null,
+      "active_requests": 0,
+      "client_id": "8fa5783b-a7a9-4b8f-8c16-098404638835",
+      "gbot_control": {
+        "service_configured": false,
+        "status": "not_requested"
+      },
+      "last_seen_unix_ms": null,
+      "local": true,
+      "name": "Local applications"
+    }
+  ],
+  "cuda_visible_gpu_uuids": [
+    "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+  ],
+  "display_name": "Ron-X17R2",
+  "draft_width_calibrations": [],
+  "first_run": {
+    "complete": false
+  },
+  "fleet": {
+    "kind": "unconfigured"
+  },
+  "fleet_membership": {
+    "authority": null,
+    "coordinator": false,
+    "membership": null
+  },
+  "gpu_device_orders": {
+    "fastest_first": {
+      "cuda_device_order": "FASTEST_FIRST",
+      "cuda_device_uuids": [
+        "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+      ],
+      "effective_cuda_device_order": "FASTEST_FIRST"
+    },
+    "pci_bus_id": [
+      "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+    ]
+  },
+  "gpus": [
+    {
+      "compute_capability": "8.6",
+      "memory_mib": 16384,
+      "name": "NVIDIA GeForce RTX 3080 Ti Laptop GPU",
+      "uuid": "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+    }
+  ],
+  "hardware_profile": {
+    "all_formats_complete": false,
+    "available": true,
+    "base_complete": true,
+    "checkpoint_available": false,
+    "diagnostic_tail": "GPU expert install gpu=GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6 format=q2g64 grid=T1..64 cache=cold/resident refresh=missing-or-stale bank_bytes=27648000 l2_bytes=4194304\nGPU expert install gpu=GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6 format=q4g64 grid=T1..64 cache=cold/resident refresh=missing-or-stale bank_bytes=52224000 l2_bytes=4194304\nGPU expert install gpu=GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6 format=w8g32 grid=T1..64 cache=cold/resident refresh=missing-or-stale bank_bytes=104448000 l2_bytes=4194304\nCPU expert calibration node=0 format=q2g64-f16s phase=core rows=4 phase_seconds=0.048082\nCPU expert calibration node=0 format=q4g64-f16s phase=core rows=4 phase_seconds=0.043009\n{\"all_formats_complete\":false,\"artifact\":{\"directory_sha256\":\"9d15909496d8d3b5791f40c7dea92676a7e2e0793385f1808726dd6a28762bcf\",\"draft_tokens\":7,\"draft_tp\":1,\"model_id\":\"muse-glimmer-30b\",\"mtp_loaded\":false,\"path\":\"/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c/model.ginfer\",\"spec\":\"dflash\",\"tp\":1,\"weights_id\":\"smol-q2g64-mix-dflash-q4\"},\"base_complete\":true,\"complete\":true,\"cpu_expert_format_completeness\":[{\"complete\":false,\"down_format\":\"q2g32-f16s\",\"gate_up_format\":\"q2g32-f16s\",\"missing_rows\":384,\"numa_node\":0,\"required_rows\":384},{\"complete\":false,\"down_format\":\"q4g32-f16s\",\"gate_up_format\":\"q4g32-f16s\",\"missing_rows\":384,\"numa_node\":0,\"required_rows\":384},{\"complete\":false,\"down_format\":\"q2g64-f16s\",\"gate_up_format\":\"q2g64-f16s\",\"missing_rows\":384,\"numa_node\":0,\"required_rows\":384},{\"complete\":false,\"down_format\":\"q4g64-f16s\",\"gate_up_format\":\"q4g64-f16s\",\"missing_rows\":384,\"numa_node\":0,\"required_rows\":384},{\"complete\":false,\"down_format\":\"w8g32-f16s\",\"gate_up_format\":\"w8g32-f16s\",\"missing_rows\":384,\"numa_node\":0,\"required_rows\":384},{\"complete\":false,\"down_format\":\"nvfp4\",\"gate_up_format\":\"nvfp4\",\"missing_rows\":192,\"numa_node\":0,\"required_rows\":192},{\"complete\":false,\"down_format\":\"nvfp4-gmul\",\"gate_up_format\":\"nvfp4-gmul\",\"missing_rows\":192,\"numa_node\":0,\"required_rows\":192}],\"elapsed_seconds\":42.344341482,\"hardware_profile\":\"/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/host/hardware-profiles/44547f182c5ddf99530e523ef4e6dc1a4ba84f9a7ac2ad7fa8e290d00bc6e59b.json.install-876f96da-721c-451a-841e-7545e9d2f67e.json\",\"missing_rows\":[],\"mode\":\"ensure\",\"optional_gpu_rows_to_refresh\":[],\"required_cpu_expert_formats\":[],\"schema_version\":2,\"scope\":\"artifact\",\"stale_required_cpu_rows\":[],\"state\":\"loaded\",\"warning\":\"\",\"warnings\":[\"GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6: GPU PCI NUMA node unavailable\",\"GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6: shared PCIe traffic path unavailable\",\"disk /usr/lib/wsl/drivers: not an identified native local block filesystem\",\"disk /mnt/c: not an identified native local block filesystem\"]}\n",
+    "duration_source": null,
+    "elapsed_ms": 42537,
+    "engine_path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/linux/sm86/bin/ginfer",
+    "error": null,
+    "expected_duration_ms": null,
+    "finished_unix_ms": 1792347554447,
+    "gpu_uuids": [
+      "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+    ],
+    "job_id": "d052dc53-5c46-4511-aade-1beafe7c7fd4",
+    "pending_gpu_groups": [],
+    "phase": "cpu_experts",
+    "phase_detail": "Completed core grid for q4g64-f16s on NUMA node 0",
+    "pid": 240166,
+    "profile_path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/host/hardware-profiles/44547f182c5ddf99530e523ef4e6dc1a4ba84f9a7ac2ad7fa8e290d00bc6e59b.json",
+    "remaining_ms": null,
+    "reprofile": false,
+    "scope": "artifact",
+    "scope_complete": true,
+    "selected_artifact": {
+      "directory_sha256": "9d15909496d8d3b5791f40c7dea92676a7e2e0793385f1808726dd6a28762bcf",
+      "draft_tokens": 7,
+      "draft_tp": 1,
+      "package_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+      "path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c/model.ginfer",
+      "spec": "dflash",
+      "tp": 1
+    },
+    "stale_groups": [],
+    "started_unix_ms": 1792347511910,
+    "status": "completed"
+  },
+  "host_id": "ca1ee853-6a0c-481b-b203-6c54da9e022d",
+  "instances": [
+    {
+      "active_requests": 0,
+      "configuration": {
+        "artifact": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c/model.ginfer",
+        "artifact_set": false,
+        "concurrency": 1,
+        "draft_policy": "fixed",
+        "draft_tokens": 7,
+        "draft_tp": 1,
+        "expert_lfu": true,
+        "flash_host_ram_headroom_gib": null,
+        "gpu_uuids": [
+          "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+        ],
+        "host_kv_cache_bytes": null,
+        "instance_id": "a6cc56c4-2447-4be1-8a68-7decfa304e74",
+        "kv_arena_bytes": null,
+        "kv_arena_headroom_bytes": 314572800,
+        "kv_dtype": "int8",
+        "max_context": 131072,
+        "model_id": "muse-glimmer-30b/smol-q2g64-mix-dflash-q4",
+        "no_cuda_graph": false,
+        "port": 44835,
+        "prefill_chunk": 1024,
+        "progressive_ready": false,
+        "spec": "dflash",
+        "structured_outputs": false,
+        "tp": 1,
+        "vision": false,
+        "vram_budget_bytes": null
+      },
+      "display_name": "muse-glimmer-30b/smol-q2g64-mix-dflash-q4",
+      "instance_id": "a6cc56c4-2447-4be1-8a68-7decfa304e74",
+      "last_error": null,
+      "model_metadata": {
+        "created": 1792347562,
+        "id": "muse-glimmer-30b/smol-q2g64-mix-dflash-q4",
+        "max_model_len": 131072,
+        "object": "model",
+        "owned_by": "ginfer"
+      },
+      "profile": {
+        "concurrency": 1,
+        "draft_policy": "fixed",
+        "draft_tokens": 7,
+        "draft_tp": 1,
+        "expert_lfu": true,
+        "flash_host_ram_headroom_gib": null,
+        "gpu_uuids": [
+          "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+        ],
+        "host_kv_cache_bytes": null,
+        "instance_id": "a6cc56c4-2447-4be1-8a68-7decfa304e74",
+        "kv_arena_bytes": null,
+        "kv_arena_headroom_bytes": 314572800,
+        "kv_dtype": "int8",
+        "max_context": 131072,
+        "model_id": "170db596-8f56-4347-a8b1-6ad0fcc147ec",
+        "no_cuda_graph": false,
+        "prefill_chunk": 1024,
+        "progressive_ready": false,
+        "qualified_profile_id": null,
+        "spec": "dflash",
+        "structured_outputs": false,
+        "vision": false,
+        "vram_budget_bytes": null
+      },
+      "session_id": "06810e6f-21cb-496f-9243-39652e7f9f33",
+      "status": "ready",
+      "upstream_model_id": "muse-glimmer-30b/smol-q2g64-mix-dflash-q4"
+    }
+  ],
+  "inventory_errors": [],
+  "lan_sharing": {
+    "active": false,
+    "enabled": false,
+    "error": null,
+    "managed": true,
+    "notice": null,
+    "port": 7444
+  },
+  "launch_profiles": [
+    {
+      "compatible_gpu_groups": [
+        [
+          "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+        ]
+      ],
+      "gpu_groups": [
+        [
+          "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+        ]
+      ],
+      "model_id": "170db596-8f56-4347-a8b1-6ad0fcc147ec",
+      "profile": {
+        "artifact_bytes": 13838508544,
+        "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+        "compute_capability": "8.6",
+        "concurrency": 1,
+        "draft_tp": 1,
+        "gpu_name": "NVIDIA GeForce RTX 3080 Ti Laptop GPU",
+        "id": "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c1-128k-int8-calculated",
+        "identity": {
+          "model_id": "muse-glimmer-30b",
+          "weights_id": "smol-q2g64-mix-dflash-q4"
+        },
+        "max_context": 131072,
+        "min_memory_mib_per_gpu": 16384,
+        "name": "Muse 30B 2-bit mix \u00b7 9d4ca1b2 \u00b7 128K context \u00b7 1 request \u00b7 calculated",
+        "options": {
+          "draft_policy": "fixed",
+          "draft_tokens": 7,
+          "draft_tp": 1,
+          "expert_lfu": true,
+          "flash_host_ram_headroom_gib": null,
+          "host_kv_cache_bytes": null,
+          "kv_arena_bytes": 2163212288,
+          "kv_arena_headroom_bytes": 314572800,
+          "kv_dtype": "int8",
+          "no_cuda_graph": false,
+          "prefill_chunk": 1024,
+          "progressive_ready": false,
+          "spec": "dflash",
+          "structured_outputs": false,
+          "vision": false,
+          "vram_budget_bytes": null
+        },
+        "platform": "linux",
+        "qualification": {
+          "calculation": {
+            "available_kv_bytes_per_rank": 2163212288,
+            "required_kv_bytes_per_rank": 1042081280
+          },
+          "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+          "evidence": "bench/reports/consumer-launch-profiles-20261018/laptop/muse-lower-points/evidence-summary.json: clean eb777 SM86, Text/INT8/fixedDFlash7/prefill1024/graphs+prefix. Own same-concurrency automatic preflight arena2163212288 bytes saved explicitly, headroom314572800; fresh/reclaimed cohort with one checkpoint/lane needs1042081280 bytes at context131072/C1. Exactly1 short smoke request returned500 tokens each; all14 arrays exact across C1/C2/C4/C7, native/lifecycle/health0, sampled VmSwap0. Placement serializes lane ordinals and actual generated_token_ids, not public request IDs. Minimum sampled GPU free1117782016 bytes. Arch signed2026-10-18T13:26:33Z, calculated-startup-smoke. Canonical8181 standard C1/C4/C8 passed52x500 exact arrays on this runtime; see muse-combined-standard/evidence-summary.json. Separate natural gate at C4/context31744/arena1458569216 passed600s C1 and600s C4 phases:74/44 waves over607.382/605.829seconds,250 HTTP/native-ID joins and246 exact per-seed comparisons including44 cross-phase; native/driver/lifecycle/health0, sampled VmSwap0 and pswp deltas0; all250 stop_token. Normal terminal2026-10-18T13:53:40Z, returned13:53Z. See muse-combined-natural/evidence-summary.json. It does not test the other three configurations. C8 has no positive1024-token bound and remains a gap. Calculation authority docs/consumer-launch-profiles/muse-sizing.md; zero full-context requests, admission-managed concurrency and no arbitrary retained-prefix or simultaneous maximum-length execution claim.",
+          "free_bytes_per_gpu": 1117782016,
+          "full_context_requests": 0,
+          "smoke_requests": 1,
+          "tier": "calculated-startup-smoke"
+        },
+        "tp": 1,
+        "vram_tier_gib": 16
+      }
+    },
+    {
+      "compatible_gpu_groups": [
+        [
+          "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+        ]
+      ],
+      "gpu_groups": [
+        [
+          "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+        ]
+      ],
+      "model_id": "170db596-8f56-4347-a8b1-6ad0fcc147ec",
+      "profile": {
+        "artifact_bytes": 13838508544,
+        "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+        "compute_capability": "8.6",
+        "concurrency": 2,
+        "draft_tp": 1,
+        "gpu_name": "NVIDIA GeForce RTX 3080 Ti Laptop GPU",
+        "id": "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c2-115k-int8-calculated",
+        "identity": {
+          "model_id": "muse-glimmer-30b",
+          "weights_id": "smol-q2g64-mix-dflash-q4"
+        },
+        "max_context": 117760,
+        "min_memory_mib_per_gpu": 16384,
+        "name": "Muse 30B 2-bit mix \u00b7 9d4ca1b2 \u00b7 115K context \u00b7 2 requests \u00b7 calculated",
+        "options": {
+          "draft_policy": "fixed",
+          "draft_tokens": 7,
+          "draft_tp": 1,
+          "expert_lfu": true,
+          "flash_host_ram_headroom_gib": null,
+          "host_kv_cache_bytes": null,
+          "kv_arena_bytes": 1913651200,
+          "kv_arena_headroom_bytes": 314572800,
+          "kv_dtype": "int8",
+          "no_cuda_graph": false,
+          "prefill_chunk": 1024,
+          "progressive_ready": false,
+          "spec": "dflash",
+          "structured_outputs": false,
+          "vision": false,
+          "vram_budget_bytes": null
+        },
+        "platform": "linux",
+        "qualification": {
+          "calculation": {
+            "available_kv_bytes_per_rank": 1913651200,
+            "required_kv_bytes_per_rank": 1901222400
+          },
+          "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+          "evidence": "bench/reports/consumer-launch-profiles-20261018/laptop/muse-lower-points/evidence-summary.json: clean eb777 SM86, Text/INT8/fixedDFlash7/prefill1024/graphs+prefix. Own same-concurrency automatic preflight arena1913651200 bytes saved explicitly, headroom314572800; fresh/reclaimed cohort with one checkpoint/lane needs1901222400 bytes at context117760/C2. Exactly2 short smoke requests returned500 tokens each; all14 arrays exact across C1/C2/C4/C7, native/lifecycle/health0, sampled VmSwap0. Placement serializes lane ordinals and actual generated_token_ids, not public request IDs. Minimum sampled GPU free1117782016 bytes. Arch signed2026-10-18T13:26:33Z, calculated-startup-smoke. Canonical8181 standard C1/C4/C8 passed52x500 exact arrays on this runtime; see muse-combined-standard/evidence-summary.json. Separate natural gate at C4/context31744/arena1458569216 passed600s C1 and600s C4 phases:74/44 waves over607.382/605.829seconds,250 HTTP/native-ID joins and246 exact per-seed comparisons including44 cross-phase; native/driver/lifecycle/health0, sampled VmSwap0 and pswp deltas0; all250 stop_token. Normal terminal2026-10-18T13:53:40Z, returned13:53Z. See muse-combined-natural/evidence-summary.json. It does not test the other three configurations. C8 has no positive1024-token bound and remains a gap. Calculation authority docs/consumer-launch-profiles/muse-sizing.md; zero full-context requests, admission-managed concurrency and no arbitrary retained-prefix or simultaneous maximum-length execution claim.",
+          "free_bytes_per_gpu": 1117782016,
+          "full_context_requests": 0,
+          "smoke_requests": 2,
+          "tier": "calculated-startup-smoke"
+        },
+        "tp": 1,
+        "vram_tier_gib": 16
+      }
+    },
+    {
+      "compatible_gpu_groups": [
+        [
+          "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+        ]
+      ],
+      "gpu_groups": [
+        [
+          "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+        ]
+      ],
+      "model_id": "170db596-8f56-4347-a8b1-6ad0fcc147ec",
+      "profile": {
+        "artifact_bytes": 13838508544,
+        "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+        "compute_capability": "8.6",
+        "concurrency": 4,
+        "draft_tp": 1,
+        "gpu_name": "NVIDIA GeForce RTX 3080 Ti Laptop GPU",
+        "id": "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c4-31k-int8-calculated",
+        "identity": {
+          "model_id": "muse-glimmer-30b",
+          "weights_id": "smol-q2g64-mix-dflash-q4"
+        },
+        "max_context": 31744,
+        "min_memory_mib_per_gpu": 16384,
+        "name": "Muse 30B 2-bit mix \u00b7 9d4ca1b2 \u00b7 31K context \u00b7 4 requests \u00b7 calculated",
+        "options": {
+          "draft_policy": "fixed",
+          "draft_tokens": 7,
+          "draft_tp": 1,
+          "expert_lfu": true,
+          "flash_host_ram_headroom_gib": null,
+          "host_kv_cache_bytes": null,
+          "kv_arena_bytes": 1458569216,
+          "kv_arena_headroom_bytes": 314572800,
+          "kv_dtype": "int8",
+          "no_cuda_graph": false,
+          "prefill_chunk": 1024,
+          "progressive_ready": false,
+          "spec": "dflash",
+          "structured_outputs": false,
+          "vision": false,
+          "vram_budget_bytes": null
+        },
+        "platform": "linux",
+        "qualification": {
+          "calculation": {
+            "available_kv_bytes_per_rank": 1458569216,
+            "required_kv_bytes_per_rank": 1438663680
+          },
+          "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+          "evidence": "bench/reports/consumer-launch-profiles-20261018/laptop/muse-lower-points/evidence-summary.json: clean eb777 SM86, Text/INT8/fixedDFlash7/prefill1024/graphs+prefix. Own same-concurrency automatic preflight arena1458569216 bytes saved explicitly, headroom314572800; fresh/reclaimed cohort with one checkpoint/lane needs1438663680 bytes at context31744/C4. Exactly4 short smoke requests returned500 tokens each; all14 arrays exact across C1/C2/C4/C7, native/lifecycle/health0, sampled VmSwap0. Placement serializes lane ordinals and actual generated_token_ids, not public request IDs. Minimum sampled GPU free1117782016 bytes. Arch signed2026-10-18T13:26:33Z, calculated-startup-smoke. Canonical8181 standard C1/C4/C8 passed52x500 exact arrays on this runtime; see muse-combined-standard/evidence-summary.json. Separate natural gate at C4/context31744/arena1458569216 passed600s C1 and600s C4 phases:74/44 waves over607.382/605.829seconds,250 HTTP/native-ID joins and246 exact per-seed comparisons including44 cross-phase; native/driver/lifecycle/health0, sampled VmSwap0 and pswp deltas0; all250 stop_token. Normal terminal2026-10-18T13:53:40Z, returned13:53Z. See muse-combined-natural/evidence-summary.json. It does not test the other three configurations. C8 has no positive1024-token bound and remains a gap. Calculation authority docs/consumer-launch-profiles/muse-sizing.md; zero full-context requests, admission-managed concurrency and no arbitrary retained-prefix or simultaneous maximum-length execution claim.",
+          "free_bytes_per_gpu": 1117782016,
+          "full_context_requests": 0,
+          "smoke_requests": 4,
+          "tier": "calculated-startup-smoke"
+        },
+        "tp": 1,
+        "vram_tier_gib": 16
+      }
+    },
+    {
+      "compatible_gpu_groups": [
+        [
+          "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+        ]
+      ],
+      "gpu_groups": [
+        [
+          "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+        ]
+      ],
+      "model_id": "170db596-8f56-4347-a8b1-6ad0fcc147ec",
+      "profile": {
+        "artifact_bytes": 13838508544,
+        "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+        "compute_capability": "8.6",
+        "concurrency": 7,
+        "draft_tp": 1,
+        "gpu_name": "NVIDIA GeForce RTX 3080 Ti Laptop GPU",
+        "id": "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c7-4k-int8-calculated",
+        "identity": {
+          "model_id": "muse-glimmer-30b",
+          "weights_id": "smol-q2g64-mix-dflash-q4"
+        },
+        "max_context": 4096,
+        "min_memory_mib_per_gpu": 16384,
+        "name": "Muse 30B 2-bit mix \u00b7 9d4ca1b2 \u00b7 4K context \u00b7 7 requests \u00b7 calculated",
+        "options": {
+          "draft_policy": "fixed",
+          "draft_tokens": 7,
+          "draft_tp": 1,
+          "expert_lfu": true,
+          "flash_host_ram_headroom_gib": null,
+          "host_kv_cache_bytes": null,
+          "kv_arena_bytes": 995098624,
+          "kv_arena_headroom_bytes": 314572800,
+          "kv_dtype": "int8",
+          "no_cuda_graph": false,
+          "prefill_chunk": 1024,
+          "progressive_ready": false,
+          "spec": "dflash",
+          "structured_outputs": false,
+          "vision": false,
+          "vram_budget_bytes": null
+        },
+        "platform": "linux",
+        "qualification": {
+          "calculation": {
+            "available_kv_bytes_per_rank": 995098624,
+            "required_kv_bytes_per_rank": 991411456
+          },
+          "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+          "evidence": "bench/reports/consumer-launch-profiles-20261018/laptop/muse-lower-points/evidence-summary.json: clean eb777 SM86, Text/INT8/fixedDFlash7/prefill1024/graphs+prefix. Own same-concurrency automatic preflight arena995098624 bytes saved explicitly, headroom314572800; fresh/reclaimed cohort with one checkpoint/lane needs991411456 bytes at context4096/C7. Exactly7 short smoke requests returned500 tokens each; all14 arrays exact across C1/C2/C4/C7, native/lifecycle/health0, sampled VmSwap0. Placement serializes lane ordinals and actual generated_token_ids, not public request IDs. Minimum sampled GPU free1117782016 bytes. Arch signed2026-10-18T13:26:33Z, calculated-startup-smoke. Canonical8181 standard C1/C4/C8 passed52x500 exact arrays on this runtime; see muse-combined-standard/evidence-summary.json. Separate natural gate at C4/context31744/arena1458569216 passed600s C1 and600s C4 phases:74/44 waves over607.382/605.829seconds,250 HTTP/native-ID joins and246 exact per-seed comparisons including44 cross-phase; native/driver/lifecycle/health0, sampled VmSwap0 and pswp deltas0; all250 stop_token. Normal terminal2026-10-18T13:53:40Z, returned13:53Z. See muse-combined-natural/evidence-summary.json. It does not test the other three configurations. C8 has no positive1024-token bound and remains a gap. Calculation authority docs/consumer-launch-profiles/muse-sizing.md; zero full-context requests, admission-managed concurrency and no arbitrary retained-prefix or simultaneous maximum-length execution claim.",
+          "free_bytes_per_gpu": 1117782016,
+          "full_context_requests": 0,
+          "smoke_requests": 7,
+          "tier": "calculated-startup-smoke"
+        },
+        "tp": 1,
+        "vram_tier_gib": 16
+      }
+    },
+    {
+      "compatible_gpu_groups": [],
+      "gpu_groups": [],
+      "model_id": "170db596-8f56-4347-a8b1-6ad0fcc147ec",
+      "profile": {
+        "artifact_bytes": 13838508544,
+        "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+        "compute_capability": "8.9",
+        "concurrency": 8,
+        "draft_tp": 1,
+        "gpu_name": "NVIDIA GeForce RTX 4090",
+        "id": "rtx4090-muse-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
+        "identity": {
+          "model_id": "muse-glimmer-30b",
+          "weights_id": "smol-q2g64-mix-dflash-q4"
+        },
+        "max_context": 131072,
+        "min_memory_mib_per_gpu": 24564,
+        "name": "Muse 30B 2-bit mix \u00b7 9d4ca1b2 \u00b7 128K context \u00b7 8 requests \u00b7 calculated",
+        "options": {
+          "draft_policy": "fixed",
+          "draft_tokens": 7,
+          "draft_tp": 1,
+          "expert_lfu": true,
+          "flash_host_ram_headroom_gib": null,
+          "host_kv_cache_bytes": null,
+          "kv_arena_bytes": 8717860864,
+          "kv_arena_headroom_bytes": 314572800,
+          "kv_dtype": "int8",
+          "no_cuda_graph": false,
+          "prefill_chunk": 0,
+          "progressive_ready": false,
+          "spec": "dflash",
+          "structured_outputs": false,
+          "vision": false,
+          "vram_budget_bytes": null
+        },
+        "platform": "linux",
+        "qualification": {
+          "calculation": {
+            "available_kv_bytes_per_rank": 8717860864,
+            "required_kv_bytes_per_rank": 8643358720
+          },
+          "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+          "evidence": "bench/reports/consumer-launch-profiles-20261018/ada4090/muse-combined-capacity/evidence-summary.json: clean eb777 SM89, Text/INT8/fixedDFlash7/graphs+prefix; witnessed automatic arena8717860864 bytes at131072/C8 with314572800-byte reserve. Calculated complete fresh/reclaimed cohort with one checkpoint/lane needs8643358720 bytes, slack74502144; admission-managed concurrency. Four short C8 waves,32x500 arrays exact, minimum sampled GPU free706740224 bytes, native/health0; expected noncanonical validator3 is diagnostic. Arch signed2026-10-18T12:55:38Z. Canonical8181 standard passed52x500 exact across C1/C4/C8, native/runner/lifecycle/health0; see muse-combined-standard/evidence-summary.json. Signed explicit-arena/context natural C1/C4 passed603.595/604.726seconds,498 HTTP200/native ID joins and494 exact per-seed comparisons including87 cross-phase comparisons; all stop_token, native/driver/lifecycle/health0, sampled VmSwap0/no swap growth. See muse-combined-natural/evidence-summary.json. Returned13:21Z. Calculation authority docs/consumer-launch-profiles/muse-sizing.md; zero full-context requests and no arbitrary retained-prefix or simultaneous maximum-length execution claim.",
+          "free_bytes_per_gpu": 706740224,
+          "full_context_requests": 0,
+          "smoke_requests": 8,
+          "tier": "calculated-startup-smoke"
+        },
+        "tp": 1,
+        "vram_tier_gib": 24
+      }
+    },
+    {
+      "compatible_gpu_groups": [],
+      "gpu_groups": [],
+      "model_id": "170db596-8f56-4347-a8b1-6ad0fcc147ec",
+      "profile": {
+        "artifact_bytes": 13838508544,
+        "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+        "compute_capability": "12.0",
+        "concurrency": 8,
+        "draft_tp": 1,
+        "gpu_name": "NVIDIA GeForce RTX 5090",
+        "id": "rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
+        "identity": {
+          "model_id": "muse-glimmer-30b",
+          "weights_id": "smol-q2g64-mix-dflash-q4"
+        },
+        "max_context": 131072,
+        "min_memory_mib_per_gpu": 32606,
+        "name": "Muse 30B 2-bit mix 9d4ca1b2 \u00b7 128K context \u00b7 8 requests \u00b7 INT8 KV \u00b7 calculated startup + smoke",
+        "options": {
+          "draft_policy": "fixed",
+          "draft_tokens": 7,
+          "draft_tp": 1,
+          "expert_lfu": true,
+          "flash_host_ram_headroom_gib": null,
+          "host_kv_cache_bytes": null,
+          "kv_arena_bytes": 15189450752,
+          "kv_arena_headroom_bytes": 314572800,
+          "kv_dtype": "int8",
+          "no_cuda_graph": false,
+          "prefill_chunk": 1024,
+          "progressive_ready": false,
+          "spec": "dflash",
+          "structured_outputs": false,
+          "vision": false,
+          "vram_budget_bytes": null
+        },
+        "platform": "linux",
+        "qualification": {
+          "calculation": {
+            "available_kv_bytes_per_rank": 15189450752,
+            "required_kv_bytes_per_rank": 8336650240
+          },
+          "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+          "evidence": "bench/reports/consumer-launch-profiles-20261018/rtx5090/muse-capacity-eb777ab95/evidence-summary.json; bench/reports/consumer-launch-profiles-20261018/rtx5090/muse-standard/evidence-summary.json; bench/reports/consumer-launch-profiles-20261018/rtx5090/muse-natural/evidence-summary.json; docs/consumer-launch-profiles/muse-sizing.md; docs/consumer-launch-profiles/rtx5090.md. Arch signed131072/C8 and explicit15189450752-byte arena at13:35:49Z in d74697764, TP1/DTP1,fixedDF7,INT8,prefill1024,graphs/prefixON,Text,300MiB reserve. Complete fresh/reclaimed C8 reservation8336650240 bytes includes one terminal prefix checkpoint per lane; measured final/safe arena15189450752 bytes,3266 fresh descriptors>=152 required. Capacity native0/health0,controller3 expected noncanonical-context diagnostic;32 short arrays/16000 IDs exact. Canonical8181 C1/C4/C8:52 arrays/26000 IDs and52 speculative dictionaries exact against accepted C6 b827deb8d and across concurrency;all exits0,72/72 GPU samples,min617611264 free bytes. Unchanged natural600sC1 then600sC4 passed COMPLETE/MATCH:229/428 requests over601.735/600.674 seconds,657 HTTP200,309284 generated IDs and653 exact seeded comparisons including shared C1/C4 seed;all exits0,VmSwap0. Natural1200 live-loop GPU samples,errorfree,maxgap1.054s,min328204288 free bytes; this lower full-coverage minimum is saved here. Capacity GPU minimum399507456 had12/56 coverage and is not the qualification minimum. Host natural numeric availability is endpoints only;4GiB floor guard passed. Zero full-context requests; no arbitrary retained/pinned prefix-cohort or simultaneous full-length execution claim. Directional standard baseline only.",
+          "free_bytes_per_gpu": 328204288,
+          "full_context_requests": 0,
+          "smoke_requests": 8,
+          "tier": "calculated-startup-smoke"
+        },
+        "tp": 1,
+        "vram_tier_gib": 32
+      }
+    }
+  ],
+  "local_administrator": {
+    "active_instances": {},
+    "active_requests": 0,
+    "last_seen_unix_ms": 1792347608188
+  },
+  "local_identity": {
+    "platform": "linux",
+    "state_directory": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/host"
+  },
+  "management_notice": null,
+  "management_origin": "https://127.0.0.1:7443",
+  "max_perf_profiles": [],
+  "model_management": {
+    "downloads": [
+      {
+        "bytes_per_second": 0,
+        "error": null,
+        "id": "c70a5542-bc41-4e7f-a62b-6d93a6ef9592",
+        "path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c/model.ginfer",
+        "received": 13838508544,
+        "release": {
+          "bytes": 13838508544,
+          "capabilities": [],
+          "identity": {
+            "model_id": "muse-glimmer-30b",
+            "weights_id": "smol-q2g64-mix-dflash-q4"
+          },
+          "launch_profiles": [
+            {
+              "artifact_bytes": 13838508544,
+              "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+              "compute_capability": "8.6",
+              "concurrency": 1,
+              "draft_tp": 1,
+              "gpu_name": "NVIDIA GeForce RTX 3080 Ti Laptop GPU",
+              "id": "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c1-128k-int8-calculated",
+              "identity": {
+                "model_id": "muse-glimmer-30b",
+                "weights_id": "smol-q2g64-mix-dflash-q4"
+              },
+              "max_context": 131072,
+              "min_memory_mib_per_gpu": 16384,
+              "name": "Muse 30B 2-bit mix \u00b7 9d4ca1b2 \u00b7 128K context \u00b7 1 request \u00b7 calculated",
+              "options": {
+                "draft_policy": "fixed",
+                "draft_tokens": 7,
+                "draft_tp": 1,
+                "expert_lfu": true,
+                "flash_host_ram_headroom_gib": null,
+                "host_kv_cache_bytes": null,
+                "kv_arena_bytes": 2163212288,
+                "kv_arena_headroom_bytes": 314572800,
+                "kv_dtype": "int8",
+                "no_cuda_graph": false,
+                "prefill_chunk": 1024,
+                "progressive_ready": false,
+                "spec": "dflash",
+                "structured_outputs": false,
+                "vision": false,
+                "vram_budget_bytes": null
+              },
+              "platform": "linux",
+              "qualification": {
+                "calculation": {
+                  "available_kv_bytes_per_rank": 2163212288,
+                  "required_kv_bytes_per_rank": 1042081280
+                },
+                "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+                "evidence": "bench/reports/consumer-launch-profiles-20261018/laptop/muse-lower-points/evidence-summary.json: clean eb777 SM86, Text/INT8/fixedDFlash7/prefill1024/graphs+prefix. Own same-concurrency automatic preflight arena2163212288 bytes saved explicitly, headroom314572800; fresh/reclaimed cohort with one checkpoint/lane needs1042081280 bytes at context131072/C1. Exactly1 short smoke request returned500 tokens each; all14 arrays exact across C1/C2/C4/C7, native/lifecycle/health0, sampled VmSwap0. Placement serializes lane ordinals and actual generated_token_ids, not public request IDs. Minimum sampled GPU free1117782016 bytes. Arch signed2026-10-18T13:26:33Z, calculated-startup-smoke. Canonical8181 standard C1/C4/C8 passed52x500 exact arrays on this runtime; see muse-combined-standard/evidence-summary.json. Separate natural gate at C4/context31744/arena1458569216 passed600s C1 and600s C4 phases:74/44 waves over607.382/605.829seconds,250 HTTP/native-ID joins and246 exact per-seed comparisons including44 cross-phase; native/driver/lifecycle/health0, sampled VmSwap0 and pswp deltas0; all250 stop_token. Normal terminal2026-10-18T13:53:40Z, returned13:53Z. See muse-combined-natural/evidence-summary.json. It does not test the other three configurations. C8 has no positive1024-token bound and remains a gap. Calculation authority docs/consumer-launch-profiles/muse-sizing.md; zero full-context requests, admission-managed concurrency and no arbitrary retained-prefix or simultaneous maximum-length execution claim.",
+                "free_bytes_per_gpu": 1117782016,
+                "full_context_requests": 0,
+                "smoke_requests": 1,
+                "tier": "calculated-startup-smoke"
+              },
+              "tp": 1,
+              "vram_tier_gib": 16
+            },
+            {
+              "artifact_bytes": 13838508544,
+              "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+              "compute_capability": "8.6",
+              "concurrency": 2,
+              "draft_tp": 1,
+              "gpu_name": "NVIDIA GeForce RTX 3080 Ti Laptop GPU",
+              "id": "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c2-115k-int8-calculated",
+              "identity": {
+                "model_id": "muse-glimmer-30b",
+                "weights_id": "smol-q2g64-mix-dflash-q4"
+              },
+              "max_context": 117760,
+              "min_memory_mib_per_gpu": 16384,
+              "name": "Muse 30B 2-bit mix \u00b7 9d4ca1b2 \u00b7 115K context \u00b7 2 requests \u00b7 calculated",
+              "options": {
+                "draft_policy": "fixed",
+                "draft_tokens": 7,
+                "draft_tp": 1,
+                "expert_lfu": true,
+                "flash_host_ram_headroom_gib": null,
+                "host_kv_cache_bytes": null,
+                "kv_arena_bytes": 1913651200,
+                "kv_arena_headroom_bytes": 314572800,
+                "kv_dtype": "int8",
+                "no_cuda_graph": false,
+                "prefill_chunk": 1024,
+                "progressive_ready": false,
+                "spec": "dflash",
+                "structured_outputs": false,
+                "vision": false,
+                "vram_budget_bytes": null
+              },
+              "platform": "linux",
+              "qualification": {
+                "calculation": {
+                  "available_kv_bytes_per_rank": 1913651200,
+                  "required_kv_bytes_per_rank": 1901222400
+                },
+                "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+                "evidence": "bench/reports/consumer-launch-profiles-20261018/laptop/muse-lower-points/evidence-summary.json: clean eb777 SM86, Text/INT8/fixedDFlash7/prefill1024/graphs+prefix. Own same-concurrency automatic preflight arena1913651200 bytes saved explicitly, headroom314572800; fresh/reclaimed cohort with one checkpoint/lane needs1901222400 bytes at context117760/C2. Exactly2 short smoke requests returned500 tokens each; all14 arrays exact across C1/C2/C4/C7, native/lifecycle/health0, sampled VmSwap0. Placement serializes lane ordinals and actual generated_token_ids, not public request IDs. Minimum sampled GPU free1117782016 bytes. Arch signed2026-10-18T13:26:33Z, calculated-startup-smoke. Canonical8181 standard C1/C4/C8 passed52x500 exact arrays on this runtime; see muse-combined-standard/evidence-summary.json. Separate natural gate at C4/context31744/arena1458569216 passed600s C1 and600s C4 phases:74/44 waves over607.382/605.829seconds,250 HTTP/native-ID joins and246 exact per-seed comparisons including44 cross-phase; native/driver/lifecycle/health0, sampled VmSwap0 and pswp deltas0; all250 stop_token. Normal terminal2026-10-18T13:53:40Z, returned13:53Z. See muse-combined-natural/evidence-summary.json. It does not test the other three configurations. C8 has no positive1024-token bound and remains a gap. Calculation authority docs/consumer-launch-profiles/muse-sizing.md; zero full-context requests, admission-managed concurrency and no arbitrary retained-prefix or simultaneous maximum-length execution claim.",
+                "free_bytes_per_gpu": 1117782016,
+                "full_context_requests": 0,
+                "smoke_requests": 2,
+                "tier": "calculated-startup-smoke"
+              },
+              "tp": 1,
+              "vram_tier_gib": 16
+            },
+            {
+              "artifact_bytes": 13838508544,
+              "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+              "compute_capability": "8.6",
+              "concurrency": 4,
+              "draft_tp": 1,
+              "gpu_name": "NVIDIA GeForce RTX 3080 Ti Laptop GPU",
+              "id": "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c4-31k-int8-calculated",
+              "identity": {
+                "model_id": "muse-glimmer-30b",
+                "weights_id": "smol-q2g64-mix-dflash-q4"
+              },
+              "max_context": 31744,
+              "min_memory_mib_per_gpu": 16384,
+              "name": "Muse 30B 2-bit mix \u00b7 9d4ca1b2 \u00b7 31K context \u00b7 4 requests \u00b7 calculated",
+              "options": {
+                "draft_policy": "fixed",
+                "draft_tokens": 7,
+                "draft_tp": 1,
+                "expert_lfu": true,
+                "flash_host_ram_headroom_gib": null,
+                "host_kv_cache_bytes": null,
+                "kv_arena_bytes": 1458569216,
+                "kv_arena_headroom_bytes": 314572800,
+                "kv_dtype": "int8",
+                "no_cuda_graph": false,
+                "prefill_chunk": 1024,
+                "progressive_ready": false,
+                "spec": "dflash",
+                "structured_outputs": false,
+                "vision": false,
+                "vram_budget_bytes": null
+              },
+              "platform": "linux",
+              "qualification": {
+                "calculation": {
+                  "available_kv_bytes_per_rank": 1458569216,
+                  "required_kv_bytes_per_rank": 1438663680
+                },
+                "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+                "evidence": "bench/reports/consumer-launch-profiles-20261018/laptop/muse-lower-points/evidence-summary.json: clean eb777 SM86, Text/INT8/fixedDFlash7/prefill1024/graphs+prefix. Own same-concurrency automatic preflight arena1458569216 bytes saved explicitly, headroom314572800; fresh/reclaimed cohort with one checkpoint/lane needs1438663680 bytes at context31744/C4. Exactly4 short smoke requests returned500 tokens each; all14 arrays exact across C1/C2/C4/C7, native/lifecycle/health0, sampled VmSwap0. Placement serializes lane ordinals and actual generated_token_ids, not public request IDs. Minimum sampled GPU free1117782016 bytes. Arch signed2026-10-18T13:26:33Z, calculated-startup-smoke. Canonical8181 standard C1/C4/C8 passed52x500 exact arrays on this runtime; see muse-combined-standard/evidence-summary.json. Separate natural gate at C4/context31744/arena1458569216 passed600s C1 and600s C4 phases:74/44 waves over607.382/605.829seconds,250 HTTP/native-ID joins and246 exact per-seed comparisons including44 cross-phase; native/driver/lifecycle/health0, sampled VmSwap0 and pswp deltas0; all250 stop_token. Normal terminal2026-10-18T13:53:40Z, returned13:53Z. See muse-combined-natural/evidence-summary.json. It does not test the other three configurations. C8 has no positive1024-token bound and remains a gap. Calculation authority docs/consumer-launch-profiles/muse-sizing.md; zero full-context requests, admission-managed concurrency and no arbitrary retained-prefix or simultaneous maximum-length execution claim.",
+                "free_bytes_per_gpu": 1117782016,
+                "full_context_requests": 0,
+                "smoke_requests": 4,
+                "tier": "calculated-startup-smoke"
+              },
+              "tp": 1,
+              "vram_tier_gib": 16
+            },
+            {
+              "artifact_bytes": 13838508544,
+              "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+              "compute_capability": "8.6",
+              "concurrency": 7,
+              "draft_tp": 1,
+              "gpu_name": "NVIDIA GeForce RTX 3080 Ti Laptop GPU",
+              "id": "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c7-4k-int8-calculated",
+              "identity": {
+                "model_id": "muse-glimmer-30b",
+                "weights_id": "smol-q2g64-mix-dflash-q4"
+              },
+              "max_context": 4096,
+              "min_memory_mib_per_gpu": 16384,
+              "name": "Muse 30B 2-bit mix \u00b7 9d4ca1b2 \u00b7 4K context \u00b7 7 requests \u00b7 calculated",
+              "options": {
+                "draft_policy": "fixed",
+                "draft_tokens": 7,
+                "draft_tp": 1,
+                "expert_lfu": true,
+                "flash_host_ram_headroom_gib": null,
+                "host_kv_cache_bytes": null,
+                "kv_arena_bytes": 995098624,
+                "kv_arena_headroom_bytes": 314572800,
+                "kv_dtype": "int8",
+                "no_cuda_graph": false,
+                "prefill_chunk": 1024,
+                "progressive_ready": false,
+                "spec": "dflash",
+                "structured_outputs": false,
+                "vision": false,
+                "vram_budget_bytes": null
+              },
+              "platform": "linux",
+              "qualification": {
+                "calculation": {
+                  "available_kv_bytes_per_rank": 995098624,
+                  "required_kv_bytes_per_rank": 991411456
+                },
+                "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+                "evidence": "bench/reports/consumer-launch-profiles-20261018/laptop/muse-lower-points/evidence-summary.json: clean eb777 SM86, Text/INT8/fixedDFlash7/prefill1024/graphs+prefix. Own same-concurrency automatic preflight arena995098624 bytes saved explicitly, headroom314572800; fresh/reclaimed cohort with one checkpoint/lane needs991411456 bytes at context4096/C7. Exactly7 short smoke requests returned500 tokens each; all14 arrays exact across C1/C2/C4/C7, native/lifecycle/health0, sampled VmSwap0. Placement serializes lane ordinals and actual generated_token_ids, not public request IDs. Minimum sampled GPU free1117782016 bytes. Arch signed2026-10-18T13:26:33Z, calculated-startup-smoke. Canonical8181 standard C1/C4/C8 passed52x500 exact arrays on this runtime; see muse-combined-standard/evidence-summary.json. Separate natural gate at C4/context31744/arena1458569216 passed600s C1 and600s C4 phases:74/44 waves over607.382/605.829seconds,250 HTTP/native-ID joins and246 exact per-seed comparisons including44 cross-phase; native/driver/lifecycle/health0, sampled VmSwap0 and pswp deltas0; all250 stop_token. Normal terminal2026-10-18T13:53:40Z, returned13:53Z. See muse-combined-natural/evidence-summary.json. It does not test the other three configurations. C8 has no positive1024-token bound and remains a gap. Calculation authority docs/consumer-launch-profiles/muse-sizing.md; zero full-context requests, admission-managed concurrency and no arbitrary retained-prefix or simultaneous maximum-length execution claim.",
+                "free_bytes_per_gpu": 1117782016,
+                "full_context_requests": 0,
+                "smoke_requests": 7,
+                "tier": "calculated-startup-smoke"
+              },
+              "tp": 1,
+              "vram_tier_gib": 16
+            },
+            {
+              "artifact_bytes": 13838508544,
+              "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+              "compute_capability": "8.9",
+              "concurrency": 8,
+              "draft_tp": 1,
+              "gpu_name": "NVIDIA GeForce RTX 4090",
+              "id": "rtx4090-muse-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
+              "identity": {
+                "model_id": "muse-glimmer-30b",
+                "weights_id": "smol-q2g64-mix-dflash-q4"
+              },
+              "max_context": 131072,
+              "min_memory_mib_per_gpu": 24564,
+              "name": "Muse 30B 2-bit mix \u00b7 9d4ca1b2 \u00b7 128K context \u00b7 8 requests \u00b7 calculated",
+              "options": {
+                "draft_policy": "fixed",
+                "draft_tokens": 7,
+                "draft_tp": 1,
+                "expert_lfu": true,
+                "flash_host_ram_headroom_gib": null,
+                "host_kv_cache_bytes": null,
+                "kv_arena_bytes": 8717860864,
+                "kv_arena_headroom_bytes": 314572800,
+                "kv_dtype": "int8",
+                "no_cuda_graph": false,
+                "prefill_chunk": 0,
+                "progressive_ready": false,
+                "spec": "dflash",
+                "structured_outputs": false,
+                "vision": false,
+                "vram_budget_bytes": null
+              },
+              "platform": "linux",
+              "qualification": {
+                "calculation": {
+                  "available_kv_bytes_per_rank": 8717860864,
+                  "required_kv_bytes_per_rank": 8643358720
+                },
+                "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+                "evidence": "bench/reports/consumer-launch-profiles-20261018/ada4090/muse-combined-capacity/evidence-summary.json: clean eb777 SM89, Text/INT8/fixedDFlash7/graphs+prefix; witnessed automatic arena8717860864 bytes at131072/C8 with314572800-byte reserve. Calculated complete fresh/reclaimed cohort with one checkpoint/lane needs8643358720 bytes, slack74502144; admission-managed concurrency. Four short C8 waves,32x500 arrays exact, minimum sampled GPU free706740224 bytes, native/health0; expected noncanonical validator3 is diagnostic. Arch signed2026-10-18T12:55:38Z. Canonical8181 standard passed52x500 exact across C1/C4/C8, native/runner/lifecycle/health0; see muse-combined-standard/evidence-summary.json. Signed explicit-arena/context natural C1/C4 passed603.595/604.726seconds,498 HTTP200/native ID joins and494 exact per-seed comparisons including87 cross-phase comparisons; all stop_token, native/driver/lifecycle/health0, sampled VmSwap0/no swap growth. See muse-combined-natural/evidence-summary.json. Returned13:21Z. Calculation authority docs/consumer-launch-profiles/muse-sizing.md; zero full-context requests and no arbitrary retained-prefix or simultaneous maximum-length execution claim.",
+                "free_bytes_per_gpu": 706740224,
+                "full_context_requests": 0,
+                "smoke_requests": 8,
+                "tier": "calculated-startup-smoke"
+              },
+              "tp": 1,
+              "vram_tier_gib": 24
+            },
+            {
+              "artifact_bytes": 13838508544,
+              "artifact_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+              "compute_capability": "12.0",
+              "concurrency": 8,
+              "draft_tp": 1,
+              "gpu_name": "NVIDIA GeForce RTX 5090",
+              "id": "rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
+              "identity": {
+                "model_id": "muse-glimmer-30b",
+                "weights_id": "smol-q2g64-mix-dflash-q4"
+              },
+              "max_context": 131072,
+              "min_memory_mib_per_gpu": 32606,
+              "name": "Muse 30B 2-bit mix 9d4ca1b2 \u00b7 128K context \u00b7 8 requests \u00b7 INT8 KV \u00b7 calculated startup + smoke",
+              "options": {
+                "draft_policy": "fixed",
+                "draft_tokens": 7,
+                "draft_tp": 1,
+                "expert_lfu": true,
+                "flash_host_ram_headroom_gib": null,
+                "host_kv_cache_bytes": null,
+                "kv_arena_bytes": 15189450752,
+                "kv_arena_headroom_bytes": 314572800,
+                "kv_dtype": "int8",
+                "no_cuda_graph": false,
+                "prefill_chunk": 1024,
+                "progressive_ready": false,
+                "spec": "dflash",
+                "structured_outputs": false,
+                "vision": false,
+                "vram_budget_bytes": null
+              },
+              "platform": "linux",
+              "qualification": {
+                "calculation": {
+                  "available_kv_bytes_per_rank": 15189450752,
+                  "required_kv_bytes_per_rank": 8336650240
+                },
+                "engine_revision": "eb777ab9570fad1c8301635617f0923f2b820424",
+                "evidence": "bench/reports/consumer-launch-profiles-20261018/rtx5090/muse-capacity-eb777ab95/evidence-summary.json; bench/reports/consumer-launch-profiles-20261018/rtx5090/muse-standard/evidence-summary.json; bench/reports/consumer-launch-profiles-20261018/rtx5090/muse-natural/evidence-summary.json; docs/consumer-launch-profiles/muse-sizing.md; docs/consumer-launch-profiles/rtx5090.md. Arch signed131072/C8 and explicit15189450752-byte arena at13:35:49Z in d74697764, TP1/DTP1,fixedDF7,INT8,prefill1024,graphs/prefixON,Text,300MiB reserve. Complete fresh/reclaimed C8 reservation8336650240 bytes includes one terminal prefix checkpoint per lane; measured final/safe arena15189450752 bytes,3266 fresh descriptors>=152 required. Capacity native0/health0,controller3 expected noncanonical-context diagnostic;32 short arrays/16000 IDs exact. Canonical8181 C1/C4/C8:52 arrays/26000 IDs and52 speculative dictionaries exact against accepted C6 b827deb8d and across concurrency;all exits0,72/72 GPU samples,min617611264 free bytes. Unchanged natural600sC1 then600sC4 passed COMPLETE/MATCH:229/428 requests over601.735/600.674 seconds,657 HTTP200,309284 generated IDs and653 exact seeded comparisons including shared C1/C4 seed;all exits0,VmSwap0. Natural1200 live-loop GPU samples,errorfree,maxgap1.054s,min328204288 free bytes; this lower full-coverage minimum is saved here. Capacity GPU minimum399507456 had12/56 coverage and is not the qualification minimum. Host natural numeric availability is endpoints only;4GiB floor guard passed. Zero full-context requests; no arbitrary retained/pinned prefix-cohort or simultaneous full-length execution claim. Directional standard baseline only.",
+                "free_bytes_per_gpu": 328204288,
+                "full_context_requests": 0,
+                "smoke_requests": 8,
+                "tier": "calculated-startup-smoke"
+              },
+              "tp": 1,
+              "vram_tier_gib": 32
+            }
+          ],
+          "min_vram_mib_per_gpu": 16384,
+          "name": "Muse Glimmer 30B 2-bit mix 9d4ca1b2",
+          "qualified_sm": [
+            "8.6",
+            "8.9",
+            "12.0"
+          ],
+          "sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+          "tp": 1,
+          "url": "http://192.168.1.109:18761/muse_glimmer_30b_smol_df2.ginfer"
+        },
+        "status": "installed",
+        "storage_root": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models",
+        "verification": {
+          "fingerprint": {
+            "bytes": 13838508544,
+            "changed": {
+              "nanos": 713500976,
+              "seconds": 1792347511
+            },
+            "identity": {
+              "device": 2096,
+              "inode": 269655,
+              "platform": "linux"
+            },
+            "modified": {
+              "nanos": 956917003,
+              "seconds": 1792347353
+            }
+          },
+          "sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c"
+        }
+      }
+    ],
+    "engine_presets_available": true,
+    "managed_root": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models",
+    "version": 1
+  },
+  "models": [
+    {
+      "artifact_set": false,
+      "id": "170db596-8f56-4347-a8b1-6ad0fcc147ec",
+      "metadata": {
+        "draft_tp": 1,
+        "identity": {
+          "model_id": "muse-glimmer-30b",
+          "weights_id": "smol-q2g64-mix-dflash-q4"
+        },
+        "nvfp4_kv_available": true,
+        "object_count": 1325,
+        "size_bytes": 13838508544,
+        "tp_size": 1
+      },
+      "path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c/model.ginfer"
+    }
+  ],
+  "profile_error": null,
+  "protocol_version": 1,
+  "revision": 381,
+  "observed_utc": "2026-10-18T18:20:08.191069+00:00"
+}

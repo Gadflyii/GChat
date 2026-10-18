@@ -6130,8 +6130,16 @@ profiles already have Engine identity evidence. No Host diagnostic route is
 added. Fixes are limited to GChat selection or catalog defects; Engine failures
 go to Bubbs.
 
-Current state: Ada Qwen passed and returned at 16:07 UTC after normal app API
-and model Stop. Its selected profile is
+Current state: Ada Qwen, Ada Muse and laptop Muse passed; laptop Qwen remains
+pending its ordinary Download and unchanged C1/C4 app check. Laptop and Ada
+returned at 18:48 UTC after the concurrent Muse checks. The remaining Download
+starts after C4's two corrected no-load quotes and the selected raw evidence
+relay. Ada booking 778 returned at 19:06 UTC. C6's not-yet-ready Ada check
+takes the first coordinated quiet boundary when built, before Download if
+ready at the quote terminal or before paired Qwen chats afterward.
+Neither Qwen natural is pre-booked while these prerequisites run.
+Ada Qwen returned at
+16:07 UTC after normal app API and model Stop. Its selected profile is
 `rtx4090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-screened`.
 C1 ran 600.867 seconds/86 waves and C4 ran 608.817 seconds/29 waves. All 202
 requests returned HTTP200, request errors were zero, system swap counters stayed
@@ -6191,13 +6199,26 @@ Laptop C4 measures four app clients queued through the selected C1 Engine.
 The unchanged attach driver started18:25:09 UTC under booking408 and the
 held canonical GPU guard, with an18:55 UTC deadline,600-second C1 then
 600-second C4 phases, uncapped responses and a3GiB system memory floor.
-The first bounded check at 18:29:25 UTC found 30 HTTP200 responses, unchanged
-system swap counters and zero app, Host and Engine VmSwap. This check was
-45 seconds earlier than the planned five-minute boundary; subsequent checks
-are explicitly gated by the recorded prior check time, next at or after
-18:34:30 UTC. Ada's independent signed72153 Muse native natural reached Ready
-at 18:27:09 UTC in 9.032 seconds under booking776, through 18:52 UTC, and runs
-the same 600-second C1/C4 phases concurrently.
+Laptop C1 completed at 18:35:10 UTC after 600.659 seconds/73 waves; C4 completed
+at 18:45:19 UTC after 609.114 seconds/22 waves. All 161 serving requests returned
+HTTP200 with zero request errors. System pswpin 468/pswpout 775 remained
+unchanged, and app, Host and Engine VmSwap were zero at the terminal check.
+The sidebar Stop server control stopped both the API and owned model; at
+18:48:10 UTC the Host instance was stopped with no last error, the Engine had
+exited and port 1337 had no listener. Booking 408 was canceled and the laptop
+returned at 18:48 UTC. Small evidence is retained in the
+[request guard](evidence/consumer-first-use-20261018/laptop/laptop-muse-natural-guard.json),
+[selected settings](evidence/consumer-first-use-20261018/laptop/laptop-muse-installed.json),
+[attach start](evidence/consumer-first-use-20261018/laptop/laptop-muse-attach-start.json)
+and [normal Stop](evidence/consumer-first-use-20261018/laptop/laptop-muse-stopped.json).
+An earlier check was 45 seconds before its planned five-minute boundary;
+explicit comparison with the prior check timestamp prevents recurrence.
+Ada's independent signed 72153 Muse native natural reached Ready
+at 18:27:09 UTC in 9.032 seconds under booking 776 and completed at 18:47:15 UTC.
+Its C1/C4 phases ran 601.726/603.807 seconds, with exact-ID comparisons and all
+native/lifecycle/health exits zero and no swap. Ada returned at 18:48 UTC and
+booking 776 was canceled; its Qwen natural awaits the laptop Qwen Download
+terminal. These native resize checks remain separate from app first-use.
 Before requests, the two laptop natural request files were corrected from target-family
 names to the exact package IDs advertised by the app; the maintained
 28,116-character prompt and uncapped output remain unchanged.
@@ -6248,8 +6269,14 @@ sign remain pending. No bulk Download or relay overlaps speed timing.
 Arch signed the Flash planner correction source `5d46a8664`; its owner is
 building SM86 and will replay only the no-load C8/81920 crash quote plus
 C8/262144 after booking408 returns and the shared native build has ended.
-Those two quotes precede ordinary laptop Qwen Download if the donor is ready;
-no Flash model or timing gate is included in that handoff.
+The corrected SM86 efb41bfe1 serving ELF is ready, 317409464 bytes. Neither
+cross-host SSH direction authenticates, the earlier transient HTTP route is
+retired and the private catalog service accepts only catalog/model paths.
+Native booking 1489 returned at 18:54:25 UTC and was canceled. Its owner
+started the established parent-mediated relay at 18:58 UTC, followed by the
+two no-load laptop quotes. Ordinary laptop Qwen Download waits for their
+terminal; no key or
+installation changes, Flash model load or timing gate belong to this handoff.
 Existing signed catalog entries and the eb777 bundle remain the first-use
 inputs until replacement bounds are signed and coordinated with Gchat 3.
 
@@ -6301,6 +6328,11 @@ those instances may report a null qualification ID. Retain effective options
 and the uniquely matching catalog candidate, labelling its source ID as derived.
 A null qualification ID alone does not establish a selection defect.
 Application Ready, Engine startup duration and API readiness are separate facts.
+The remaining laptop Qwen first-use candidate in this frozen catalog is
+`rtx3080ti-laptop-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-52k-int8-screened`,
+53248 context/C8 with automatic KV. Its ordinary Download has not started.
+The separately signed 72153 resize point is 75776/C8; it does not replace the
+frozen first-use input before this check completes.
 
 Owned inventory:
 
@@ -6309,7 +6341,7 @@ Owned inventory:
 | local5090 | `/ai/gchat-worktrees/c5-consumer-first-use-20261018`, branch `test/c5-consumer-first-use-20261018` | Documentation/evidence integration; no local model or build |
 | S1 | `/media/ron/SSD_RAID/ai/tmp-c5-consumer-first-use-20261018` | Accepted app/Host/runtime builds and 4.65 GB AppDir donor; retain through first-use |
 | Ada | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated AppDir/tools/controls, private HOME/run/tmp, managed Qwen and Muse; Qwen and Muse app natural PASS, both models/API stopped; retain small evidence and fixture through integration |
-| laptop | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated app/API settings; ordinary Muse Download complete, Automatic Ready confirmed18:20 UTC; app natural active from18:25 UTC, deadline18:55 UTC; retain for first-use |
+| laptop | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated app/API settings; ordinary Muse Download and Automatic load passed, C1/C4 app natural COMPLETE with 161 HTTP200; model/API stopped and booking 408 canceled at 18:48 UTC; retain for ordinary Qwen first-use |
 | Ada | `/tmp/c5x/xkbcomp` | Owned compiler symlink for private Xvfb; remove with fixture |
 
 Both targets use private mode-700 runtime directories, private HOME/XDG,
