@@ -950,9 +950,12 @@ model run or acceptance rerun was needed.
 
 ## Windows RC refresh — current main and Engine, October 18 afternoon
 
-The unsigned Release RC is built, accepted and delivered. Codex4 still owns
-Bubbs's requested native installation, first-user walk and chat on the4090 and
-laptop. Nothing is published; the builder's installed app/profile is excluded.
+The unsigned Release RC is built, accepted and delivered. Bubbs resumed Codex4's
+native installation, first-user walk and chat on the4090 and laptop at22:07Z
+while Arch decides the separate Flash quote diagnostic. `d90e96f17` identifies
+the accepted RC documentation; its compiled package remains GChat250df804a /
+Engine6b85ecf77 below. Nothing is published; the builder's installed app/profile
+is excluded.
 
 | Field | Refreshed RC |
 | --- | --- |
@@ -1003,7 +1006,7 @@ through registered WSL distro `Ubuntu`: the Ada INT donor under
 `\\wsl.localhost\Ubuntu\ai\ginfer-artifacts\qwen38-muse-tp1-tp2-tp4-2026-09-02-r1\qwen38_27b_int_df2.ginfer`
 and the laptop mix under
 `\\wsl.localhost\Ubuntu\home\ron\tmp-c5-laptop-natural-c4-soak-rerun-20261018\pkg\qwen38_27b_smol_df2.ginfer`.
-Native Temp parents have ample space; no installer staging or launch has run.
+Native Temp parents have ample space; the later Ada staging/installer attempt is recorded below.
 C5's ordinary laptop Qwen Download completed20:05Z. After artifact setup
 recovery, Automatic Load was rejected before Ready; no laptop natural or
 Engine run completed. The signed Ada Qwen natural passed. Both targets
@@ -1026,11 +1029,29 @@ witness rejected before Ready21:23:18Z (native1, no requests/swap); C5 retained
 its full packet in `febe380cc`. Ada was not launched. Arch21:32Z holds both
 targets until the corrected bound. GInfer diagnostic25a62767c exposes the final
 Host requirement/capacity after probe retirement without changing budgets;
-its retained SM86 build is active, with diagnostic proof direction pending.
-Physical equality and final Arch sign remain pending. No RC target installer, desktop or model
-has launched. Both native walk commands remain prepared under the retained
-Job guards; install/walk/chat follow correction acceptance and the current
-target handoff. Gchat3's separate packaged-resource copies returned21:08:55Z;
+its retained SM86 Release build passed21:49:08Z and returned21:52Z. The
+matched67584 quote/Ready-only controls are prepared in GInfer `f098846f1`,
+with Arch's diagnostic direction pending. Flash target runs remain held;
+physical equality and final Arch sign remain pending. Bubbs separately resumed
+the Windows RC walks at22:07Z. No RC desktop or model has
+launched. Ada's Gchat3 Qwen returned22:03Z and its private Host stopped; Gchat3
+handed the free Ada boundary to this installed walk. The laptop's native Qwen
+standard425 returned22:11Z with its private Host stopped, opening the shared
+untimed transfer boundary. C4's accepted1,484,393,816-byte installer transfer returned22:14:14Z with
+matching SHA256. Ada booking791 covers22:14–22:44Z; the durable build→GPU
+flock parent launched the inherited native Job at22:16Z. The bound ordinary
+NSIS PID5824 opened its genuine Welcome page. Its Next/Cancel Win32 Button
+controls appear as UIA Pane with no supported patterns, so no installer action,
+installation, desktop or model launch has occurred. The bound tree and pattern
+receipts are `ada-native-walk/installer-uia-{01,patterns}.json`. C4 reported
+this blocker to Bubbs and Gchat3 at22:17Z and retains Job/guard custody pending
+supported GUI continuation or normal retirement direction. No coordinate,
+SendKeys, CDP or guessed-control fallback is authorized. The requested installed
+first-user walk, Ada Automatic INT chat and normal Stop remain incomplete. Gchat3 relays Arch22:11Z's newer
+laptop Qwen/Muse hold for corrected Engine plus e001 Host. C4 asked Arch to
+resolve its scope against Bubbs's resumed pinned-RC hand-picked laptop chat;
+no laptop action is taken pending that decision. This
+Windows authorization does not release either card for Flash experiments. Gchat3's separate packaged-resource copies returned21:08:55Z;
 those are qualification copies, not an RC installation. Recheck each actual
 shared boundary before staging or launch; no earlier return grants a future hold.
 C7's local-model acceptance can share the
@@ -1052,7 +1073,7 @@ and the retained candidate-bound UIAutomation recipe govern execution.
 | C4 local WSL | `/ai/gchat/out/c4-windows-rc-refresh-20261018` | Small command, result and target metadata receipts; no binaries |
 | C4 local WSL | `/ai/ginfer-worktrees/c4-windows-rc-engine-20261018` | Read-only pinned Engine donor |
 | C4 local Windows | `E:\gchat4-windows-rc-250df804a-20261018` | Accepted images/packages; retain through both target walks, then retire disposable builds. Gchat3's read-copy returned19:05Z |
-| C4 target Windows | not yet allocated | Authorized installation/walk; staged package copies will be retired afterward |
+| C4 Ada Windows | `C:\Users\Ron\AppData\Local\Temp\gchat4-windows-rc-250df804a-20261018` | Accepted NSIS and small Job/UIA receipts; installer Welcome active under791, no installed desktop/model yet. Retire staged package after walk |
 
 ## Windows RC refresh — release installer delivered, October 18 morning
 
