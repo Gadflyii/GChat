@@ -45,6 +45,15 @@ unchanged. Pending attachment-send completion after switching or unmounting is
 covered by rendered regressions; the native pass starts no model or inference.
 Receipts: `/ai/gchat/out/gchat-chat-skill-draft-20261018/`.
 
+Reopening a composer also waits for its selected draft skill to resolve from
+the skill catalog. While that catalog is loading, Send shows a busy state and
+Enter retains the draft. Once the catalog arrives, submission uses the restored
+skill rather than the conversation's previous active skill. Ordinary Chat
+without a draft skill and `/compact` remain available while the catalog loads.
+Deferred-catalog rendered regressions cover both submission controls and a
+different previously active skill. Follow-up receipts:
+`/ai/gchat/out/gchat-chat-skill-draft-loading-20261018/`.
+
 ## Finding a newly saved agent — October 18
 
 A private Linux native pass saved `Zebraweeklyplanner` in a long Agent Studio
