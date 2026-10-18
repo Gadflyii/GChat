@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import type { Approval } from '@/services/gbot'
 
@@ -54,15 +53,20 @@ export default function GbotTaskApproval({
 }) {
   const [pending, setPending] = useState<boolean>()
   const submitting = useRef(false)
+  const [error, setError] = useState<{ allow: boolean; message: string }>()
   const { summary, target } = describeAction(approval.request.operation)
   const decide = async (allow: boolean) => {
     if (busy || submitting.current) return
     submitting.current = true
     setPending(allow)
+    setError(undefined)
     try {
       await reply(allow)
     } catch (cause) {
-      toast.error(String(cause))
+      setError({
+        allow,
+        message: cause instanceof Error ? cause.message : String(cause),
+      })
     } finally {
       submitting.current = false
       setPending(undefined)
@@ -91,6 +95,19 @@ export default function GbotTaskApproval({
         <p role="status" className="text-sm text-muted-foreground">
           {pending ? 'Allowing this action…' : 'Denying this action…'}
         </p>
+      )}
+      {error && (
+        <div role="alert" className="space-y-1 text-sm">
+          <p>
+            {error.allow
+              ? 'Could not allow this action. Try again.'
+              : 'Could not deny this action. Try again.'}
+          </p>
+          <details className="text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="break-words">{error.message}</p>
+          </details>
+        </div>
       )}
       <div className="flex gap-2">
         <Button
