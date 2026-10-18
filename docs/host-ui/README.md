@@ -27,6 +27,68 @@ original XML, in Gchat 2 custody. Windows: not built (dev phase).
 
 Result: `out/gchat2-human-help-inline-errors-20261018/result.json`, with
 `SUMMARY.md` beside it. Branch `fix/gchat2-human-help-inline-errors-20261018`.
+## Interface reset restores the theme — C3, October 18
+
+`GUI-INTERFACE-RESET-KEEPS-THEME`: Settings → Interface promised to reset all
+interface settings, but its reset only restored font size and the accent preset.
+The independently persisted Light/System theme stayed selected. The candidate
+restores the existing Dark default through the shared theme service before
+resetting the font to Medium. It waits for completion, disables another reset
+while pending and shows failure feedback if the theme service rejects. The
+description names the defaults that Reset restores.
+
+Outcome and acceptance: ordinary Reset from Light with a larger text size
+restores Dark/Medium, reports success after completion, and preserves the
+chosen settings on a rejected theme operation. Existing hook and rendered-route
+tests cover those behaviors. The changed-source Linux native acceptance is
+**PASS** and the row is **MERGE READY**.
+
+Owner Codex 3; worktree
+`/ai/gchat-worktrees/c3-interface-reset-theme-20261018`, branch
+`fix/c3-interface-reset-theme-20261018`, original base `d0a8d06bf`, source
+`18c405b1d`. Current main `072655126` was merged normally before gates.
+Main still lacked the known first-run disk-full test synchronization correction:
+the alert can commit before the folder hydration effect. This branch includes
+only the same one-line `waitFor` before Retry, preserving all assertions; the
+unrelated folder-reveal runtime fix is excluded.
+
+Source `5c53a6cc2` is pushed. Focused Interface hook/route/theme and first-run
+suites passed 60 cases; lint passed with zero errors and five existing warnings.
+The first and only `make verify` stopped at TS2367: the new default constant
+narrowed `initialState.activeTheme` to Dark. The original failure is retained.
+The approved correction annotates `initialState: ThemeState`, preserving Auto.
+Affected theme9/typecheck and every original unrun guard/coverage/native stage
+passed: 3,367 app/core tests (six skipped), 121 extension tests, six floors,
+1,228 native tests (28 ignored). Passed stages were reused; no second full
+verify ran. Vite and default desktop/custom-protocol debug build passed.
+
+The parent launched the checked candidate at 05:14:21Z with the private
+`current-main-home`, preserving Light/Extra Large. Actual Settings → Interface
+showed those values. An ordinary Reset click changed them to Dark/Medium; the
+retained post-action DOM has the root `dark` class, `--font-size-base: 16px`,
+visible Dark/Medium controls and no horizontal overflow at 1500×1000.
+The parent reviewed all three screenshots: Light/Extra Large before Reset at
+1500×1000, then Dark/Medium at 1500×1000 and 1024×800. Wording and controls are
+readable without overflow. Evidence:
+`out/c3-interface-reset-theme-20261018/{native-after-reset-wide.json,native-before-light-xl-wide.png,native-after-dark-medium-wide.png,native-after-dark-medium-narrow.png}`.
+Packet:
+`out/c3-interface-reset-theme-20261018/{result.json,summary.md}`. Immutable
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018/interface-candidate/bin/gchat`
+is 255,482,456 bytes, SHA256
+`81e922c84d7912bbb239ac3c7f11ba30790f5fbf564eeace2ef7adaea4463eaa`.
+Its private pre-install and runnable-resource link were checked at 05:13:59Z.
+Both terminal containers and disposable local/remote source archives are
+removed; booking3010 returned. Candidate, concise logs and existing shared
+source/dependency/target caches remain for parent integration and serial CLI
+gates. Native app PID3080914 stopped at 05:15:22Z and its private session ended;
+no Host launched. The parent's Xvfb:79 remains retained under booking3001 through
+05:32Z. Launch and stop receipts are `native-launch.json` and
+`native-terminal.json` in the same packet; only the completed build booking3010
+is claimed returned here.
+Installed current-main AppDir/home, folder/badge candidates and runnable
+resources were preserved. This debug build does not refresh installer qualification.
+No dependencies, model/profile, GPU or native settings service change. Next:
+merge integration; no further test or build is needed.
 
 ## Gbot Hand back and task resume guidance — October 18
 

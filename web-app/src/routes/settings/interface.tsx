@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { route } from '@/constants/routes'
 import SettingsMenu from '@/containers/SettingsMenu'
@@ -19,6 +20,7 @@ export const Route = createFileRoute(route.settings.interface as any)({
 function InterfaceSettings() {
   const { t } = useTranslation()
   const { resetInterface } = useInterfaceSettings()
+  const [isResetting, setIsResetting] = useState(false)
 
   return (
     <div className="flex flex-col h-svh w-full">
@@ -62,17 +64,27 @@ function InterfaceSettings() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      resetInterface()
-                      toast.success(
-                        t('settings:interface.resetInterfaceSuccess'),
-                        {
-                          id: 'reset-interface',
-                          description: t(
-                            'settings:interface.resetInterfaceSuccessDesc'
-                          ),
-                        }
-                      )
+                    disabled={isResetting}
+                    onClick={async () => {
+                      setIsResetting(true)
+                      try {
+                        await resetInterface()
+                        toast.success(
+                          t('settings:interface.resetInterfaceSuccess'),
+                          {
+                            id: 'reset-interface',
+                            description: t(
+                              'settings:interface.resetInterfaceSuccessDesc'
+                            ),
+                          }
+                        )
+                      } catch {
+                        toast.error(
+                          t('settings:interface.resetInterfaceError')
+                        )
+                      } finally {
+                        setIsResetting(false)
+                      }
                     }}
                   >
                     {t('common:reset')}
