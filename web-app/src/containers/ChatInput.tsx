@@ -278,8 +278,26 @@ const ChatInput = memo(function ChatInput({
     setAgentSkillTokenWidth(agentSkillTokenRef.current?.offsetWidth ?? 0)
   }, [selectedAgentSkill])
 
+  const preselectedAgentDefinitionAppliedRef = useRef<string | null>(null)
   useEffect(() => {
-    setSelectedAgentDefinitionId(preselectedAgentDefinitionId ?? activeDefinition ?? 'general')
+    const preselectionKey = preselectedAgentDefinitionId
+      ? JSON.stringify([conversationKey, preselectedAgentDefinitionId])
+      : null
+    // A route suggestion seeds the choice once; later user choices own the draft.
+    if (
+      preselectedAgentDefinitionId &&
+      preselectionKey !== preselectedAgentDefinitionAppliedRef.current
+    ) {
+      preselectedAgentDefinitionAppliedRef.current = preselectionKey
+      setSelectedAgentDefinitionId(preselectedAgentDefinitionId)
+      useConversationPolicy.getState().setActiveDefinition(
+        conversationKey,
+        preselectedAgentDefinitionId
+      )
+      return
+    }
+    if (!preselectionKey) preselectedAgentDefinitionAppliedRef.current = null
+    setSelectedAgentDefinitionId(activeDefinition ?? 'general')
   }, [conversationKey, preselectedAgentDefinitionId, activeDefinition])
 
   useEffect(() => {
@@ -2749,6 +2767,7 @@ const ChatInput = memo(function ChatInput({
                         value={selectedAgentDefinitionId}
                         onValueChange={(value) => {
                           setSelectedAgentDefinitionId(value)
+                          useConversationPolicy.getState().setActiveDefinition(conversationKey, value)
                           setDraftSkill(conversationKey)
                           useConversationPolicy.getState().setActiveSkill(conversationKey)
                         }}

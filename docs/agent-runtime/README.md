@@ -22,6 +22,16 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Saved-agent choices in Chat drafts — October 18
+
+A private Linux native pass selected a saved agent, typed a task, opened New
+Chat and returned to the saved conversation. The text returned but the agent
+selector reset to Chat. The selected saved agent now updates the existing
+conversation policy when chosen, so navigation restores that choice with the
+text. Choosing Chat clears only that conversation's saved-agent selection.
+Route suggestions seed the choice once, allowing later user changes to stick.
+Baseline: `/ai/gchat/out/gchat-chat-agents-pass-20261018-1700/`.
+
 ## Conversation draft skills — October 18
 
 A private Linux native Chat pass selected `/pdf`, typed a summary request,

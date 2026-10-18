@@ -448,6 +448,75 @@ describe('ChatInput', () => {
     expect(input()).toHaveValue('Reply to conversation B')
   })
 
+  it('restores saved-agent choices with each conversation draft across New Chat and reopening', async () => {
+    const user = userEvent.setup()
+    agentDefinitions.value = ['researcher', 'reviewer'].map((id) => ({
+      id, name: id, kind: 'standard', schemaVersion: 2, skills: [], instructions: '',
+      description: '', outputContract: '', maxSteps: 25, modelInstanceId: null, builtIn: false,
+    }))
+    conversationPolicyState.setActiveDefinition.mockImplementation((threadId: string, definition?: string) => {
+      if (definition && definition !== 'general') conversationPolicyState.activeDefinitions[threadId] = definition
+      else delete conversationPolicyState.activeDefinitions[threadId]
+    })
+    useThreads.setState({ currentThreadId: 'agent-draft-a' })
+    const view = render(<ChatInput />)
+    const choice = () => screen.getByRole('button', { name: 'Invoke saved agent' })
+    const input = () => screen.getByTestId('chat-input')
+    const choose = async (name: string) => {
+      await user.click(choice())
+      await user.click(screen.getByRole('menuitemradio', { name, exact: true }))
+    }
+    await choose('researcher')
+    fireEvent.change(input(), { target: { value: 'Plan three weekly priorities' } })
+    view.rerender(<ChatInput initialMessage />)
+    expect(choice()).toHaveTextContent('Chat')
+    expect(input()).toHaveValue('')
+    view.rerender(<ChatInput />)
+    expect(choice()).toHaveTextContent('researcher')
+    expect(input()).toHaveValue('Plan three weekly priorities')
+
+    act(() => useThreads.setState({ currentThreadId: 'agent-draft-b' }))
+    expect(choice()).toHaveTextContent('Chat')
+    await choose('reviewer')
+    fireEvent.change(input(), { target: { value: 'Review the other plan' } })
+    view.unmount()
+    const reopened = render(<ChatInput />)
+    expect(choice()).toHaveTextContent('reviewer')
+    expect(input()).toHaveValue('Review the other plan')
+    act(() => useThreads.setState({ currentThreadId: 'agent-draft-a' }))
+    expect(choice()).toHaveTextContent('researcher')
+    expect(input()).toHaveValue('Plan three weekly priorities')
+    await choose('Chat')
+    reopened.rerender(<ChatInput initialMessage />)
+    reopened.rerender(<ChatInput />)
+    expect(choice()).toHaveTextContent('Chat')
+    act(() => useThreads.setState({ currentThreadId: 'agent-draft-b' }))
+    expect(choice()).toHaveTextContent('reviewer')
+  })
+
+  it('keeps a changed agent choice when a route preselection is still present', async () => {
+    const user = userEvent.setup()
+    agentDefinitions.value = ['researcher', 'reviewer'].map((id) => ({
+      id, name: id, kind: 'standard', schemaVersion: 2, skills: [], instructions: '',
+      description: '', outputContract: '', maxSteps: 25, modelInstanceId: null, builtIn: false,
+    }))
+    conversationPolicyState.setActiveDefinition.mockImplementation((threadId: string, definition?: string) => {
+      if (definition && definition !== 'general') conversationPolicyState.activeDefinitions[threadId] = definition
+      else delete conversationPolicyState.activeDefinitions[threadId]
+    })
+    const view = render(<ChatInput initialMessage preselectedAgentDefinitionId="researcher" />)
+    const choice = () => screen.getByRole('button', { name: 'Invoke saved agent' })
+    expect(choice()).toHaveTextContent('researcher')
+    await user.click(choice())
+    await user.click(screen.getByRole('menuitemradio', { name: 'reviewer', exact: true }))
+    view.rerender(<ChatInput initialMessage preselectedAgentDefinitionId="researcher" />)
+    expect(choice()).toHaveTextContent('reviewer')
+    await user.click(choice())
+    await user.click(screen.getByRole('menuitemradio', { name: 'Chat', exact: true }))
+    view.rerender(<ChatInput initialMessage preselectedAgentDefinitionId="researcher" />)
+    expect(choice()).toHaveTextContent('Chat')
+  })
+
   it('clears only the submitted conversation draft after a successful send', async () => {
     usePrompt.getState().setPrompt('Unsent home draft')
     useThreads.setState({ currentThreadId: 'sent-conversation' })
