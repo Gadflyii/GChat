@@ -1,5 +1,39 @@
 # GInfer host UI
 
+## MCP required-field guidance — C3, October 18
+
+`GUI-MCP-REQUIRED-FIELDS` passes Linux native acceptance. The merged fix
+`bbd2b1358` (`d47f08051`) rejects blank STDIO commands and HTTP/SSE addresses
+with plain provider-instruction alerts before saving. Native Save keeps the
+named draft open in Dark 1500×1000 and Light 1024×800. All six inspected
+screenshots show readable guidance and controls without horizontal overflow.
+Cancel closes the draft and returns to the empty visible connection list;
+no probe connection is saved. After-dark and final configuration bytes match.
+The sole config entry is the app-generated inactive official Browser tool.
+
+The rejection handler, required-field labels, alert and Save/Cancel controls
+are unchanged between retained native source `ed68c7443` and base `f15627195`.
+Current component/tests exactly match the retained **11 focused PASS** and
+ONE `make verify` PASS: **3,459 app, 127 extension, 1,275 native**, six coverage
+floors. This evidence-only branch reuses those gates and passes
+`git diff --check`. [Source binding](../../out/c3-mcp-required-fields-20261018/source-binding.json)
+and [result](../../out/c3-mcp-required-fields-20261018/result.json) retain the
+comparison, observations and six screenshots.
+
+Native input used XTest; the inspector only read state. Preparation first
+seeded one directory above the app's actual data directory, allowing default
+Exa initialization without tool calls. The app was stopped and corrected
+before accepted capture; that launch initialized zero MCP servers. No valid
+connection, tool process, account, model, GPU or Windows acceptance is claimed.
+
+Owned worktree `/ai/gchat-worktrees/c3-mcp-required-fields-20261018`, branch
+`docs/c3-mcp-required-fields-20261018`. Private S1 app/Host/keyring/D-Bus/Xvfb
+and observer are stopped. Owned SSD root
+`/media/ron/SSD_RAID/ai/tmp-c3-mcp-required-fields-20261018` was removed;
+CPU96–103 booking3202 canceled, returned09:25Z. The inactive RC donor is
+unchanged, without a hold. Only small evidence remains. Next: coordinator
+integration and canonical row closure.
+
 ## Select appearance in Light — Gchat 3, October 18
 ## Collapsed-section spacing recovery — C3, October 18
 
