@@ -3456,6 +3456,17 @@ to include or remove it. Each skill announces whether it is selected, including
 skills assigned to a specialist or workflow stage. Choose **Save definition**
 to keep the assignment. Reopening that definition restores its selected skills.
 
+Linux acceptance (`GUI-AGENT-SKILL-SELECTION-STATE-20261018`): native Space
+toggles `aria-pressed` and keeps focus. Saving, switching definitions and
+reopening restores agent and workflow stage selections independently. Original
+assignments were restored; 17 saved records, 45 skill files and two workspace
+inputs remained byte unchanged. Focused 74 tests, lint and ONE verification gate
+passed after refreshing four stale external catalog fixtures from their merged
+source; the original failure and bounded resume are recorded separately in
+[`out/gchat-agent-skill-assignment-20261018/`](../../out/gchat-agent-skill-assignment-20261018/).
+This covers Linux keyboard and DOM semantics; spoken assistive output and
+Windows were not exercised.
+
 ## Creating and editing skills
 
 After you choose **Create** or **Save**, the button shows **Creating skill…**
