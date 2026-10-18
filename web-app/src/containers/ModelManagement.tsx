@@ -3,6 +3,7 @@ import { confirmAction } from '@/lib/confirm'
 import { IconChevronDown } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import { Link } from '@tanstack/react-router'
+import { joinPath } from '@gchat/core'
 import { route } from '@/constants/routes'
 import HeaderPage from '@/containers/HeaderPage'
 import { Button } from '@/components/ui/button'
@@ -84,6 +85,8 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
   const refreshLocal = useLocalModelDownloads(s => s.refresh)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const registrationPending = useRef(false)
+  const [localRegistration, setLocalRegistration] = useState<'choosing' | 'registering' | null>(null)
   const mounted = useRef(true)
   const loadRef = useRef<PendingLocalLoad | null>(null)
   const [pendingLoad, setPendingLoad] = useState<PendingLocalLoad | null>(null)
@@ -105,7 +108,8 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
     (!selectedGpuUuids.length || selectedGpuUuids.some(id => !gpus.some(g => g.uuid === id))))
   const downloads = local ? localDownloads : snapshot?.model_management?.downloads ?? []
   const managementAvailable = local || snapshot?.model_management?.version === 1
-  const localModels = providers.find(p => p.provider === 'ginfer')?.models ?? []
+  const localProvider = providers.find(p => p.provider === 'ginfer')
+  const localModels = localProvider?.models ?? []
   // A model started from GInfer Hosts is a Host instance, not a desktop-loaded model; match it by its weights file.
   const localHost = hosts.find(h => h.local)
   const localSnapshot = localHost && !hostErrors[localHost.host_id] ? snapshots[localHost.host_id] : undefined
@@ -180,6 +184,32 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
     const report = await engineCommand<{ rejected: { filename: string; reason: string }[] }>('local_model_adopt')
     useModelProvider.getState().setProviders(await service.providers().getProviders())
     if (report.rejected.length) throw new Error(report.rejected.map(r => `${r.filename}: ${r.reason}`).join('\n'))
+  }
+  const addLocalModel = async () => {
+    if (!local || busy || registrationPending.current) return
+    registrationPending.current = true
+    setBusy(true)
+    setLocalRegistration('choosing')
+    try {
+      const path = await service.dialog().open({
+        multiple: false,
+        directory: false,
+        filters: [{ name: 'GInfer model', extensions: ['ginfer'] }],
+      })
+      if (typeof path !== 'string' || !path || !mounted.current) return
+      setLocalRegistration('registering')
+      setError(null)
+      const configuredRoot = String(localProvider?.settings?.find(s => s.key === 'model_path')?.controller_props.value ?? '').trim()
+      const modelsRoot = configuredRoot ? await joinPath([configuredRoot, 'models']) : undefined
+      await engineCommand('local_model_register', { path, ...(modelsRoot === undefined ? {} : { modelsRoot }) })
+      useModelProvider.getState().setProviders(await service.providers().getProviders())
+      await refreshHosts()
+    } catch (e) {
+      if (mounted.current) setError(errorMessage(e))
+    } finally {
+      registrationPending.current = false
+      if (mounted.current) { setLocalRegistration(null); setBusy(false) }
+    }
   }
   const download = (release: ModelRelease) => act(async () => {
     const job = await engineCommand<ModelDownload>(local ? 'local_model_download' : 'download', { host_id: destination, body: release })
@@ -276,7 +306,11 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
             setTab(managementTabs[next])
             ;(event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus()
           }}>{t}</Button>)}
-      </div><Button variant="outline" disabled={busy || (offline && tab !== 'Recommended')} onClick={() => void act(tab === 'Recommended' ? refreshCatalog : rescan)}>{tab === 'Recommended' ? 'Refresh recommendations' : 'Refresh installed models'}</Button></div>
+      </div><div className="flex flex-wrap gap-2">
+        {local && tab === 'Installed' && <Button disabled={busy} onClick={() => void addLocalModel()}>{localRegistration === 'choosing' ? 'Choosing local model…' : localRegistration === 'registering' ? 'Adding local model…' : 'Add local model'}</Button>}
+        <Button variant="outline" disabled={busy || (offline && tab !== 'Recommended')} onClick={() => void act(tab === 'Recommended' ? refreshCatalog : rescan)}>{tab === 'Recommended' ? 'Refresh recommendations' : 'Refresh installed models'}</Button>
+      </div></div>
+      {local && tab === 'Installed' && <p className="text-sm text-muted-foreground">Add an existing .ginfer file. The file stays in its current location.</p>}
       {(error || (offline && hostErrors[destination])) && <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error ?? hostErrors[destination]}{error?.endsWith(NO_SETTINGS) && <> <Link to={route.engines.index} className="underline">Open GInfer Hosts</Link></>}{offline ? ' · Saved inventory may be out of date.' : ''}</p>}
       {local && !localLoadReady && (resources.error
         ? <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">Local model runtime is unavailable: {resources.error}</p>
@@ -303,7 +337,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
           {invalidGpuSelection && <p role="alert">{hardwareReady ? 'Choose available GPUs. A saved GPU may no longer be connected.' : 'Waiting for fresh GPU information.'}</p>}
         </fieldset>}
         {local ? <>{!filteredModels.length && <div className="rounded-xl border p-8 text-center"><p>No installed models found.</p><Button className="mt-3" onClick={() => setTab('Recommended')}>Find a recommended model</Button></div>}
-          {filteredModels.map(m => <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{plainModelName(m.displayName ?? m.id)}</h2><p className="text-sm text-muted-foreground">{activeModels.includes(m.id) || hostInstanceOf(m.path) ? 'Running' : 'Installed'} · {m.capabilities?.filter(c => !/dflash|mtp/i.test(c)).join(' · ') || 'GInfer model'}. Load uses the saved hardware profile for the selected graphics cards. For custom settings, open GInfer Hosts.</p></div><div className="flex gap-2"><Button disabled={busy || !localLoadReady || invalidGpuSelection || activeModels.includes(m.id) || !!hostInstanceOf(m.path)} onClick={() => void loadLocal(m.id)}>Load model</Button><Button variant="outline" disabled={busy || !(activeModels.includes(m.id) || hostInstanceOf(m.path))} onClick={() => void (activeModels.includes(m.id) ? stopLocal(m.id) : stopHostInstance(hostInstanceOf(m.path)!))}>Stop</Button><DeleteModelAction modelId={m.id} label={m.displayName ?? m.name} provider="ginfer" /></div></section>)}</>
+          {filteredModels.map(m => <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{plainModelName(m.displayName ?? m.id)}</h2><p className="text-sm text-muted-foreground">{activeModels.includes(m.id) || hostInstanceOf(m.path) ? 'Running' : 'Installed'} · {m.capabilities?.filter(c => !/dflash|mtp/i.test(c)).join(' · ') || 'GInfer model'}. Load uses the saved hardware profile for the selected graphics cards. For custom settings, open GInfer Hosts.</p></div><div className="flex gap-2"><Button disabled={busy || !localLoadReady || invalidGpuSelection || activeModels.includes(m.id) || !!hostInstanceOf(m.path)} onClick={() => void loadLocal(m.id)}>Load model</Button><Button variant="outline" disabled={busy || !(activeModels.includes(m.id) || hostInstanceOf(m.path))} onClick={() => void (activeModels.includes(m.id) ? stopLocal(m.id) : stopHostInstance(hostInstanceOf(m.path)!))}>Stop</Button><DeleteModelAction modelId={m.id} label={m.displayName ?? m.name} provider="ginfer" externalReference={m.source === 'external'} /></div></section>)}</>
           : host ? <HostCard key={host.host_id} host={host} snapshot={snapshot} error={hostErrors[destination]} /> : <p>Select a paired host in GInfer Hosts.</p>}
         {!local && snapshot?.model_management && <details><summary className="cursor-pointer text-sm">Managed storage and removal</summary><p className="my-2 text-sm text-muted-foreground">External model roots are read-only. Stop instances before removing a managed package.</p>{snapshot.models.filter(m => downloads.some(j => j.status === 'installed' && j.path === m.path)).map(m => <div key={m.id} className="flex items-center justify-between gap-3 border-b py-2"><span>{m.metadata.identity.model_id} · {formatModelBytes(m.metadata.size_bytes)}</span><Button variant="outline" disabled={busy || offline} onClick={async () => { if (await confirmAction({ title: 'Remove this package?', message: `Remove ${hostModelLabel(m)} from ${host?.name}? The package will need downloading again.`, confirmLabel: 'Remove package', destructive: true })) void act(() => engineCommand('remove_model', { host_id: destination, body: { model_id: m.id } })) }}>Remove package</Button></div>)}</details>}
       </>}

@@ -12,6 +12,20 @@ do not imply compute capability; memory is never summed to estimate a single-GPU
 fit. TP peer connectivity and package binding remain final engine startup checks.
 There is no downloadable Smol entry until that package is published and qualified.
 
+## Add an existing local model
+
+In **Models > This computer > Installed**, choose **Add local model** and
+select an existing `.ginfer` file. This works independently of the Recommended
+catalog. GChat validates the container through the local Host and records its
+exact path; the file stays in its original location. Keep it available there
+when loading the model. Registration does not start inference.
+
+An app-owned catalog manifest makes the file visible in Installed after restart.
+Adding the same file again reuses its entry. Removing this external reference
+from Installed leaves the source file intact; it may still appear in the Host's
+read-only inventory. This action is local to this computer. Add files for a
+paired host on that host.
+
 ## Release feed
 
 Models are published under [SectileLabs on Hugging Face](https://huggingface.co/SectileLabs).

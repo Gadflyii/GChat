@@ -32,6 +32,11 @@ const SOURCE_META: Record<
     className:
       'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200',
   },
+  external: {
+    label: 'Local file',
+    className:
+      'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200',
+  },
 }
 
 // Pill labeling where an imported model's weights live; nothing for app-managed ones.
@@ -69,7 +74,7 @@ export function MissingModelBadge({
   source?: Model['source']
   className?: string
 }) {
-  const origin = source ? SOURCE_META[source]?.label : undefined
+  const origin = source && source !== 'external' ? SOURCE_META[source]?.label : undefined
 
   const title = origin
     ? `The file for this model was removed in ${origin}. Re-add it there, or delete this entry.`

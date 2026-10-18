@@ -98,6 +98,17 @@ describe('DeleteModelAction', () => {
     expect(screen.queryByText(new RegExp(hash))).not.toBeInTheDocument()
   })
 
+  it('explains that removing an external model leaves the original file in place', async () => {
+    render(<DeleteModelAction modelId="external-model" label="My model" provider="ginfer" externalReference />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Remove from Models' }))
+    expect(screen.getByText('Remove My model from Models?')).toBeInTheDocument()
+    expect(screen.getByText('The original model file will remain in place. Only its Models entry will be removed.')).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: 'Remove from Models' }).at(-1)!)
+    await waitFor(() => expect(deleteModel).toHaveBeenCalledWith('external-model', 'ginfer'))
+    expect(toastSuccess).toHaveBeenCalledWith('Model removed', expect.objectContaining({ description: 'Removed from Models. The original file remains in place.' }))
+  })
+
   it('drops the model from the provider list and from favorites', async () => {
     const onDeleted = vi.fn()
     render(

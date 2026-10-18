@@ -1,5 +1,51 @@
 # GChat remediation and code hygiene
 
+## Local model registration from Models (C7, October 18)
+
+Repository `/ai/gchat`, branch `fix/c7-models-local-import-20261018`,
+worktree `/ai/gchat-worktrees/c7-models-local-import-20261018`, baseline
+`2d6f423be`. Models > This computer > Installed now exposes **Add local
+model** for an existing `.ginfer` file, including when inventory is empty or
+the release catalog is unavailable. Host validates and canonicalizes the exact
+external path, then GChat writes an app-owned catalog manifest without copying
+model bytes. Duplicate registration preserves identity and display name;
+removal deletes only the catalog reference. Welcome wording names the file
+action. Cancellation, pending submission and errors remain visible and retryable.
+No folder scan, remote import or package copy is included. Arch signed this
+design; frontend/backend work ran in parallel with separate file ownership.
+
+Acceptance passed: empty/offline inventory, successful refresh, cancellation,
+error/retry, duplicate submission suppression, canonical deduplication, restart
+persistence, invalid artifact rejection and external-byte preservation during
+removal. All 63 affected frontend cases and eight registration tests pass, with
+`cargo check` and Clippy. Full verification passes by composition: 3,194 frontend
+tests (six skipped), 120 extension tests and 1,205 Rust tests (27 ignored), plus
+lint, type checking, quality/contract/asset checks and coverage floors. Five
+existing lint warnings remain. The gate caught the new source missing from the
+badge's exhaustive map and an obsolete welcome expectation; both were fixed.
+Dependency preparation reused an unchanged, source-matched plugin API output.
+The Host catalog fixture requires original catalog filenames, so its failed
+stage and remaining Rust suites were resumed with the original named Linux
+inputs, retaining already-passed stages.
+
+Arch's additional real-package condition passed on S1 with private HOME/XDG
+and app data: register the external Muse package, retain its ID on repeated
+registration, reach Ready through Host and serve one request (eight completion
+tokens). This is an integration check, not a model-quality or performance claim.
+The retained Linux SM120a runtime was `e2282c336`; an earlier incompatible
+`5af502f1` attempt stopped before model load on unsupported profiling arguments.
+The final instance stopped and Host exited cleanly at 00:46:53Z; GPU0 was returned
+and its booking cancelled. Windows WebView/file-picker behavior was not exercised.
+Ron’s Windows install and shared app data were untouched.
+
+Concise evidence is retained at
+`/ai/gchat/out/c7-models-local-import-20261018/result.json` and `summary.md`.
+Owned disk: retain this source worktree for review. The private S1 SSD root
+`/media/ron/SSD_RAID/ai/tmp-c7-models-local-import-20261018`, copied dependencies,
+build outputs, private Host state and exited test containers are removed after
+verification; donor caches, reused runtime and source package remain untouched.
+The next step is the authorized merge; no further run is required.
+
 ## Model deletion result and retry (C4, October 17)
 
 Repository `/ai/gchat`, branch `fix/c4-model-delete-result-20261017`,

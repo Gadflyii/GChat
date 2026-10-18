@@ -384,6 +384,9 @@ fn deletion_location(
     let model: serde_yaml::Value =
         serde_yaml::from_slice(&fs::read(&manifest).map_err(|error| error.to_string())?)
             .map_err(|error| error.to_string())?;
+    if model["source"].as_str() == Some("external") {
+        return Ok(Some((directory, None)));
+    }
     let payload = model["model_path"].as_str().map(|path| {
         let path = PathBuf::from(path);
         if path.is_absolute() {
@@ -554,6 +557,66 @@ fn write_manifest(path: &Path, manifest: &GinferModelManifest<'_>) -> Result<(),
     result
 }
 
+pub(crate) fn register_local_model_in(
+    data: &Path,
+    entry: &ginfer_host::service::ModelEntry,
+    models_root: Option<&Path>,
+) -> Result<AdoptedGinferModel, String> {
+    // Host admission precedes this publication. Serialize duplicate desktop requests
+    // so one canonical payload receives only one app catalog reference.
+    static REGISTRATION: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _registration = REGISTRATION.lock().map_err(|error| error.to_string())?;
+    let payload = fs::canonicalize(&entry.path).map_err(|error| error.to_string())?;
+    let model_path = path_string(&payload)?;
+    let roots = catalog_roots(
+        data,
+        ginfer_host::model_storage::resolve_artifact_root(&data.join("ginfer/models")).ok(),
+        models_root,
+    )?;
+    for location in deduplicate_locations(locations_at_roots(&roots)?) {
+        let bytes = fs::read(&location.manifest_path).map_err(|error| error.to_string())?;
+        let Ok(manifest) = serde_yaml::from_slice::<serde_yaml::Value>(&bytes) else {
+            continue;
+        };
+        let Some(path) = manifest["model_path"].as_str() else {
+            continue;
+        };
+        let path = data.join(path);
+        if fs::canonicalize(path).is_ok_and(|path| path == payload) {
+            return Ok(AdoptedGinferModel {
+                model_id: location.model_id,
+                model_path,
+            });
+        }
+    }
+
+    let model_id = entry.id.to_string();
+    let location = model_import_location_in(data, &model_id)?;
+    let model_dir = Path::new(&location.model_dir);
+    let name = payload
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or(&entry.metadata.identity.model_id);
+    let manifest = GinferModelManifest {
+        model_path: &model_path,
+        name,
+        size_bytes: entry.metadata.size_bytes,
+        embedding: false,
+        source: "external",
+    };
+    fs::create_dir_all(model_dir.parent().ok_or("Model catalog root is missing")?)
+        .map_err(|error| error.to_string())?;
+    fs::create_dir(model_dir).map_err(|error| error.to_string())?;
+    if let Err(error) = write_manifest(Path::new(&location.manifest_path), &manifest) {
+        let _ = fs::remove_dir(model_dir);
+        return Err(error);
+    }
+    Ok(AdoptedGinferModel {
+        model_id,
+        model_path,
+    })
+}
+
 fn adopt_one(models_root: &Path, source: &Path) -> Result<AdoptedGinferModel, String> {
     let size_bytes = validate_ginfer_v3(source)?;
     let preferred_id = source
@@ -638,6 +701,213 @@ pub fn adopt_root_ginfer_models<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn write_inventory_artifact(path: &Path) -> Vec<u8> {
+        let metadata = serde_json::json!({
+            "identity": {"model_id": "muse-glimmer-30b", "weights_id": "nvfp4"},
+            "tp_size": 1,
+            "draft_tp": 0,
+            "objects": [{"kind": "tensor", "rank": "all", "name": "fixture"}]
+        })
+        .to_string();
+        let mut bytes = GINFER_V3_MAGIC.to_vec();
+        bytes.extend((metadata.len() as u64).to_le_bytes());
+        bytes.extend(metadata.as_bytes());
+        bytes.resize(4096, 0);
+        fs::write(path, &bytes).unwrap();
+        bytes
+    }
+
+    async fn open_registration_host(data: &Path) -> std::sync::Arc<ginfer_host::service::Host> {
+        ginfer_host::service::Host::open(
+            data.join("ginfer/host"),
+            "Local registration test".into(),
+            data.join("missing-engine"),
+            vec![],
+            vec![],
+            vec![],
+        )
+        .await
+        .unwrap()
+    }
+
+    async fn register_at_host(
+        host: &std::sync::Arc<ginfer_host::service::Host>,
+        path: &Path,
+    ) -> Result<ginfer_host::service::ModelEntry, String> {
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let request = hyper::Request::post("/host/v1/local-artifacts")
+            .header("authorization", format!("Bearer {token}"))
+            .body(hyper::Body::from(
+                serde_json::json!({"path": path}).to_string(),
+            ))
+            .unwrap();
+        let response = host.clone().route(request).await.unwrap();
+        let status = response.status();
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        if !status.is_success() {
+            return Err(String::from_utf8(body.to_vec()).unwrap());
+        }
+        serde_json::from_slice(&body).map_err(|error| error.to_string())
+    }
+
+    #[tokio::test]
+    async fn registers_external_artifact_once_and_restores_catalog_after_reopen() {
+        let directory = tempfile::tempdir().unwrap();
+        let base = fs::canonicalize(directory.path()).unwrap();
+        let data = base.join("data");
+        let configured_root = base.join("custom-provider/models");
+        let payload = base.join("My model.ginfer");
+        let bytes = write_inventory_artifact(&payload);
+        let host = open_registration_host(&data).await;
+        assert!(enumerate_model_locations_in(&data).unwrap().is_empty());
+        let entry = register_at_host(&host, &payload).await.unwrap();
+        let registered = register_local_model_in(&data, &entry, Some(&configured_root)).unwrap();
+        assert_eq!(registered.model_id, entry.id.to_string());
+        assert_eq!(Path::new(&registered.model_path), payload);
+        let catalog = enumerate_model_locations_in(&data).unwrap();
+        assert_eq!(catalog.len(), 1);
+        assert_eq!(catalog[0].model_id, registered.model_id);
+        assert!(Path::new(&catalog[0].model_dir).starts_with(data.join("ginfer/models")));
+        assert!(!configured_root.exists());
+        assert!(!Path::new(&catalog[0].model_dir)
+            .join("model.ginfer")
+            .exists());
+        let manifest_bytes = fs::read(&catalog[0].manifest_path).unwrap();
+        let manifest: serde_yaml::Value = serde_yaml::from_slice(&manifest_bytes).unwrap();
+        assert_eq!(manifest["model_path"].as_str(), payload.to_str());
+        assert_eq!(manifest["name"].as_str(), Some("My model"));
+        assert_eq!(manifest["source"].as_str(), Some("external"));
+        assert_eq!(manifest["size_bytes"].as_u64(), Some(bytes.len() as u64));
+        let duplicate = register_at_host(&host, &payload).await.unwrap();
+        assert_eq!(duplicate.id, entry.id);
+        assert_eq!(
+            register_local_model_in(&data, &duplicate, None).unwrap(),
+            registered
+        );
+        assert_eq!(fs::read(&catalog[0].manifest_path).unwrap(), manifest_bytes);
+        drop(host);
+
+        let reopened = open_registration_host(&data).await;
+        assert_eq!(enumerate_model_locations_in(&data).unwrap(), catalog);
+        let restored = register_at_host(&reopened, &payload).await.unwrap();
+        assert_eq!(restored.id, entry.id);
+        assert_eq!(
+            register_local_model_in(&data, &restored, Some(&configured_root)).unwrap(),
+            registered
+        );
+        assert_eq!(enumerate_model_locations_in(&data).unwrap().len(), 1);
+        assert_eq!(fs::read(&payload).unwrap(), bytes);
+    }
+
+    #[tokio::test]
+    async fn registration_reuses_existing_manifest_for_canonical_payload() {
+        let directory = tempfile::tempdir().unwrap();
+        let base = fs::canonicalize(directory.path()).unwrap();
+        let data = base.join("data");
+        let configured_root = base.join("custom-provider/models");
+        let existing = configured_root.join("org/existing");
+        fs::create_dir_all(&existing).unwrap();
+        fs::create_dir_all(data.join("payloads")).unwrap();
+        let payload = data.join("payloads/model.ginfer");
+        let bytes = write_inventory_artifact(&payload);
+        let manifest = b"model_path: payloads/model.ginfer\nname: My chosen name\nsource: local\n";
+        fs::write(existing.join("model.yml"), manifest).unwrap();
+        let host = open_registration_host(&data).await;
+        let selected = {
+            #[cfg(unix)]
+            {
+                let alias = data.join("alias.ginfer");
+                std::os::unix::fs::symlink(&payload, &alias).unwrap();
+                alias
+            }
+            #[cfg(not(unix))]
+            {
+                payload.clone()
+            }
+        };
+        let entry = register_at_host(&host, &selected).await.unwrap();
+        let registered = register_local_model_in(&data, &entry, Some(&configured_root)).unwrap();
+        assert_eq!(registered.model_id, "org/existing");
+        assert_eq!(Path::new(&registered.model_path), payload);
+        let roots = catalog_roots(&data, None, Some(&configured_root)).unwrap();
+        let catalog = deduplicate_locations(locations_at_roots(&roots).unwrap());
+        assert_eq!(catalog.len(), 1);
+        assert_eq!(catalog[0].model_id, "org/existing");
+        assert!(!data.join("ginfer/models").exists());
+        assert_eq!(fs::read(existing.join("model.yml")).unwrap(), manifest);
+        assert_eq!(fs::read(&payload).unwrap(), bytes);
+    }
+
+    #[tokio::test]
+    async fn removing_external_reference_preserves_payload_even_with_managed_journal() {
+        let directory = tempfile::tempdir().unwrap();
+        let base = fs::canonicalize(directory.path()).unwrap();
+        let data = base.join("data");
+        let managed_root = base.join("managed");
+        fs::create_dir(&managed_root).unwrap();
+        let payload = managed_root.join("external.ginfer");
+        let bytes = write_inventory_artifact(&payload);
+        let host = open_registration_host(&data).await;
+        let entry = register_at_host(&host, &payload).await.unwrap();
+        let registered = register_local_model_in(&data, &entry, None).unwrap();
+        let journal = data.join("ginfer/model-downloads.json");
+        fs::write(
+            &journal,
+            serde_json::to_vec(&serde_json::json!({
+                "installed": {"status": "installed", "storage_root": managed_root, "path": payload}
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let journal_bytes = fs::read(&journal).unwrap();
+        let roots = model_catalog_roots_in(&data).unwrap();
+        let (owned_directory, managed) = deletion_location(&data, &registered.model_id, &roots)
+            .unwrap()
+            .unwrap();
+        assert!(managed.is_none());
+        assert!(owned_directory.starts_with(data.join("ginfer/models")));
+        fs::remove_dir_all(&owned_directory).unwrap();
+        assert!(!owned_directory.exists());
+        assert!(enumerate_model_locations_in(&data).unwrap().is_empty());
+        assert_eq!(fs::read(&payload).unwrap(), bytes);
+        assert_eq!(fs::read(&journal).unwrap(), journal_bytes);
+        assert_eq!(host.inventory.read().await[0].id, entry.id);
+        let restored = register_at_host(&host, &payload).await.unwrap();
+        assert_eq!(
+            register_local_model_in(&data, &restored, None).unwrap(),
+            registered
+        );
+    }
+
+    #[tokio::test]
+    async fn host_rejects_invalid_local_artifacts_without_catalog_publication() {
+        let directory = tempfile::tempdir().unwrap();
+        let base = fs::canonicalize(directory.path()).unwrap();
+        let data = base.join("data");
+        let host = open_registration_host(&data).await;
+        let broken = base.join("broken.ginfer");
+        write_artifact(&broken, false);
+        let incomplete = base.join("incomplete.ginfer");
+        write_artifact(&incomplete, true);
+        let wrong_extension = base.join("valid.bin");
+        write_inventory_artifact(&wrong_extension);
+        for payload in [
+            broken.clone(),
+            incomplete,
+            wrong_extension,
+            base.join("missing.ginfer"),
+        ] {
+            assert!(register_at_host(&host, &payload).await.is_err());
+            assert!(host.data.lock().await.local_artifacts.is_empty());
+            assert!(enumerate_model_locations_in(&data).unwrap().is_empty());
+        }
+        assert!(register_at_host(&host, Path::new("relative.ginfer"))
+            .await
+            .is_err());
+        assert!(!data.join("ginfer/models").exists());
+        assert_eq!(fs::read(&broken).unwrap(), b"NOTMODEL\0\0\0\0\0\0\0\0");
+    }
 
     fn write_artifact(path: &Path, valid: bool) {
         let mut bytes = Vec::from(if valid { GINFER_V3_MAGIC } else { *b"NOTMODEL" });

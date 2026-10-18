@@ -365,9 +365,15 @@ async fn require_local_hardware() -> Result<(), String> {
 async fn ensure_desktop_host<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<ginfer_host::launcher::LocalControl, String> {
-    use tauri::Manager;
     crate::core::setup::wait_for_bundled_resources(app).await?;
     let _access = data_folder_access().read().await;
+    ensure_desktop_host_unlocked(app).await
+}
+
+async fn ensure_desktop_host_unlocked<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<ginfer_host::launcher::LocalControl, String> {
+    use tauri::Manager;
     #[cfg(feature = "hardware")]
     require_local_hardware().await?;
     let local = installed_desktop_host(
@@ -436,6 +442,32 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
         return Err("Stop Host and Quit is only available for a Windows desktop-managed Host".into());
     }
     if action.starts_with("local_model_") {
+        if action == "local_model_register" {
+            let path = args["path"]
+                .as_str()
+                .filter(|path| !path.is_empty())
+                .ok_or("path is required")?;
+            let models_root = args["modelsRoot"]
+                .as_str()
+                .map(std::path::PathBuf::from);
+            crate::core::setup::wait_for_bundled_resources(&app).await?;
+            // Keep Host admission and the catalog write in the same data folder,
+            // even if Settings requests a relocation while registration awaits IO.
+            let _access = data_folder_access().read().await;
+            let control = ensure_desktop_host_unlocked(&app).await?;
+            let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
+            let entry = control.register_model(std::path::Path::new(path)).await?;
+            let registered = tokio::task::spawn_blocking(move || {
+                crate::core::ginfer_models::register_local_model_in(
+                    &root,
+                    &entry,
+                    models_root.as_deref(),
+                )
+            })
+            .await
+            .map_err(|error| error.to_string())??;
+            return serde_json::to_value(registered).map_err(|error| error.to_string());
+        }
         if action == "local_model_adopt" {
             let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
             let report = tokio::task::spawn_blocking(move || {
