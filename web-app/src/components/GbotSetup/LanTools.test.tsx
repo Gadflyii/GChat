@@ -6,6 +6,7 @@ import {
   waitFor,
 } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import LanTools from './LanTools'
 import { gbot } from '@/services/gbot'
 
@@ -232,7 +233,8 @@ it.each([new Error('SSH unavailable'), 'SSH transport closed'])(
 it.each([
   'This setup supports a dedicated Debian 13 computer. Use an already prepared computer for another OS.',
   'A person may be using this desktop. Sign out of graphical sessions before preparing the bot computer.',
-  'Gbot tools are not fully installed. For a dedicated Debian 13 computer, authorize installation and choose Prepare tools in GChat.',
+  'Gbot tools are not fully installed. For a dedicated Debian 13 computer, authorize installation and choose Prepare tools in GChat. Follow its installation instructions, including running the administrator command if shown, then choose Check tools.',
+  'The bot desktop or media service is stopped. Re-run the installer and check again.',
 ])('keeps actionable tool instructions visible: %s', async (issue) => {
   vi.mocked(gbot).mockResolvedValueOnce({
     installed: false,
@@ -246,3 +248,75 @@ it.each([
   expect(screen.getByText(issue).closest('details')).toBeNull()
   expect(ready).toHaveBeenLastCalledWith(false)
 })
+
+it.each([
+  { action: 'check', issue: 'sh: 1: systemctl: not found', cloud: false },
+  { action: 'check', issue: '', cloud: false },
+  {
+    action: 'prepare',
+    issue: 'sudo: gbot-cloud-tools: command not found',
+    cloud: true,
+  },
+  { action: 'prepare', issue: '', cloud: true },
+])(
+  'resolved tool failure recovery: $action with issue "$issue"',
+  async ({ action, issue, cloud }) => {
+    const user = userEvent.setup()
+    const ready = vi.fn()
+    const busy = vi.fn()
+    const api = vi
+      .mocked(gbot)
+      .mockResolvedValueOnce({ installed: false, command: null, issue })
+      .mockResolvedValueOnce({ installed: true, command: null, issue: null })
+    render(
+      <LanTools workspaceId="bot" ready={ready} busy={busy} cloud={cloud} />
+    )
+    const prepare = screen.getByRole('button', { name: 'Prepare tools' })
+    expect(prepare).toBeDisabled()
+    if (action === 'prepare') await user.click(screen.getByRole('checkbox'))
+    const retry = screen.getByRole('button', {
+      name: action === 'prepare' ? 'Prepare tools' : 'Check tools',
+    })
+    await user.click(retry)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      action === 'prepare'
+        ? 'GChat could not finish preparing the tools.'
+        : 'GChat could not check the tools.'
+    )
+    expect(alert).toHaveTextContent(
+      action === 'prepare'
+        ? 'choose Prepare tools to try again'
+        : 'choose Check tools to try again'
+    )
+    if (issue) {
+      const details = screen.getByText(issue).closest('details')
+      expect(details).not.toHaveAttribute('open')
+      await user.click(screen.getByText('Details'))
+      expect(details).toHaveAttribute('open')
+    } else {
+      expect(screen.queryByText('Details')).not.toBeInTheDocument()
+    }
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+    expect(busy).toHaveBeenLastCalledWith(false)
+    expect(retry).toBeEnabled()
+    expect(api).toHaveBeenCalledTimes(1)
+    if (action === 'check') expect(prepare).toBeDisabled()
+
+    await user.click(retry)
+    await screen.findByText(
+      'Tools installed. Continue to connect and check the bot desktop.'
+    )
+    expect(api).toHaveBeenCalledTimes(2)
+    expect(api).toHaveBeenNthCalledWith(
+      2,
+      action === 'prepare' ? 'workspaces/ssh/prepare' : 'workspaces/ssh/tools',
+      { workspace_id: 'bot', ...(action === 'prepare' ? { consent: true } : {}) }
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(true)
+    expect(busy).toHaveBeenLastCalledWith(false)
+  }
+)

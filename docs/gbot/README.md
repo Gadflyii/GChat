@@ -1,5 +1,21 @@
 # Gbot design
 
+## Recovering failed tool results — Gchat 2
+
+`GBOT-TOOLS-RESULT-ERROR-GUIDANCE`, based on main `7f626c5dc`, gives
+failed Check tools and Prepare tools results the same plain retry guidance as
+failed requests. Previously, nonzero guest commands exposed shell output as the
+main instruction, and a nonzero command with no output showed no failure.
+Optional diagnostic output now stays in initially closed Details. The service’s
+known instructions for unsupported systems, signed-in desktops, missing tools
+and stopped services stay visible.
+
+Rendered journeys cover tool-check and cloud-preparation results with shell
+output and with no output, optional disclosure and explicit successful retry.
+Preparation still requires installation consent; neither opening Details nor
+receiving a failed result repeats a request. Source/rendered mocked-service
+scope only; no guest installation, native or account acceptance.
+
 ## Reviewing tasks after a local service restart — Gchat 2
 
 `GBOT-SERVICE-RESTART-RESUME-WORDING`, based on main `61e4ea300`, replaces
