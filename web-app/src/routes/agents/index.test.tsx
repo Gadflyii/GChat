@@ -280,6 +280,32 @@ describe('AgentStudioPage', () => {
     expect(within(detail()).getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
   })
 
+  it.each(['failed', 'incomplete'] as const)(
+    'shows continuation help and its action only when switching from finished to %s history', async (status) => {
+      listAgentRuns.mockResolvedValue([
+        { ...firstHistoricalRun, status: 'finished', finishReason: 'reply' },
+        { ...secondHistoricalRun, status },
+      ])
+      render(<AgentStudioPage />)
+      fireEvent.click(screen.getByRole('button', { name: 'Runs', exact: true }))
+      const finished = await screen.findByRole('button', { name: /Review assistant finished/ })
+      const help = /^Continuation opens a new run setup with prior findings for review\./
+
+      fireEvent.click(finished)
+      expect(screen.getByRole('heading', { name: 'Result overview' })).toBeInTheDocument()
+      expect(screen.queryByText(help)).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Continue as new run…' })).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(`Research assistant ${status}`) }))
+      expect(screen.getByText(help)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Continue as new run…' })).toBeEnabled()
+
+      fireEvent.click(finished)
+      expect(screen.queryByText(help)).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Continue as new run…' })).not.toBeInTheDocument()
+    }
+  )
+
   it('lets the run history pane fill the page height so its divider reaches the bottom', async () => {
     listAgentRuns.mockResolvedValue([])
     await renderRunHistory()

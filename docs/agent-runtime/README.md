@@ -22,6 +22,30 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Saved-run continuation guidance — October 18
+
+A private native Linux history pass found that finished results described
+**Continue as new run…** although their overview and action menu offered no
+continuation. Failed and incomplete results offered the action with the same
+explanation. The source is unchanged from native source `40573bd8a` through
+main `96172afb5`; the viewed finished/failed screenshots and read-only navigation
+receipt are in `/ai/gchat/out/gchat-agent-history-navigation-20261018/`.
+
+Continuation guidance now uses the same status condition as **Continue as new
+run…**: finished results show neither, while failed and incomplete results show
+both. Two rendered regressions cover selecting finished results, moving to each
+nonfinished status, and returning to finished. They fail against the unchanged
+parent route and pass with the correction; the focused suite passes all 72 tests.
+
+The single `make verify` passes (3,404 frontend tests, 127 extension tests and
+1,262 Rust tests), as do the frontend and offline locked native builds. The
+isolated Linux native replay of frozen source `5dee3689887e` passes finished →
+failed → incomplete → finished navigation, with the three screenshots viewed and
+all 17 retained data files byte-identical after shutdown. No continuation or run
+was started. Receipts are in
+`/ai/gchat/out/gchat-finished-run-continuation-hint-20261018/`. Windows was not
+built (dev phase).
+
 ## Unavailable assignment in run setup — October 18
 
 An isolated native Linux **Re-run** pass at 1200×800 reproduced horizontal
