@@ -2,136 +2,68 @@
 
 ## Windows Hyper-V local computer adapter — Gchat 2
 
-`GBOT-WINDOWS-HYPERV-ADAPTER` adds the Windows adapter to the existing
-local-computer setup contract. Preflight reads edition, firmware virtualization,
-Hyper-V availability, permissions, restart requirements and storage. Missing
-features give the user a Windows Features and restart step; GChat never enables
-features or elevates. The selected guest root prefers a suitable non-system
-drive and is saved for retries. The separate persistent Debian guest uses the
-same pinned worker, SSH identity, desktop tools and full readiness checks as KVM.
+`GBOT-WINDOWS-HYPERV-ADAPTER` implements the Windows side of the shared
+local-computer lifecycle. Preflight reads edition, firmware virtualization,
+Hyper-V availability, permissions, restart requirements, RAM and free space.
+Missing features show a plain Windows Features and restart step. GChat never
+enables features, elevates, changes host networking or installs host tools.
 
-The setup API is `/v1/setup/local-vm/{preflight,status,start,stop,remove}`;
-existing `/v1/setup/kvm` routes remain compatible. Stop computer fences tasks,
-schedules and human control, waits for graceful shutdown and keeps the disk,
-brain, key and account links. A failed shutdown stays visible and blocks new
-work until Stop succeeds or Start rechecks readiness. Start computer uses the
-same saved guest. Remove computer checks ownership before retiring it.
+The separate persistent Debian guest uses the same worker, pinned SSH,
+desktop tools and readiness checks as KVM. The guest root prefers a suitable
+non-system drive and is saved for retries. Ron explicitly selected C: for the
+native .143 acceptance; its WSL root was not used for images or builds.
 
-The adapter uses the existing Default Switch, an owned COM console pipe for
-SSH host-key capture, and a loopback relay to the guest's current IP. It checks
-the Hyper-V VM ID, ownership note and exact disk/seed/console paths before
-mutating the guest. It does not adopt another VM after a name collision.
-See the [adapter decision](../decisions/2026-10-18-own-windows-hyperv-bot-computers.md).
+The API is `/v1/setup/local-vm/{preflight,status,start,stop,remove}`; existing
+`/v1/setup/kvm` routes remain compatible. Stop fences tasks, schedules and human
+control, waits for graceful shutdown and keeps the disk, brain, key and account
+links. Start reuses that guest. Remove verifies the Hyper-V VM ID, ownership
+note and exact disk, seed and COM paths before retiring it. Foreign or ambiguous
+registrations are refused. The adapter uses the existing Default Switch, a
+trusted COM console for SSH host-key capture, and a loopback-only SSH relay.
 
-Source verification passes: 200 focused UI tests, 110 service library tests,
-Cargo checks and service/Host Clippy. Shell library Clippy passes with the
-existing unrelated MSRV finding suppressed. The production PowerShell dispatcher
-and module fake pass 138 assertions under Windows PowerShell 5.1, covering
-read-only detection, storage, owned lifecycle and refusal of foreign resources.
+Windows receives a ready VHDX with its own pinned SHA256 and byte count, derived
+from the accepted Debian source. Arch approved this delivery choice at 10:28 UTC.
+Existing release tooling performs conversion once and records provenance;
+`package-gbot-runtime.py --platform windows --guest-assets ...` stages the assets.
+Users need no qemu installation. The immutable source image stays read-only;
+only the new private guest disk is made writable. Asset publication remains
+Ron-gated. See the [adapter decision](../decisions/2026-10-18-own-windows-hyperv-bot-computers.md).
 
-The Linux/S1 `make verify` run on 18 October, 10:11:30–10:20:58 UTC, completed
-through a failed-stage continuation: lint, type checking, quality guards, 3,537
-app tests (6 skipped), 127 extension tests, six coverage floors and 1,295 Rust
-tests (28 ignored) pass. The initial command stopped at missing private Yarn
-extension workspace metadata; the continuation ran its exact installed coverage
-script through Node, then the remaining coverage and Rust stages. No passing
-stage was repeated. Source hashes and command results are recorded in
-`out/gchat2-windows-hyperv-20261018/result.json`.
+Native acceptance **passes** on Ron's Windows 11 Pro .143 host, source
+`1922e7567`, 18 October 13:45:03–13:47:27 UTC. A fresh 2-CPU, 4-GiB guest
+completed detection, creation, bootstrap, pinned SSH, worker commands/files,
+desktop capture, keyboard input saved to a guest file, and a view handshake.
+Graceful Stop preserved the disk. Start reached Ready again, retained the same
+VM/storage/SSH identity and read the saved sentinel. Production retirement
+confirmed that the registration, guest directory and fixture credential were
+absent; task/runtime shutdown passed. The credential vault was an isolated
+in-memory fixture. No model or account was used. The source VHDX stayed read-only.
+The executable SHA256 was
+`dc6d6e934d2c1dfeb3d99402b2d3274e98e5bd24e5fe62dd8b18cefb452707b4`.
 
-The Windows guest resource is a ready VHDX with its own pinned SHA256 and
-byte count, derived from the same accepted Debian image as Linux. Release
-staging records the source and converter; the adapter needs only built-in
-Hyper-V disk cmdlets. No host converter is installed or required. Use the
-existing `package-gbot-runtime.py --platform windows --guest-assets ...`
-staging path; publication remains Ron-gated.
+Native findings fixed in this branch: real COM1 objects use `Name`, guest IP
+reporting needs `hyperv-daemons`, and SSH may start before the desktop service.
+The initial read-only hello now waits at most 20 seconds for a stable active
+desktop; authenticated commands/files never wait or replay. Desktop restarts
+still require pinned-SSH proof and guarded session renewal. The native fixture
+now loads the production task runner before exercising those guards.
 
-Bundled guest assets may be read-only. The adapter leaves that source unchanged
-and clears Read-only only on its newly created private guest disk before
-expanding it. Follow-up Linux gates pass 11 focused tests (Hyper-V, asset pins,
-API platform boundaries and shell delivery), service/root checks and strict
-Clippy after a test-module ordering correction. The shell keeps its existing
-MSRV allowance. See `out/gchat2-windows-hyperv-20261018/linux-ready-gates-summary.json`.
+Verification passes: 234 Windows PowerShell-module fake assertions, native
+Windows service checks and compilation, focused adapter/relay tests, all-target
+service checking and strict Clippy. The readiness regression fails with the old
+script and passes with the fix; three existing renewal/binding cases also pass.
+ONE Linux `make verify`, 13:39:43–13:43:57 UTC, passes lint, types, guards,
+3,537 app tests (6 skipped), 127 extension tests, 1,302 Rust tests (28 ignored)
+and six coverage floors. All 3,405 frozen tracked source hashes are stable.
+The later Windows-only acceptance fixture is covered by the native compile/run.
 
-Native Windows service all-target checking, test-executable compilation and
-10 focused service tests pass. The compile findings were Linux-only vault
-control routes and a Linux-only KVM example being included on Windows; both
-now follow their platform boundary. The updated production PowerShell
-dispatcher and module fake pass 228 assertions on Windows PowerShell 5.1,
-including refusal of a private guest disk that inherits the source Read-only
-flag. The final source `0ebe36606` service executable rebuilt successfully.
-The native shell asset-installer regression also completed with Cargo exit 0
-using `--no-default-features --features test-tauri,cli`; its stdout was lost
-after a monitor error, so the receipt records process termination and binary
-provenance rather than a test-count claim. The initial default-feature command
-failed on an unstaged Bun bundle resource. Neither command's result is hidden,
-and the successful command was not repeated. See
-`out/gchat2-windows-hyperv-20261018/native-final-summary.json`.
-
-Read-only detection on Ron's Windows 11 Pro `.143` reports no prerequisite
-issues. The first native attempt created a separate guest without elevation,
-then found that real `Get-VMComPort` objects identify COM1 by `Name` and do not
-have the fake's `Number` property. The ownership check now uses `Name`; the
-fake matches the native object shape and checks foreign COM2 pipes too.
-Its regression fails against the previous dispatcher and all 234 assertions
-pass with the correction on Windows PowerShell 5.1. The corrected production
-ownership check retired the first guest, and its private disk directory was
-removed at 12:14 UTC. The immutable source image remains read-only.
-
-The corrected native service executable rebuilt successfully in 19 seconds
-at 12:21 UTC with all ten adapter source hashes matching. The second native
-attempt created and started the guest, then captured its SSH host key through
-the trusted serial channel. Its first SSH transport connection failed before
-Ready. Production retirement passed: the guest registration, private guest
-directory and fixture credential are absent. The source image stays read-only.
-
-The pinned Debian image inventory and shared seed omit `hyperv-daemons`.
-Hyper-V's address discovery depends on guest KVP integration, so the Windows
-seed now installs that package and starts `hv-kvp-daemon.service` before
-publishing readiness. The relay waits up to 20 seconds for the owned guest's
-address and TCP listener, preserving the failure cause. It never retries an
-authenticated guest operation. Native failure evidence now captures a bounded
-serial tail and the endpoint error before retirement. This addresses a concrete
-missing dependency; the live continuation must establish the final outcome.
-See [Microsoft's KVP/IP guidance](https://learn.microsoft.com/en-us/troubleshoot/windows-server/virtualization/get-vmnetworkadapter-doesnt-report-ip-addresses)
-and [Debian's package contents](https://packages.debian.org/trixie/amd64/hyperv-daemons/filelist).
-
-The KVP/relay source `5bb539c7d` passes four focused relay tests, six
-Hyper-V boundary tests, all-target service checking and strict Clippy. ONE
-S1 `make verify`, 12:53:47–12:59:06 UTC, passes 3,537 app tests (6 skipped),
-127 extension tests and 1,301 Rust tests (28 ignored), all six coverage floors,
-lint, type checking and guards. All 3,405 tracked source files match the
-frozen committed bytes after the gate. Booking3292 was returned and canceled;
-the private cache is retained idle. The Windows warm rebuild then passed at
-13:15 UTC, including all four relay tests. All ten adapter source files match
-the committed bytes. The 34,549,248-byte executable has SHA256
-`ba9006819d2548d920252fe63f53e311cf50259a6141cfde95aa0e4d8acf569d`
-and is staged on S1. Local booking1468 was canceled and both guards returned.
-
-The third native run reached Ready: bootstrap, pinned SSH, worker commands and
-files, desktop capture, keyboard input saved to a file, and the view handshake
-pass. Graceful Stop preserved the disk. Start then reached SSH before the
-lingering desktop service became ready and failed its initial session check.
-Production retirement and runtime shutdown passed; no guest registration,
-private guest directory or fixture credential remained. The source VHDX stayed
-read-only.
-
-The initial read-only session hello now waits up to 20 seconds for a stable,
-active desktop service before binding its identity. Command and file operations
-do not wait or replay. A restarted desktop still requires the existing
-pinned-SSH proof and guarded session renewal. The executable regression fails
-with status 69 on the previous script and passes with the fix, including bounded
-failure and immediate refusal of an unready operation. The three existing
-renewal/binding checks, all-target checking and strict Clippy pass. A Windows
-warm rebuild completed at 13:36 UTC; all 13 changed adapter/guest source hashes
-match the receipt. The 34,553,344-byte executable has SHA256
-`ba16ec2b88b54520b5e3b66985dabc50b2ccebb539c2c2d4d02c18d9f454a2bd`.
-The fresh native lifecycle and one full source verification are running.
-
-Receipts are under `out/gchat2-windows-hyperv-20261018/`: the first attempts
-in `native-lifecycle-result.json` and `native-lifecycle-r2-result.json`, KVP
-finding in `native-kvp-finding.json`, third run in
-`native-lifecycle-r3-result.json`, and the current build in
-`native-restart-build-result.json`.
+Receipts: `out/gchat2-windows-hyperv-20261018/result.json`,
+`native-lifecycle-r5-result.json`, its raw stdout/stderr, `restart-result.json`,
+and `native-fixture-build-result.json` (13 adapter/guest source hashes).
+Earlier failed native attempts remain recorded beside them. The final guest
+and Ada image/binary copies are retired; no guest or compute booking remains.
+This qualifies the adapter lifecycle; installed Windows UI and outward release
+publication retain their own acceptance gates.
 
 ## Saved human replies keep recovery errors visible — Gchat 2
 
@@ -986,7 +918,7 @@ processes passed at 01:09:06 UTC on October 13, freeing 30.47 GB on S1 and
 and concise evidence; no guest, job or reservation remains.
 
 Remaining setup acceptance includes sleep recovery, scheduled
-dispatch after client exit, native Windows/Hyper-V acceptance, cloud/M365 creation, remote service
+dispatch after client exit, cloud/M365 creation, remote service
 selection and installer opt-in. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
 separates these from accepted setup evidence. The CPU-only installed guest also
 exposed unguarded local Host hardware preparation; its owning native gate now rejects unsupported local hardware before Host
@@ -1907,7 +1839,8 @@ source tree, current tested desktop artifact and evidence; no live job or
 reservation remains. The accepted baseline package was preserved.
 
 This setup candidate is merged to main `bb4cde410`; reuse its installed evidence.
-Remaining setup acceptance: native Windows/Hyper-V on .143 after user enable/reboot, cloud/M365,
+Native Windows/Hyper-V adapter lifecycle passes on .143 (18 October; see above).
+Remaining setup acceptance: cloud/M365,
 remote service selection, installer choice, sleep recovery and scheduled
 dispatch after client exit. Gbot's explicit brain assignment must select a
 persistent Host or other inference endpoint for client-exit continuity. Hardware preparation is a
