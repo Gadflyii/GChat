@@ -3493,6 +3493,7 @@ mod target_launch_tests {
         assert!(!host.processes.lock().await.has_children());
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn flash_graph_receipts_require_ready_and_match_the_saved_startup_recipe() {
         let (dir, host, mut request) = installed_flash("groupwise-int", false).await;
