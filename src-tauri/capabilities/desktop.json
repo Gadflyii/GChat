@@ -13,7 +13,6 @@
     "core:window:allow-start-dragging",
     "core:window:allow-set-theme",
     "core:window:allow-get-all-windows",
-    "core:window:allow-destroy",
     "core:event:allow-listen",
     "shell:allow-spawn",
     "shell:allow-open",
