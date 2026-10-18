@@ -4,28 +4,39 @@
 
 `GUI-FOLDER-REVEAL-NESTED-RUNTIME`: the pinned current-main release
 `d0a8d06bf` crashed at 04:38:54Z when General → Diagnostic logs →
-**Open Containing Folder** was clicked. The retained native panic identifies
-Tokio's nested-runtime guard. Opener 2.5.3 executes synchronous Linux
-`zbus::blocking` inside its async command; its blocking runtime cannot enter
-from a Tokio worker. The app now owns a native reveal command that calls the
-same cross-platform opener from `spawn_blocking`, and the frontend uses that
-command. Folder selection semantics and file-manager errors are preserved.
+**Open Containing Folder** was clicked. Opener 2.5.3 executes synchronous Linux
+`zbus::blocking` inside its async command; Tokio's nested-runtime guard aborts
+the app. The app now owns a native reveal command that calls the same
+cross-platform opener from `spawn_blocking`, and the frontend uses that command.
+Folder selection semantics and file-manager errors are preserved.
 
 Acceptance: the real private folder handler receives the logs folder, GChat
 stays responsive, and an unavailable handler returns an error without panic.
-The Linux regression calls the real opener on a Tokio worker with an isolated
-unreachable D-Bus address. Frontend IPC cases cover the literal path and error
-propagation. Source is prepared; focused checks, lint, ONE `make verify`, build
-and changed-source native acceptance are pending. This crash takes priority
-after the in-flight download-count candidate; Interface and CLI fixes follow.
+Frontend IPC2 and the real-opener Linux runtime-worker regression1 passed.
+Corrected library check/clippy and lint passed. The original check command
+incorrectly combined all targets with CLI features, disabling the desktop
+entry point; that failure is retained and corrected to library scope.
+
+The first/only `make verify` stopped at a new background disk-full test:
+3351 app tests passed, one failed, six skipped. Its alert renders directly from
+`flow`, while the retained folder is hydrated by a later `useEffect([flow])`.
+Waiting for the alert did not wait for that effect. The test now waits for the
+same `/models` value before clicking Retry; all existing assertions remain.
+The original failure remains in the packet. Authorized continuation: this
+first-run file, failed app coverage, then unrun extension coverage/floors and
+seven native suites; no second `make verify` or passed-stage repeat. If these
+pass, build Vite/default desktop custom-protocol into `folder-reveal-candidate`.
+Actual changed-source native acceptance remains coordinator-owned and pending.
 No model, profile or GPU workload is needed.
 
 Owner/source: Codex 3,
 `/ai/gchat-worktrees/c3-folder-reveal-runtime-20261018`, branch
 `fix/c3-folder-reveal-runtime-20261018`, baseline `bbc81c2ec`.
-The shared S1 stage remains exclusively with the download-count build until
-its handoff. The immutable release AppDir and private profile are retained;
-its app exited on the crash, while Xvfb :79 remains private. Evidence:
+The shared S1 stage was handed off after download-count build04:41:46Z.
+CPU80–87 booking2994 through05:09Z, socket1 shared lock and nice10;
+all35 retained manifests/locks/config matched before exact source staging.
+The installed AppDir/home, badge candidate, downloads home, runnable resources
+and tools are protected. Evidence:
 `out/c3-current-main-release-20261018/{folder-reveal-crash.json,folder-reveal-panic.txt}`;
 fix result `out/c3-folder-reveal-runtime-20261018/result.json`.
 
