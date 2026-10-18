@@ -7,7 +7,7 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 ## OI-068 Linux Hermes reply, file tool and continuation — October 18, Codex 3
 
 The Linux Hermes leaf **passes** on normal Release candidate
-`fix/c3-hermes-ready-host-20261018`, based on main `af8d1b4dc`. Ordinary product
+`9ad8796ba`, based on main `af8d1b4dc`, merged as `e5d0f3c38`. Ordinary product
 setup installed upstream Hermes 0.22.2 in a disposable S1 container. The
 candidate's desktop/CLI/resources ran at the retained extracted DEB's normal
 installed paths, preserving Engine `b26ec5b8f` and the frozen 179-profile
