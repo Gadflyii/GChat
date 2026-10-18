@@ -29,9 +29,19 @@ bundle-only lookup, PATH ordering after AppRun, system installation without
 AppDir, directory aliases versus installed file symlinks, and missing or
 non-executable commands. Focused command:
 `cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli cli_install_detection -- --test-threads=1`.
-Focused Rust checks, supported Cargo check/Clippy, ONE `make verify`, a changed
-native build and parent-owned installed-layout acceptance are pending; no
-execution result is claimed. Windows is not built or exercised.
+The five focused Rust regressions, library-scope Cargo check/Clippy and lint
+passed. ONE `make verify` passed on S1 CPUs80–87 (booking3025): 3,369 app tests
+(six skipped), 127 extension tests, all six coverage floors and 1,234 native
+tests (28 ignored). There was no gate failure or continuation. Vite and the
+default desktop debug build passed at 05:25:46Z. The exported source-native
+`cli-candidate/bin/gchat` is bound to source `86c3068ad`; ELF, private pre-install
+and retained resource linkage were verified. Installed-layout acceptance passed
+at 05:32Z with explicit APPDIR and bundled-first PATH: Install was offered, the
+CLI installed in private HOME/.local/bin, and reopening General retained the
+external Installed path. Uninstall removed the private launcher set; reopening
+General offered Install again. The system bin directory was unwritable. Viewed
+Light 1500×1000 and Dark 1024×800 screenshots show readable controls without
+horizontal overflow. Windows is not built or exercised.
 
 Current main `b9a56c96c` was merged normally before gates. Its retained
 first-run disk-full test already includes the exact folder hydration wait;
@@ -42,11 +52,11 @@ Inventory: owner C3, branch
 `fix/c3-cli-packaged-path-detection-20261018`, baseline `bbc81c2ec`, worktree
 `/ai/gchat-worktrees/c3-cli-packaged-path-detection-20261018`. Only
 `src-tauri/src/core/system/commands.rs` and this authority are owned by this
-row. The shared S1 source/dependencies/native target are released after
-Interface export. Next: five focused native detection tests, library-scope
-check/Clippy with `test-tauri,cli`, lint, ONE `make verify`, then Vite/default
-desktop debug build into separate `cli-candidate`. Parent owns native installed
-layout acceptance with private HOME and explicit APPDIR/bundled PATH; no GPU,
+row. The shared S1 source/dependencies/native target were returned at 05:26Z; app,
+idle Host and private session returned at 05:32Z. The tested CLI export is retained
+for integration, and shared private Xvfb remains in use for the next candidate.
+Next: coordinator integration, then retire this candidate. Native acceptance
+used private HOME and explicit APPDIR/bundled PATH; no GPU,
 model, profile, host install or shared terminal PATH mutation. Reuse pinned
 routed-offline dependencies only after all retained manifests match. Preserve
 current-main AppDir/home, Interface/folder/badge candidates and runnable assets.
