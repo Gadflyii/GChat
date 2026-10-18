@@ -1,5 +1,26 @@
 # GInfer host UI
 
+## First-run action recovery — in verification, Gchat 3, October 18
+
+`GUI-FIRST-RUN-ACTION-ERROR-GUIDANCE` stops describing every rejected setup
+action as a connection failure. A rejected folder change or Stop request now
+directs the user to **Retry local setup** to read current status before an
+explicit action retry. Diagnostics remain in closed **Setup action error
+details**. Successful polls do not imply the action succeeded; edited choices
+and existing retry behavior are preserved. Connection-read and actionable
+disk-full maintenance guidance remain unchanged.
+
+Candidate: `fix/gchat3-first-run-action-error-guidance-20261018`, base
+`73fac6573`, in the matching `/ai/gchat-worktrees/` directory. Acceptance is
+the existing rendered stop/folder regressions, including status-only recovery
+without folder mutation replay, lint and one `make verify`. No native service,
+catalog, model or Windows behavior changes. The independent S1 dependency
+fixture retains its initial preparation name,
+`/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-maintenance-guidance-tests-20261018`;
+it is disposable after result review, with the inactive RC donor protected.
+Small results go in `out/first-run-action-error-guidance-20261018/`.
+Next: execute the focused checks and single full gate on the frozen source.
+
 ## Locked-vault next action — verified, Gchat 3, October 18
 
 `GUI-SECURE-STORAGE-LOCKED-STATE-GUIDANCE` gives a confirmed locked passphrase
@@ -26,7 +47,8 @@ retired at **17:46:18Z**, removing **28,309,240,082 logical bytes**. The
 protected RC donor is unchanged. Only
 [the result](../../out/secure-storage-locked-guidance-20261018/test-result.json)
 and [short summary](../../out/secure-storage-locked-guidance-20261018/test-summary.md)
-are retained. Next: merge this verified branch, then the next owned GUI row.
+are retained. Merged as `73fac6573`; continue the next owned GUI row without
+repeating these accepted checks.
 
 ## Check-again locked-vault recovery — verified, Gchat 3, October 18
 
