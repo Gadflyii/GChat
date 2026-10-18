@@ -1,5 +1,40 @@
 # GInfer host UI
 
+## Models, Downloads and Hardware accessibility — C7, October 18
+
+Bubbs assigned a source-only accessibility pass at 23:12Z. The outcome is named
+controls, logical keyboard order, visible focus in Light and Dark, announced
+download progress and load results, and dialogs that can be dismissed by
+keyboard. Each concrete finding is a GUI row in GInfer open-work. Fixes stay in
+small branches, use existing rendered accessibility/keyboard tests, pass focused
+tests and exactly one `make verify` per merge, and include native screenshots
+in the same branch. No model run or Windows qualification is required.
+
+The first candidate is
+`fix/c7-models-downloads-hardware-a11y-20261018`, worktree
+`/ai/gchat-worktrees/c7-models-downloads-hardware-a11y-20261018`, baseline
+`5cca9a52a`. Root owns Hardware, shared Progress and current documentation;
+parallel workers read Models/Downloads and recover existing native tooling.
+Source freeze is ready for an isolated S1 gate and native Light/Dark keyboard
+screenshots; no target resource is held.
+
+Confirmed first findings: Hardware refresh unmounts its focused control during
+loading and provides no announced terminal result; CPU/RAM usage progressbars
+lack accessible names, and shared Progress drops the value before the Radix
+root, exposing indeterminate progress despite a visible percentage. Acceptance
+is stable keyboard focus through refresh, announced loading/success/failure,
+named numeric CPU/RAM progress, existing logical keyboard navigation, and native
+Light/Dark focus screenshots. Keep shared Progress ownership clear; later
+Models/Downloads fixes add their own names and announcements. No general
+accessibility framework or new test harness is needed.
+
+Implemented the first Hardware/progress correction with six rendered Hardware
+regressions and numeric/indeterminate Progress tests. Next: focused tests, lint,
+the sole `make verify`, then an isolated Linux native build and Light/Dark
+keyboard focus screenshots. Further concrete findings are Downloads names/live
+progress, Models terminal load announcements, and delete dialog dismissal/focus;
+these remain separate small follow-up branches.
+
 ## Models confirmed Stop and status recovery — C7, October 18
 
 `GUI-MODELS-STOP-STATUS-RECOVERY` separates a confirmed Stop from a later
