@@ -1,36 +1,160 @@
 # GInfer host UI
 
+## Select appearance in Light — Gchat 3, October 18
+## Collapsed-section spacing recovery — C3, October 18
+
+`GUI-CLOSED-DETAILS-GAP` is owned by C3 on
+`docs/c3-closed-details-gap-20261018`, worktree
+`/ai/gchat-worktrees/c3-closed-details-gap-20261018`, base `a7ab6dc02`.
+The original fix `6fb07b18c` (merged `d54a0db25`) remains ineffective: its
+closed-summary override sits in Tailwind's base layer, below the utilities
+layer that supplies `space-y-3`. The source-text assertion passes despite
+the cascade defect; the original reported 66→54 px reduction does not
+establish the retained product's behavior.
+
+Native baseline source `ed68c7443` demonstrates the extra 12 px. The closed
+manual-Host box is **74 px** high: a 20 px summary, 20 px padding on each
+side, 1 px borders and a 12 px summary margin. Closed **Launch Server
+Instance** and **Server details** boxes are **66 px** high with the same
+20 px summary, 16 px padding, 1 px borders and 12 px margin. A native pointer
+click opens the manual section to **210 px**; its first label begins 12 px
+after the summary, preserving the intended open-content spacing.
+[Closed geometry](../../out/c3-closed-details-gap-20261018/baseline-closed.json)
+and [open geometry](../../out/c3-closed-details-gap-20261018/baseline-open.json)
+retain these measurements.
+
+Candidate `9ff124a55` moves the closed-state override from base to utilities
+and removes the ineffective source-text assertion. **72 focused checks PASS**;
+ONE `make verify` PASS: 3,518 app / 6 skipped, 127 extension, 1,284 native /
+28 ignored, six coverage floors, lint, types and quality guards. All six
+stages exit 0, including the frontend and native desktop/Host builds.
+
+Implementation and Linux native acceptance are **complete**. In Dark
+1500×1000 and Light 1024×800, closed sections have **zero summary margin**:
+manual Host is **62 px** (baseline 74), **Start a model with saved settings**
+and **Model and memory settings** are **54 px** (baseline 66), and advanced
+sections are **20 px** (baseline 32). No horizontal overflow is present;
+inspected screenshots are readable. Real pointer and Space open/close checks
+pass. Space on the focused manual summary closes it to 62 px with zero margin.
+[Dark closed geometry](../../out/c3-closed-details-gap-20261018/candidate-closed-dark-wide.json),
+[light narrow geometry](../../out/c3-closed-details-gap-20261018/candidate-closed-light-narrow.json),
+[dark model geometry](../../out/c3-closed-details-gap-20261018/candidate-models-closed-dark-wide.json),
+[light narrow model geometry](../../out/c3-closed-details-gap-20261018/candidate-models-closed-light-narrow.json)
+and [keyboard close](../../out/c3-closed-details-gap-20261018/candidate-keyboard-close.json)
+retain these checks.
+
+Open sections retain **12 px summary margin and content gap**. Measured open
+heights are manual Host 242 px, saved settings 373 px, model/memory settings
+194 px, nested **Choose model settings** 658 px, and hardware advanced 606 px.
+The actual model advanced section also opens with 12 px summary margin.
+Total open height depends on content; the preserved summary-to-content gap
+is the acceptance criterion.
+[Manual open](../../out/c3-closed-details-gap-20261018/candidate-open-dark-wide.json),
+[saved settings open](../../out/c3-closed-details-gap-20261018/candidate-model-open-light-narrow.json),
+[model/memory open](../../out/c3-closed-details-gap-20261018/candidate-settings-open-dark-wide.json),
+[nested settings open](../../out/c3-closed-details-gap-20261018/candidate-nested-open-dark-wide.json),
+[hardware advanced open](../../out/c3-closed-details-gap-20261018/candidate-advanced-open-light-narrow.json)
+and [model advanced open](../../out/c3-closed-details-gap-20261018/candidate-model-advanced-open-dark-wide.json)
+retain the open-state measurements.
+
+The independent private S1 fixture, Host, keyring/D-Bus, Xvfb and SSH observer
+are stopped. Owned root
+`/media/ron/SSD_RAID/ai/tmp-c3-closed-details-gap-20261018` and its build
+container were removed; CPU80–87 returned09:15Z and booking3180 canceled.
+The inactive Gchat 3 RC donor was unchanged, with no remaining hold. Only
+small evidence remains in
+[the result packet](../../out/c3-closed-details-gap-20261018/result.json).
+Next action: merge the fix and evidence. Windows, model/download/profile/GPU
+execution and setup behavior remain outside this CSS spacing leaf.
+
 ## First-run button spacing — C3, October 18
 
-`GUI-FIRST-RUN-BUTTON-GAP` passes its remaining Linux native leaf.
-Retained release DOM measures an **8 px gap** between **Save model choices**
-and **Refresh model catalog**, and between **Download selected models** and
-Refresh; both controls are 36 px high. Inspected dark 1500×1000 and light
-1024×800 screenshots show readable separate controls. The light narrow DOM
-reports no horizontal overflow.
+`GUI-NATIVE-SELECT-LOOK` is closed by the later shared dropdown replacement
+and retained Linux native evidence. Original styling `b4bc8692e`, merged as
+`3466b0157`, was superseded by `ChoiceSelect` in merge `01b14d5bd`; its native
+select CSS and chevron assertion were removed. The current Hosts, Benchmark
+and Workspace connections fields use the app-rendered control.
 
-Original fix `c41c73606` merged as `5fd1bc289`. The `flex flex-wrap gap-2`
-wrapper, labels/actions and shared button styles are unchanged between native
-source `d0a8d06bf` and closure base `d74860fcf`. Existing rendered spacing and
-Refresh regression remains. Original **20 focused PASS** and the later full
-`d16521c19` gate are reused: **3,469 app / 6 skipped, 127 extension,
-1,276 native / 28 ignored**, six coverage floors PASS. This docs-only closure
-uses `git diff --check`; no repeated build, suite or native fixture.
+The inspected [Light 1024×800 Hosts capture](../../out/c3-host-locator-deleted-runtime-20261018/native-model-settings-light-narrow.png)
+shows Installed model, Reply speedup and Conversation memory format beside
+readable input fields. The retained [Light open-menu capture](../../out/c7-dropdown-host-selectors-20261018/after-light-medium-serving.png)
+shows readable choices, wrapping and the app palette. These close the remaining
+light-theme visual check. The existing
+[dropdown acceptance](../../out/c7-dropdown-host-selectors-20261018/result.json)
+retains Dark/Light keyboard and popup evidence; no new route-specific native
+claim is made for Benchmark or Workspace connections.
 
-[Result and source comparison](../../out/c3-first-run-button-gap-20261018/result.json),
-[dark screenshot](../../out/c3-current-main-release-20261018/remainder-profile-dark-wide.png)
-and [light narrow screenshot](../../out/c3-current-main-release-20261018/remainder-advanced-light-narrow.png)
-retain the acceptance. Save geometry is in `remainder-host-setup-storage.json`;
-Download geometry is in `remainder-host-start-settings.json` in that same
-release packet. Model choices/download behavior, profiling, model startup,
-Windows and extremely narrow wrapping are outside this spacing leaf.
+`ChoiceSelect`, its dropdown primitive and theme stylesheet are identical at
+native sources `8f4d0724f` and `82f17a1ac`, later passing full gate `d16521c19`
+and this branch base `a89302f19`. Retain the replacement's **42 focused PASS**
+and later ONE `make verify`: **3,469 app, 127 extension, 1,276 native PASS**,
+six frontend skips, 28 Rust ignores, lint/types/coverage PASS. This evidence-only
+closure uses `git diff --check`, with no repeated tests, app launch or compute.
 
-Owner C3; branch `docs/c3-first-run-button-gap-20261018`, worktree
-`/ai/gchat-worktrees/c3-first-run-button-gap-20261018`. The prior native fixture
-is retired. No compute, build, fixture, donor hold or large artifact was
-allocated for this closure; only small JSON/Markdown evidence remains.
-Source fix and native acceptance are complete; next action is merging this
-record. Gchat 3 retains the independent model-choice reasons leaf.
+Owner Gchat 3; branch `docs/gchat3-native-select-look-20261018`, worktree
+`/ai/gchat-worktrees/gchat3-native-select-look-20261018`. Only small evidence is
+retained in [the result](../../out/gchat3-native-select-look-20261018/result.json).
+No new booking, build, private HOME or SSD fixture was allocated. The cited
+fixtures are already stopped and retired. Windows native UI remains unqualified.
+
+## Empty project direction — C7, October 18
+
+`GUI-PROJECT-EMPTY-ABOVE` passes its remaining Linux native empty-project
+leaf. The [retained screenshot](../../out/c7-project-empty-above-20261018/empty-project.png)
+shows the message box above the card and the instruction “Start a new
+conversation with ProjectMembershipProbe above”. Original fix `df86386aa`
+merged as `d7bfbb629`; its 14 translated direction strings need no further
+change. [Result and limits](../../out/c7-project-empty-above-20261018/result.json).
+
+The project route/test and all 14 direction strings match native source
+`d7de423c2`, passing gate base `6b7f42daf` and this branch base `23d0f3236`.
+That existing ONE `make verify` includes the project copy/order test and
+passes 3,513 app, 127 extension and 1,284 native tests, lint/types/guards and
+coverage floors. This evidence-only closure uses `git diff --check`; no
+repeated fixture, build or suite. Only English native empty-project rendering
+is claimed; other locale strings are source-checked. Windows, populated
+projects, model loading and inference are outside this leaf.
+
+Owner C7; branch `test/c7-project-empty-above-native-20261018`, worktree
+`/ai/gchat-worktrees/c7-project-empty-above-native-20261018`. Only small
+PNG/JSON/Markdown evidence remains. No new compute, app, booking, SSD root or
+donor custody was allocated. The original isolated native fixture was stopped
+06:52Z. Next: merge this closure and take the next open row under rule13.
+
+## Downloads initial inventory — C7, October 18
+
+`GUI-DOWNLOADS-LOADING-STATE` is fixed on
+`test/c7-downloads-loading-native-20261018` from `6b7f42daf`.
+Before the first successful Host inventory, Models → Downloads now withholds
+byte totals and empty-list claims. Checking remains visible while waiting;
+an initial failure shows the existing readable error and Refresh downloads.
+After a successful refresh, the real inventory and totals appear.
+
+Both regressions fail against unchanged source and pass with the fix:
+**50 focused Models/store tests**, affected ESLint and the matching
+frontend/Host/desktop build pass. ONE `make verify` passes:
+**3,513 app / 6 skipped, 127 extension, 1,284 native / 28 ignored**, lint
+(five existing warnings), types, quality guards and six critical coverage floors.
+Native Linux screenshots cover [pending](../../out/c7-downloads-loading-20261018/pending.png),
+[first failure](../../out/c7-downloads-loading-20261018/failure.png) and
+[recovery](../../out/c7-downloads-loading-20261018/recovery.png).
+The failure fixture pauses only its own detached private Host; a native
+Refresh click followed by resuming that Host recovers the confirmed empty
+inventory. Background polling remains enabled, so this does not attribute
+recovery exclusively to the click; the focused regression proves that button path.
+[Result and limits](../../out/c7-downloads-loading-20261018/result.json).
+
+Owner C7; worktree `/ai/gchat-worktrees/c7-downloads-loading-native-20261018`.
+Independent AppDir/HOME/XDG/runtime700, D-Bus/keyring and Xvfb ran on S1
+CPU88–95 booking3164. Owned processes stopped by verified PIDs; the disposable root
+`/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018` was removed.
+CPU88–95 returned08:53Z and booking3164 canceled.
+Read-only donors remain unchanged. Windows, model transfers, payload integrity
+and inference are outside this inventory leaf. Main `a7ab6dc02` was merged without rebase, retaining its adjacent failed-download
+recovery fix. The combined code passes **54 focused tests and affected ESLint**;
+the inventory rendering matches the native-tested build. No second full gate
+or native rerun. The temporary merge-check SSD copy was removed, booking3182 canceled and CPUs
+returned08:56Z. Next: merge the source/evidence branch.
 
 ## Benchmark plain intro — C7, October 18
 
@@ -60,6 +184,50 @@ only small evidence remains and the donor was unchanged. Windows, model load,
 benchmark execution, scoring, performance and later selector/restart controls
 are outside this intro leaf. The older scripted-navigation screenshot is
 supporting history only.
+
+## First-run model reasons — Gchat 3, October 18
+
+`GUI-FIRST-RUN-MODEL-REASONS` passes its remaining Linux native wording
+leaf. The actual **Hosts → Use selected graphics cards** model-choice path
+shows a recommended Qwen card with: “Fits your graphics card and free disk
+space. GInfer still checks the download and measures your hardware before it
+can start.” The inspected dark 1200×800
+[native screenshot](../../out/gchat3-first-run-model-reasons-20261018/model-reasons-wide.png)
+and [DOM](../../out/gchat3-first-run-model-reasons-20261018/model-reasons-dom.json)
+show the complete reason without clipping. The
+[final Host state](../../out/gchat3-first-run-model-reasons-20261018/host-final-sanitized.json)
+confirms a loaded catalog, zero downloads/instances and idle hardware
+measurement. Model choices
+were not saved and no download, Ensure, profiling or model start occurred.
+
+Original fix `5b0e37f16` merged as `dd62b4607`. The Host recommendation file
+is identical between passing gate `71abf1708` and native source `3928dda90`;
+its reason rendering is also unchanged in the 08:55Z main comparison.
+Original focused **17 PASS** and the retained ONE `make verify` are reused:
+**3,409 web/core, 127 extension, 1,267 Rust PASS**, six frontend skips and
+28 Rust ignores; lint, types and coverage floors PASS. This evidence-only
+closure uses `git diff --check`, without repeating the suites.
+
+Owner Gchat 3; branch `docs/gchat3-first-run-model-reasons-20261018`, worktree
+`/ai/gchat-worktrees/gchat3-first-run-model-reasons-20261018`. Frontend,
+debug Host and desktop were built from `3928dda90` on S1 using an independent
+copy of inactive RC dependencies, CPUs 72–79 and the socket-1 shared compile
+lock. Restoring generated icons omitted by the source archive allowed the
+failed desktop stage to resume. The private HOME/runtime700, D-Bus/keyring
+and Xvfb app used the read-only development LAN catalog and its own Host at
+`https://127.0.0.1:17543`. No GPU or native exclusive lock was held.
+
+The owned fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-model-reasons-20261018` stopped
+and CPUs 72–79 returned 09:05Z; booking3179 was canceled. Its build, app and
+private HOME were removed 09:06Z, releasing 48.84 GB of logical files. Only
+small evidence remains in
+[the result](../../out/gchat3-first-run-model-reasons-20261018/result.json).
+This qualifies development native wording only. Public/release catalog
+admission, launch-profile bounds, payload transfer, Engine execution and
+Windows are outside this leaf; the shared catalog and inactive donor remain
+unchanged.
+
 ## Missing saved-settings guidance — Gchat 3, October 18
 
 `GUI-PROFILE-MISSING-WORDING` passes its remaining Linux native leaf. With
@@ -136,6 +304,7 @@ The independent S1 private processes, forward, five stopped containers and
 `/media/ron/SSD_RAID/ai/tmp-c3-failed-download-wording-20261018` build/fixture root
 are removed; CPU80–87 returned **08:45Z**. Only small evidence remains.
 Source and regressions are merge-ready; no acceptance work remains.
+Evidence closure merged as `3928dda90`.
 
 ## Advanced launch-field labels recovery — C3, October 18
 
@@ -3070,7 +3239,8 @@ were unchanged (package SHA256
 No model start, GPU computation, Fleet authority change, Windows account change
 or release-wide qualification is claimed. Windows native UI remains unqualified.
 The earlier FRESH VM is OFF with original XML and its private stage removed.
-Next: coordinator review and merge of source and native evidence together.
+Source and native evidence merged as `01b14d5bd`. This replacement also closes
+the historical `GUI-NATIVE-SELECT-LOOK` row's remaining Light appearance check.
 
 ## Models tabs installed keyboard acceptance — C7, closed October 18
 
@@ -3852,6 +4022,32 @@ After you choose **Create** or **Save**, the button shows **Creating skill…**
 or **Saving skill…** until the request finishes. Wait for the dialog to close
 before using the saved skill. If saving fails, your entries stay in the dialog
 and the button becomes available so you can try again.
+
+Linux acceptance (`GUI-AGENT-SKILL-EDIT-TARGET-NATIVE-20261018`): with
+`lifecycle-probe` selected, opening a disposable skill’s **Skill actions → Edit
+skill** showed the disposable skill’s name, description and instructions. Save
+persisted its changed description and preserved its instructions. Reselecting
+`lifecycle-probe` showed its original instructions. The disposable skill was
+then uninstalled; all 17 saved records, 45 original `SKILL.md` files and two
+workspace inputs stayed byte unchanged, with the original skill inventory
+restored. Retained build `8f7d18f6f` matches the relevant source at `42d039f6e`;
+resources returned at 09:05Z. Evidence:
+[`out/gchat-agent-skill-edit-target-native-20261018/`](../../out/gchat-agent-skill-edit-target-native-20261018/).
+The source fix retains its 25 focused cases and ONE `make verify` PASS. Pending
+races retain source qualification; Windows was not exercised.
+
+Linux acceptance (`GUI-AGENT-SKILL-CREATE-RECOVERY-NATIVE-20261018`): a real
+permission error kept the Create dialog open with its name, description and
+instructions unchanged, and re-enabled Create. Restoring the owned directory's
+original permission and retrying in the same dialog saved the exact skill file.
+The disposable skill was then uninstalled; all 17 saved records, 45 original
+`SKILL.md` files, two workspace inputs and disabled-state bytes stayed unchanged.
+Retained build `8f7d18f6f` matches the relevant Create source at `a89302f19`;
+resources returned at 09:16Z. Evidence:
+[`out/gchat-agent-skill-create-recovery-native-20261018/`](../../out/gchat-agent-skill-create-recovery-native-20261018/).
+The source fix retains its four focused cases and corrected ONE `make verify`
+PASS. Pending dismissal and duplicate races retain source-test qualification;
+Windows was not exercised.
 
 ## Removing a custom skill
 

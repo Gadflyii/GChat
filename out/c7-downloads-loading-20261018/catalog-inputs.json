@@ -1,0 +1,27 @@
+{
+  "source_repository": "/ai/ginfer",
+  "source_commit": "5825c2e39062a0998fa42e989dc8e5de91da23d7",
+  "private_target": "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018/profile-catalogs",
+  "catalogs": [
+    {
+      "file": "linux-rtx3090-qwen38-groupwise-int-dflash2-q4.json",
+      "sha256": "521d6f5ca793f5a89bd2a1a22c129a0d35d9bdd6971fa92f7e15cd01cba36010",
+      "bytes": 19101
+    },
+    {
+      "file": "linux-rtx4090-qwen38-groupwise-int-dflash2-q4.json",
+      "sha256": "040af54a8e1885f595d93268df101e302a0adc99db589f92b4c8c57132486d9b",
+      "bytes": 22195
+    },
+    {
+      "file": "linux-rtx3090-qwen38-groupwise-int-dflash2-q4-vision.json",
+      "sha256": "0d84d625cbfbaf6642f96b89089e5a21cd1b97811b85262633363cd368921b28",
+      "bytes": 19015
+    },
+    {
+      "file": "linux-rtx4090-qwen38-groupwise-int-dflash2-q4-vision.json",
+      "sha256": "58603f767aa5b00d8181b139d4e62cc47e619e01133fb5d3c1186e4071110431",
+      "bytes": 19029
+    }
+  ]
+}

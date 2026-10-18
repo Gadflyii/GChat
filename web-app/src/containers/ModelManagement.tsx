@@ -128,6 +128,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const invalidGpuSelection = !hardwareReady || (selectedGpuUuids !== null &&
     (!selectedGpuUuids.length || selectedGpuUuids.some(id => !gpus.some(g => g.uuid === id))))
   const downloads = local ? localDownloads : snapshot?.model_management?.downloads ?? []
+  const downloadsChecked = !local || localDownloadsLoaded
   const managementAvailable = local || snapshot?.model_management?.version === 1
   const localProvider = providers.find(p => p.provider === 'ginfer')
   const localModels = localProvider?.models ?? []
@@ -375,8 +376,10 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
         {!managementAvailable && <p role="alert">Downloads are not available on this computer’s version of GInfer Host. Update GInfer on that computer, then reconnect in GInfer Hosts.</p>}
       </>}
       {tab === 'Downloads' && <>
-        <p className="text-sm text-muted-foreground">{formatModelBytes(partialBytes)} of unfinished downloads · {formatModelBytes(totalInstalled)} of downloaded models. Only one model downloads at a time on each computer.</p>
-        {!downloads.length && <p className="rounded-xl border p-6 text-center text-muted-foreground">{local && !localDownloadsLoaded && !localDownloadError ? 'Checking for downloads…' : 'No downloads on this computer yet. Choose Recommended to find a model.'}</p>}
+        <p className="text-sm text-muted-foreground">{downloadsChecked && <>{formatModelBytes(partialBytes)} of unfinished downloads · {formatModelBytes(totalInstalled)} of downloaded models. </>}Only one model downloads at a time on each computer.</p>
+        {!downloads.length && (downloadsChecked
+          ? <p className="rounded-xl border p-6 text-center text-muted-foreground">No downloads on this computer yet. Choose Recommended to find a model.</p>
+          : !localDownloadError && <p role="status" className="rounded-xl border p-6 text-center text-muted-foreground">Checking for downloads…</p>)}
         {downloads.map(job => {
           const recovery = downloadFailureRecovery(job.error)
           return <section key={job.id} className="space-y-2 rounded-xl border p-4"><div className="flex flex-wrap justify-between gap-2"><h2 className="font-medium">{plainModelName(job.release.name)}</h2><span className="text-sm text-muted-foreground">{downloadStatusLabel(job.status)}</span></div><progress aria-label={`${job.release.name} download`} className="h-2 w-full accent-primary" max={job.release.bytes} value={job.received} /><p className="font-mono text-xs tabular-nums">{formatModelBytes(job.received)} / {formatModelBytes(job.release.bytes)}{job.bytes_per_second > 0 ? ` · ${(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s · about ${Math.ceil((job.release.bytes - job.received) / job.bytes_per_second)} seconds left` : ''}</p>

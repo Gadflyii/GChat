@@ -14,10 +14,6 @@ describe('native checkbox and radio theme', () => {
     expect(css).toMatch(/input\[type='checkbox'\]:focus-visible,\s*input\[type='radio'\]:focus\s*\{[^}]*outline-ring/)
   })
 
-  it('drops the spacing under the summary of a collapsed details element', () => {
-    expect(css).toMatch(/details:not\(\[open\]\) > summary\s*\{[^}]*margin-block-end: 0/)
-  })
-
   it('themes native progress bars and animates an indeterminate one, honouring reduced motion', () => {
     expect(css).toMatch(/progress::-webkit-progress-value\s*\{[^}]*background-color: var\(--primary\)/)
     expect(css).toMatch(/progress:not\(\[value\]\)\s*\{[^}]*animation: native-progress-indeterminate/)
