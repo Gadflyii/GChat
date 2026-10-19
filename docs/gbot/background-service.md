@@ -162,3 +162,25 @@ case names. The test container is retired and CPU booking 644 cancelled. This
 candidate owns no build copy or live service; it reused the accepted Cargo cache.
 Mock lifetime/recovery acceptance is complete. Physical sleep and model-backed
 scheduled dispatch remain release qualification, rather than claims of this gate.
+
+## Windows sign-in startup: native registration acceptance — core, October 19
+
+`GBOT-WINDOWS-AUTOSTART-FALSE-SUCCESS-20261016` passes its native registration and
+disable legs on the laptop's Windows 11 profile (build 26200) with the installed
+GChat 2.0.42, driven through Windows UI Automation on the real **Settings,
+Integrations, Gbot integration** switch:
+
+- **On** wrote exactly one value, `GChat-Gbot-<root hash>`, under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`: the installed `gchat.exe`
+  with `--gbot-service --data-folder C:\Users\Ron\AppData\Roaming\GChat\data
+  --resources \\?\C:\Users\Ron\AppData\Local\GChat`.
+- **Off** removed it; **On** again restored the identical value. The five unrelated
+  Run entries were untouched at every step.
+- Running that value as the sign-in does (`cmd` start) brought the service up with the
+  same arguments and it published `gbot/service.json`.
+- Cleanup left the switch Off, no GChat Run entry, no process and no stale discovery file.
+
+[Result](../../out/core-gbot-win-autostart-20261019/result.json). Not done: an actual
+Windows sign-out and sign-in, which would end the laptop's interactive session, so the
+sign-in leg is covered by executing the registered command. Windows policies can still
+delay or disable startup entries. The 4090 box was not used (its WSL was down).
