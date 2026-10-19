@@ -27,7 +27,12 @@ export type SubAgentResult = {
   status: SubAgentOutcome
   result?: string
   error?: string
+  /** Guidance for the parent model, such as a stop the user chose. */
+  note?: string
 }
+
+export const STOPPED_BY_USER_NOTE =
+  'The user stopped this sub-agent. Do not dispatch it again unless the user asks.'
 
 export function buildSubAgentDispatchTool(): Record<string, Tool> {
   return {
@@ -37,7 +42,7 @@ export function buildSubAgentDispatchTool(): Record<string, Tool> {
         'Use this whenever the user asks you to dispatch, delegate to, or use agents or sub-agents, or when a request splits into independent parts. ' +
         "Each sub-agent is a General Agent with this conversation's model, tools, permissions and folders. " +
         'A sub-agent cannot see this conversation, so each task must be complete on its own: include file names, details and the expected answer. ' +
-        'The user sees every sub-agent working in the chat and can stop any of them.',
+        'The user sees every sub-agent working in the chat and can stop any of them; a stopped sub-agent was stopped on purpose, so do not dispatch it again unless the user asks.',
       inputSchema: jsonSchema({
         type: 'object',
         properties: {
@@ -121,6 +126,7 @@ export function savedSubAgentResults(output: unknown): SubAgentResult[] {
         status: value.status,
         ...(typeof value.result === 'string' ? { result: value.result } : {}),
         ...(typeof value.error === 'string' ? { error: value.error } : {}),
+        ...(typeof value.note === 'string' ? { note: value.note } : {}),
       },
     ]
   })

@@ -106,7 +106,7 @@ describe('Chat sub-agent cards', () => {
     expect(within(card(briefs[0].title)).getByRole('status')).toHaveTextContent('Waiting for a free model slot')
     expect(within(card(briefs[0].title)).getByText(briefs[0].task)).toBeInTheDocument()
     const working = card(briefs[1].title)
-    expect(within(working).getByRole('status')).toHaveTextContent('Working · step 1')
+    expect(within(working).getByRole('status')).toHaveTextContent('Working · 1 step done')
     expect(within(working).getByRole('list', { name: 'Recent steps' })).toHaveTextContent('Reading file · notes-2.txt')
     expect(within(card(briefs[2].title)).getByRole('status')).toHaveTextContent('Waiting for your approval')
     // The parent placeholder spinner yields to the cards while they run.

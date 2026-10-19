@@ -19,7 +19,7 @@ import {
   shouldSendToolFollowUp,
 } from '../execute-chat-tool-calls'
 import { ModelFactory } from '../model-factory'
-import { savedSubAgentResults } from '../sub-agents'
+import { savedSubAgentResults, STOPPED_BY_USER_NOTE } from '../sub-agents'
 
 type StreamPart = Record<string, unknown>
 
@@ -231,6 +231,10 @@ describe('Chat sub-agent dispatch', () => {
       { status: 'done', result: 'Summary of notes-1.txt', error: undefined },
       { status: 'failed', result: undefined, error: 'notes-2.txt was not found' },
       { status: 'stopped', result: undefined, error: undefined },
+    ])
+    // The parent model learns that a stop was the user's choice, not a failure to retry.
+    expect(savedSubAgentResults(result.content).map(({ note }) => note)).toEqual([
+      undefined, undefined, STOPPED_BY_USER_NOTE,
     ])
   })
 

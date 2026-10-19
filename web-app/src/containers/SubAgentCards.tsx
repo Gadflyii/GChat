@@ -138,7 +138,7 @@ function SubAgentCard({
             <span role="status" className="text-xs text-muted-foreground">
               {label}
               {steps.length > 0 && active
-                ? ` · step ${steps.length}`
+                ? ` · ${steps.length} ${steps.length === 1 ? 'step' : 'steps'} done`
                 : ''}
             </span>
           </div>

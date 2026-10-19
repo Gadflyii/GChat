@@ -14,9 +14,10 @@ title: "Dispatch Chat sub-agents through spawn and wait"
 - **Decision:** Chat gets one `agent_dispatch` tool taking 1–8 `{title, task}`
   briefs. The Chat runtime starts every brief at once through the existing
   `agent_spawn` capability, waits for each through `agent_wait`, and returns
-  `{agents: [{title, runId, status, result, error}]}` to the parent model in
-  brief order. The tool is offered only while both `agent_spawn` and
-  `agent_wait` are enabled, so per-conversation tool switches still apply.
+  `{agents: [{title, runId, status, result, error, note}]}` to the parent
+  model in brief order; a stopped entry notes that the user stopped it. The
+  tool is offered only while both `agent_spawn` and `agent_wait` are enabled,
+  so per-conversation tool switches still apply.
   Each worker carries a `subAgent` attribution (dispatch tool call, index,
   title, task) and renders as a sub-agent card inside the dispatching message.
 - **Why this shape:** No Rust, service or event change. Workers keep the

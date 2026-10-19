@@ -18,6 +18,7 @@ import { useAppState } from '@/hooks/useAppState'
 import { capabilitySchema, capabilitySearchResults } from './custom-chat-transport-helpers'
 import {
   parseSubAgentBriefs,
+  STOPPED_BY_USER_NOTE,
   SUBAGENT_DISPATCH_TOOL,
   subAgentOutcome,
   type SubAgentBrief,
@@ -233,6 +234,8 @@ async function runSubAgent(
       title: brief.title, runId, status,
       ...(result ? { result } : {}),
       ...(error ? { error } : {}),
+      // Only the user's per-card Stop ends one sub-agent while its parent runs.
+      ...(status === 'stopped' ? { note: STOPPED_BY_USER_NOTE } : {}),
     }
   } catch (error) {
     if (signal.aborted || (error as Error).name === 'AbortError') throw error
