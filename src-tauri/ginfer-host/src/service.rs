@@ -1525,9 +1525,7 @@ impl Host {
         let registered = match metadata.identity.model_id.as_str() {
             "qwen3.8-27b" => matches!(metadata.identity.weights_id.as_str(),
                 "groupwise-int-dflash2-q4" | "groupwise-int-dflash2-q4-g32"
-                | "smol-q2g64-dflash2-q4"
-                | "smol-q2g64-fullattn-gate-value-l51down-q4-dflash2-q4"
-                | "smol-q2g64-l51down-q4-dflash2-q4"
+                | "smol-q2g64-mix-dflash2-q4"
                 | "groupwise-int-dflash2-q4w8" | "groupwise-int-dflash2-w8"
                 | "nvfp4" | "nvfp4-dflash2-q4" | "nvfp4-dflash2-q4w8"
                 | "nvfp4-dflash2-w8" | "nvfp4-dflash2-nvfp4"),
@@ -1535,7 +1533,7 @@ impl Host {
                 "groupwise-int" | "groupwise-int-dflash-q4" | "groupwise-int-dflash-q4-g32"
                 | "groupwise-int-dflash-q4w8" | "groupwise-int-dflash-w8"
                 | "nvfp4" | "nvfp4-dflash-q4w8" | "nvfp4-dflash-w8"
-                | "nvfp4-dflash-nvfp4" | "smol-q2g64-dflash-q4"),
+                | "nvfp4-dflash-nvfp4" | "smol-q2g64-mix-dflash-q4"),
             "qwen3.8-flash-next" => matches!(metadata.identity.weights_id.as_str(),
                 "groupwise-int" | "smol-q2g64" | "nvfp4"),
             _ => false,

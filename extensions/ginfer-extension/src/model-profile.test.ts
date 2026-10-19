@@ -50,7 +50,7 @@ describe('ginferModelProfile', () => {
     'nvfp4-dflash-q4w8',
     'nvfp4-dflash-w8',
     'nvfp4-dflash-nvfp4',
-    'smol-q2g64-dflash-q4',
+    'smol-q2g64-mix-dflash-q4',
   ])('preserves the registered Muse identity %s', (weights) => {
     expect(ginferModelProfile(`muse-glimmer-30b/${weights}`)?.family).toBe('muse-glimmer-30b')
   })
@@ -60,9 +60,7 @@ describe('ginferModelProfile', () => {
     'groupwise-int-dflash2-q4-g32',
     'groupwise-int-dflash2-q4w8',
     'groupwise-int-dflash2-w8',
-    'smol-q2g64-dflash2-q4',
-    'smol-q2g64-l51down-q4-dflash2-q4',
-    'smol-q2g64-fullattn-gate-value-l51down-q4-dflash2-q4',
+    'smol-q2g64-mix-dflash2-q4',
     'nvfp4',
     'nvfp4-dflash2-q4',
     'nvfp4-dflash2-q4w8',
