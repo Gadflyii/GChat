@@ -1,0 +1,74 @@
+{
+ "row": "GUI-CHECKBOX-THEME",
+ "engine": "Microsoft Edge 155.0.4283.62 (Chromium, the WebView2 engine) headless on the 4090 Windows box, native Windows rendering",
+ "scope": "production-built web-app CSS with the Workspace service checkbox and Desktop connection method radio markup; not the Tauri window",
+ "before": {
+  "light": {
+   "page_bg": [
+    250,
+    251,
+    252
+   ],
+   "c-off": {
+    "max_edge_contrast_vs_bg": 1.22
+   },
+   "c-off-dis": {
+    "max_edge_contrast_vs_bg": 1.1
+   },
+   "r-off": {
+    "max_edge_contrast_vs_bg": 3.86
+   }
+  },
+  "dark": {
+   "page_bg": [
+    8,
+    9,
+    11
+   ],
+   "c-off": {
+    "max_edge_contrast_vs_bg": 1.52
+   },
+   "c-off-dis": {
+    "max_edge_contrast_vs_bg": 1.18
+   },
+   "r-off": {
+    "max_edge_contrast_vs_bg": 4.97
+   }
+  }
+ },
+ "after": {
+  "light": {
+   "page_bg": [
+    250,
+    251,
+    252
+   ],
+   "c-off": {
+    "max_edge_contrast_vs_bg": 6.13
+   },
+   "c-off-dis": {
+    "max_edge_contrast_vs_bg": 2.17
+   },
+   "r-off": {
+    "max_edge_contrast_vs_bg": 3.86
+   }
+  },
+  "dark": {
+   "page_bg": [
+    8,
+    9,
+    11
+   ],
+   "c-off": {
+    "max_edge_contrast_vs_bg": 6.19
+   },
+   "c-off-dis": {
+    "max_edge_contrast_vs_bg": 2.31
+   },
+   "r-off": {
+    "max_edge_contrast_vs_bg": 4.97
+   }
+  }
+ },
+ "note": "max edge contrast is the highest contrast between any pixel of the box area and the page background; unchecked checkbox boundary was 1.22 light / 1.52 dark (WCAG 1.4.11 asks 3:1)"
+}

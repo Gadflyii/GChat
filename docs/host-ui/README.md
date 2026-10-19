@@ -7008,3 +7008,22 @@ containers were removed (27,822,125,840 logical bytes); the dependency donor
 was preserved. Small evidence: `out/c7-host-name-save-result-20261018/`.
 No Host protocol, model, inference, native GUI rename or Windows qualification
 is changed or claimed. Next: reviewed merge, then continue the owned GUI queue.
+
+## Unchecked checkbox visibility and Windows rendering — core, October 19
+
+`GUI-CHECKBOX-THEME` found a real defect while checking the Workspace controls on
+Windows: the themed unchecked checkbox used the hairline `--input` tint for its
+border, about **1.2:1 in Light and 1.5:1 in Dark** against the page, so an
+unchecked box was nearly invisible (and an unchecked disabled box more so). The
+border now uses `--muted-foreground` (about 6:1 in both themes); checked fill, tick,
+focus ring, disabled opacity and radios are unchanged.
+
+Windows check: Microsoft Edge 155 (the WebView2 Chromium engine) on the 4090 Windows
+box rendered the production-built CSS with the Workspace service checkboxes and the
+Desktop connection method radios, Light and Dark, checked, unchecked and disabled.
+Measured unchecked boundary contrast: checkbox 1.22→6.13 (Light) and 1.52→6.19 (Dark);
+radios were already 3.86 and 4.97. Images and numbers:
+[before/after](../../out/core-checkbox-theme-20261019/result.json). This is the
+shipped stylesheet in the WebView2 engine, not the Tauri window, and no signed-in
+Workspace session; those two limits remain. Focused test
+`native-control-theme.test.ts` pins the border; ONE `make verify` is on the branch.
