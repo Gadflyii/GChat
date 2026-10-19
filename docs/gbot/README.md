@@ -4265,3 +4265,22 @@ you". Duplicates (ignoring case) are not stored twice. Live check in the Debian 
 Checks: Rust cases cover address parsing and spoofing (`@` credentials, look-alike hosts), allowed/blocked
 precedence, the blocked-tab lifecycle, rule and memory persistence and bounds; web cases cover both cards and the new
 approval wording.
+
+## Windows Cua runtime ships as one zip (WINDOWS-INSTALLER-NSIS-2GB)
+
+With the loose Cua runtime (about 153 MB, 6,200 files) in `resources/gbot`, the Windows payload passed NSIS's 2 GB limit
+and `makensis` stopped with `error mmapping file`; only an MSI could be built, while the updater and
+`windows/hooks.nsh` need NSIS. The release builder now zips the verified runtime into `resources/gbot/runtime.zip`
+(54 MB) and writes `runtime-zip.json` (`zip_sha256`, `zip_bytes`). Measured on the Windows build PC: NSIS fails
+with the loose tree, passes with no runtime (1,484,836,327 B) and passes with the zip (1,536,880,026 B).
+
+On the first Gbot start `core/gbot/runtime_pack.rs` checks the zip's SHA-256 and size, unpacks it into
+`<data>/gbot/runtime/<zip hash>.unpacking`, copies Bun beside it and renames the folder into place only when complete,
+so a crash or a full disk never leaves a half-unpacked runtime (a leftover `.unpacking` folder is removed on the next
+start). A marker records the zip hash and the app version; either changing unpacks again, and older unpacked
+runtimes are deleted. A damaged zip ("Reinstall GChat to repair it") or an unpack failure ("Gbot could not unpack its
+runtime: … Free up disk space or check that GChat may write to its data folder, then start Gbot again.") surfaces as
+the typed Bot unavailable message. An upgrade from an NSIS install that still has the loose tree works because the
+new installer replaces `resources/gbot` and the app reads only the unpacked copy; a build without the zip (Linux, or
+any loose tree) is used as installed. Four Rust cases cover unpack-once and reuse, version and zip changes, a damaged
+zip and failed or interrupted unpacking.

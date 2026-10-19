@@ -64,6 +64,7 @@ Write-Host "  Selected $($profileIds.Count) Windows profiles from $($catalogPath
 # prerequisites, copying source or writing resources. ValidateInputsOnly uses
 # this same complete input gate.
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+Add-Type -AssemblyName System.IO.Compression
 function Read-GinferRuntimeArchive {
     param([string]$Path)
     $archive = [IO.Compression.ZipFile]::OpenRead($Path)
@@ -560,18 +561,37 @@ if ($LASTEXITCODE -ne 0) { Write-Host 'copy:assets:tauri failed' -ForegroundColo
 Write-Step 'Staging bundled Gbot Cua runtime'
 # Recheck after prerequisites and native mirroring; copy only manifest-covered
 # runtime files. The independently staged guest assets remain untouched.
+# The runtime ships as ONE zip (the loose tree pushes the NSIS payload past its
+# 2 GB limit); the app verifies and unpacks it into the data folder on first Gbot start.
 $gbotManifest = Read-GbotCuaRuntime $GbotCuaRuntime
-New-Item -ItemType Directory -Path $gbotResourceDir -Force | Out-Null
-Get-ChildItem -LiteralPath $gbotResourceDir -Force | Where-Object { $_.Name -ine 'assets' } |
-    Remove-Item -Recurse -Force
-foreach ($file in @($gbotManifest.files)) {
-    $destination = Join-Path $gbotResourceDir $file.path
-    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $GbotCuaRuntime $file.path) -Destination $destination -Force
-}
-Copy-Item -LiteralPath (Join-Path $GbotCuaRuntime 'runtime.json') -Destination (Join-Path $gbotResourceDir 'runtime.json') -Force
-$null = Read-GbotCuaRuntime $gbotResourceDir
-Write-Host "  Staged $(@($gbotManifest.files).Count) verified Windows Cua runtime files."
+$gbotStage = Join-Path ([IO.Path]::GetTempPath()) ('gbot-cua-stage-' + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $gbotStage -Force | Out-Null
+try {
+    foreach ($file in @($gbotManifest.files)) {
+        $destination = Join-Path $gbotStage $file.path
+        New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $GbotCuaRuntime $file.path) -Destination $destination -Force
+    }
+    Copy-Item -LiteralPath (Join-Path $GbotCuaRuntime 'runtime.json') -Destination (Join-Path $gbotStage 'runtime.json') -Force
+    $null = Read-GbotCuaRuntime $gbotStage
+    New-Item -ItemType Directory -Path $gbotResourceDir -Force | Out-Null
+    Get-ChildItem -LiteralPath $gbotResourceDir -Force | Where-Object { $_.Name -ine 'assets' } |
+        Remove-Item -Recurse -Force
+    $zipPath = Join-Path $gbotResourceDir 'runtime.zip'
+    $zip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        $rootLength = $gbotStage.TrimEnd('\').Length + 1
+        foreach ($item in Get-ChildItem -LiteralPath $gbotStage -Recurse -File -Force) {
+            $entryName = $item.FullName.Substring($rootLength).Replace('\', '/')
+            $null = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $item.FullName, $entryName, [IO.Compression.CompressionLevel]::Optimal)
+        }
+    } finally { $zip.Dispose() }
+} finally { Remove-Item -LiteralPath $gbotStage -Recurse -Force -ErrorAction SilentlyContinue }
+$zipFile = Get-Item -LiteralPath $zipPath
+$zipSha = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+[ordered]@{ zip_sha256 = $zipSha; zip_bytes = $zipFile.Length } | ConvertTo-Json -Compress |
+    Set-Content -LiteralPath (Join-Path $gbotResourceDir 'runtime-zip.json') -Encoding ASCII
+Write-Host "  Staged $(@($gbotManifest.files).Count) verified Windows Cua runtime files as runtime.zip ($($zipFile.Length) bytes)."
 
 # ── Build CLI (release) ───────────────────────────────────────
 Write-Step 'Build gchat-cli (release)'

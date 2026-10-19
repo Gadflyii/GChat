@@ -11,6 +11,7 @@ use tokio::sync::Mutex;
 mod background;
 mod cloud;
 mod inference;
+mod runtime_pack;
 #[cfg(any(windows, test))]
 mod login_windows;
 #[cfg(target_os = "linux")]

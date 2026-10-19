@@ -26,6 +26,12 @@ fn packaged_executor(resources: &Path) -> Result<Option<ExecutorProcesses>, Star
     Ok(processes)
 }
 
+/// Unpacks the zipped Windows Cua runtime into the data folder when the installer shipped it that way.
+fn unpacked_resources(resources: &Path, root: &Path) -> Result<PathBuf, StartupError> {
+    super::runtime_pack::ensure(resources, root, env!("CARGO_PKG_VERSION"))
+        .map_err(|detail| StartupError::new(StartupFailure::BotUnavailable, detail))
+}
+
 fn executor_processes(resources: &Path) -> Result<Option<ExecutorProcesses>, StartupError> {
     match (
         std::env::var_os("GBOT_CUA_PYTHON"),
@@ -182,6 +188,12 @@ async fn serve(
             .await
             .map_err(api_startup_error)?;
     }
+    let resources = {
+        let (installed, data) = (resources.clone(), root.clone());
+        tokio::task::spawn_blocking(move || unpacked_resources(&installed, &data))
+            .await
+            .map_err(|_| StartupError::new(StartupFailure::BotUnavailable, "Gbot could not unpack its runtime."))??
+    };
     if let Some(processes) = executor_processes(&resources)? {
         api = api
             .with_executor(directory.join("tasks"), processes)
