@@ -474,7 +474,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
         ? <ModelProblem message="Could not prepare GInfer to run models on this computer. Restart GChat to try again. If this keeps happening, reinstall GChat." detail={resources.error} />
         : <p role="status" className="rounded border p-3 text-sm">Preparing GInfer to run models on this computer…</p>)}
       <p role="status" aria-label="Model load status" aria-live="polite" aria-atomic="true" className={pendingLoad || loadResult ? 'rounded border p-3 text-sm font-medium' : 'sr-only'}>{pendingLoad
-        ? cancellingLoad ? 'Cancelling model startup…' : loadStatusUnavailable ? 'Cannot check progress right now. GChat is still waiting for the model to finish loading.' : loadProgress?.status === 'ready' ? 'The model is loaded. Finishing up…' : loadResult && !loadProgress ? loadResult : loadPhaseLabels[loadProgress?.phase ?? 'preparing']
+        ? cancellingLoad ? 'Cancelling model startup…' : loadStatusUnavailable ? 'Cannot check progress right now. GChat is still waiting for the model to finish loading.' : loadProgress?.status === 'ready' ? 'The model is loaded. Finishing up…' : loadResult ? loadResult : loadPhaseLabels[loadProgress?.phase ?? 'preparing']
         : loadResult}</p>
       {pendingLoad && <div className="space-y-2 rounded border p-3 text-sm">
         {loadProgress?.detail && <details className="text-muted-foreground"><summary className="cursor-pointer">Startup details</summary><p className="mt-2 whitespace-pre-wrap break-words">{loadProgress.detail}</p></details>}
