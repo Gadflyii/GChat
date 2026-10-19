@@ -366,62 +366,11 @@ mod windows_native_admission {
     };
     use windows::{
         core::{Interface, BOOL, HSTRING, PCWSTR, PWSTR},
-        Win32::System::{
-            StationsAndDesktops::{
-                CloseDesktop, CreateDesktopW, GetThreadDesktop, DESKTOP_CONTROL_FLAGS,
-                DESKTOP_CREATEMENU, DESKTOP_CREATEWINDOW, DESKTOP_ENUMERATE, DESKTOP_READOBJECTS,
-                DESKTOP_WRITEOBJECTS, HDESK,
-            },
-            Threading::GetCurrentThreadId,
-        },
+        Win32::System::{StationsAndDesktops::GetThreadDesktop, Threading::GetCurrentThreadId},
     };
 
-    const FIXTURE_TEST: &str = "core::webview_security::windows_native_admission::windows_private_desktop_enforces_frame_and_command_admission";
+    const FIXTURE_TEST: &str = "core::webview_security::windows_native_admission::windows_hidden_window_enforces_frame_and_command_admission";
     const CHILD_RECEIPT: &str = "GCHAT_WINDOWS_NATIVE_ADMISSION_CHILD_RECEIPT";
-
-    struct PrivateDesktop {
-        owned: Option<HDESK>,
-    }
-
-    impl PrivateDesktop {
-        fn create(name: &str) -> Result<Self, String> {
-            unsafe {
-                // Associate the owner with its existing desktop before creating
-                // another one. Only the spawned GUI thread attaches to it.
-                GetThreadDesktop(GetCurrentThreadId()).map_err(|e| e.to_string())?;
-                let owned = CreateDesktopW(
-                    &HSTRING::from(name),
-                    PCWSTR::null(),
-                    None,
-                    DESKTOP_CONTROL_FLAGS(0),
-                    DESKTOP_CREATEWINDOW.0
-                        | DESKTOP_CREATEMENU.0
-                        | DESKTOP_READOBJECTS.0
-                        | DESKTOP_WRITEOBJECTS.0
-                        | DESKTOP_ENUMERATE.0,
-                    None,
-                )
-                .map_err(|e| e.to_string())?;
-                Ok(Self { owned: Some(owned) })
-            }
-        }
-
-        fn close(&mut self) -> Result<(), String> {
-            if let Some(owned) = self.owned {
-                unsafe {
-                    CloseDesktop(owned).map_err(|e| e.to_string())?;
-                }
-                self.owned = None;
-            }
-            Ok(())
-        }
-    }
-
-    impl Drop for PrivateDesktop {
-        fn drop(&mut self) {
-            let _ = self.close();
-        }
-    }
 
     struct NativeInitLogger;
 
@@ -607,7 +556,7 @@ const send = data => window.chrome.webview.postMessage(JSON.stringify({fixture:m
 if (location.pathname === '/logs') {
   send({type:'app-route',href:location.href});
 } else {
-  const bounded = p => Promise.race([p,new Promise(r=>setTimeout(()=>r({kind:'timeout'}),6500))]);
+  const bounded = (p,ms=6500) => Promise.race([p,new Promise(r=>setTimeout(()=>r({kind:'timeout'}),ms))]);
   const call = (command,payload) => bounded(window.__TAURI_INTERNALS__.invoke(command,payload).then(value=>({kind:'success',value}),error=>({kind:'rejected',error:String(error)})));
   // Tauri answers postMessage IPC by evaluating runCallback in this top
   // document. Record every answer addressed to a callback this document did
@@ -623,11 +572,13 @@ if (location.pathname === '/logs') {
     const mainAsset=await bounded(fetch(m.asset).then(r=>r.text()).then(value=>({kind:'success',value}),error=>({kind:'rejected',error:String(error)})));
     const frame=document.createElement('iframe');
     frame.setAttribute('sandbox','allow-scripts');
+    // A hidden page aligns timers to one second; leave the preview's own
+    // four-second bounds room to report.
     const preview=bounded(new Promise(resolve=>addEventListener('message',function receipt(e) {
       if(e.source===frame.contentWindow && e.origin==='null' && e.data?.fixture===m.fixture && e.data.type==='preview') {
         removeEventListener('message',receipt); resolve({...e.data.result,eventOrigin:e.origin});
       }
-    })));
+    })),15000);
     frame.src=m.preview; document.body.append(frame);
     const child=await preview;
     // Resource requests use the real native filter. A native observer, rather
@@ -989,7 +940,9 @@ if (location.pathname === '/logs') {
             let config = tauri::utils::config::WindowConfig {
                 label: "main".into(),
                 title: "Private GChat native admission".into(),
-                visible: true,
+                // Hidden and unfocused: nothing appears on, or takes input
+                // from, the host desktop.
+                visible: false,
                 focus: false,
                 data_directory: None,
                 ..Default::default()
@@ -1074,10 +1027,13 @@ if (location.pathname === '/logs') {
         Ok(root)
     }
 
-    /// Run this test binary again with the private desktop as its process
-    /// desktop. WebView2 browser processes inherit the process desktop, not a
-    /// thread desktop, and cannot host into a window on another desktop.
-    fn run_on_private_desktop(desktop: &str, receipt: &std::path::Path) -> Result<u32, String> {
+    /// Run this test binary again as the fixture process. WebView2 keeps its
+    /// UUID user-data folder open until that process exits, so the parent
+    /// removes it afterwards. A private Win32 desktop cannot host WebView2:
+    /// the pinned runtime starts its browser process through explorer.exe on
+    /// the default desktop (observed on the laptop, 0x80070578), so the
+    /// fixture window stays hidden and unfocused instead.
+    fn run_fixture_process(receipt: &std::path::Path) -> Result<u32, String> {
         use std::os::windows::io::AsRawHandle;
         use windows::Win32::{
             Foundation::{
@@ -1096,7 +1052,6 @@ if (location.pathname === '/logs') {
         .encode_utf16()
         .chain(Some(0))
         .collect();
-        let mut desktop: Vec<u16> = desktop.encode_utf16().chain(Some(0)).collect();
         let stdout = HANDLE(std::io::stdout().as_raw_handle());
         let stderr = HANDLE(std::io::stderr().as_raw_handle());
         for handle in [stdout, stderr] {
@@ -1105,7 +1060,6 @@ if (location.pathname === '/logs') {
         }
         let startup = STARTUPINFOW {
             cb: std::mem::size_of::<STARTUPINFOW>() as u32,
-            lpDesktop: PWSTR(desktop.as_mut_ptr()),
             dwFlags: STARTF_USESTDHANDLES,
             hStdOutput: stdout,
             hStdError: stderr,
@@ -1128,7 +1082,7 @@ if (location.pathname === '/logs') {
             )
         };
         std::env::remove_var(CHILD_RECEIPT);
-        created.map_err(|e| format!("Could not start fixture on private desktop: {e}"))?;
+        created.map_err(|e| format!("Could not start fixture process: {e}"))?;
         unsafe {
             let _ = CloseHandle(process.hThread);
             let waited = WaitForSingleObject(process.hProcess, 90_000);
@@ -1142,26 +1096,25 @@ if (location.pathname === '/logs') {
                 .map_err(|e| e.to_string());
             let _ = CloseHandle(process.hProcess);
             if waited != WAIT_OBJECT_0 {
-                return Err("Private-desktop fixture process timed out".into());
+                return Err("Fixture process timed out".into());
             }
             code
         }
     }
 
     #[test]
-    #[ignore = "Requires an explicitly booked Windows host; creates a private Win32 desktop and removes UUID browser data"]
-    fn windows_private_desktop_enforces_frame_and_command_admission() {
+    #[ignore = "Requires an explicitly booked Windows host; opens one hidden unfocused window and removes UUID browser data"]
+    fn windows_hidden_window_enforces_frame_and_command_admission() {
         if let Some(receipt) = std::env::var_os(CHILD_RECEIPT) {
-            // Child: this process, and the WebView2 processes it starts, run
-            // on the private desktop the parent created. An early failure
-            // keeps the identifier-only receipt for the parent's cleanup.
+            // Child: the fixture process. An early failure keeps the
+            // identifier-only receipt for the parent's cleanup.
             eprintln!(
                 "GCHAT_WINDOWS_NATIVE_ADMISSION_DESKTOP {}",
                 current_desktop()
             );
             let outcome = run_fixture().unwrap_or_else(|error| panic!("{error}"));
             std::fs::write(receipt, outcome.cleanup.to_string())
-                .expect("Could not write private-desktop cleanup receipt");
+                .expect("Could not write fixture cleanup receipt");
             assert!(outcome.result.is_ok(), "{}", outcome.result.unwrap_err());
             return;
         }
@@ -1169,11 +1122,7 @@ if (location.pathname === '/logs') {
         let uuid = uuid::Uuid::new_v4().simple().to_string();
         let receipt = root.join(format!("gchat-native-admission-receipt-{uuid}.json"));
         assert!(!receipt.exists(), "Refusing existing fixture receipt");
-        let name = format!("gchat-native-admission-{uuid}");
-        let mut desktop =
-            PrivateDesktop::create(&name).expect("Could not create private fixture desktop");
-        let child = run_on_private_desktop(&name, &receipt);
-        let desktop_cleanup = desktop.close();
+        let child = run_fixture_process(&receipt);
         let receipt_value = std::fs::read_to_string(&receipt)
             .ok()
             .and_then(|text| serde_json::from_str::<Value>(&text).ok());
@@ -1194,18 +1143,14 @@ if (location.pathname === '/logs') {
             Some(value) if value.get("inputs").is_some() => value["inputs"].clone(),
             _ => json!("fixture exited before cleanup receipt"),
         };
-        let mut cleanup = json!({"privateData":data_cleanup.as_ref().err(),"inputs":inputs,"paths":private.as_ref().map(|p| p.paths.clone()).unwrap_or_default()});
-        cleanup["desktop"] = json!(desktop_cleanup.as_ref().err());
+        let cleanup = json!({"privateData":data_cleanup.as_ref().err(),"inputs":inputs,"paths":private.as_ref().map(|p| p.paths.clone()).unwrap_or_default()});
         println!("GCHAT_WINDOWS_NATIVE_ADMISSION_CLEANUP {cleanup}");
         let result = child
             .and_then(|exit| match exit {
                 0 => Ok(()),
-                exit => Err(format!(
-                    "Private-desktop fixture process failed with exit {exit}"
-                )),
+                exit => Err(format!("Fixture process failed with exit {exit}")),
             })
             .and(data_cleanup)
-            .and(desktop_cleanup)
             .and(receipt_cleanup);
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
