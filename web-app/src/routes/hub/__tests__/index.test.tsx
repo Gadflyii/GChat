@@ -777,7 +777,7 @@ describe('host-scoped Models', () => {
     mocks.switchModel.mockRejectedValue(Object.assign(new Error('x'), { code: 'no_qualified_profile' }))
     mocks.localSnapshot = { host_id: 'local-host', gpus: [], models: [], instances: [] }
     mocks.command.mockImplementation(async action => {
-      if (action === 'snapshot') return { host_id: 'local-host', gpus: [{ uuid: 'gpu-1', name: 'GPU', memory_mib: 1 }], models: [{ id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'other', weights_id: 'w' }, tp_size: 1 } }], instances: [] }
+      if (action === 'snapshot') return { host_id: 'local-host', gpus: [{ uuid: 'gpu-1', name: 'GPU', memory_mib: 1 }], models: [{ id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'other', weights_id: 'w' }, tp_size: 1 } }], hardware_profile: { status: 'completed', available: true, gpu_uuids: ['gpu-1'] }, instances: [] }
       if (action === 'quote') throw new Error('Not enough graphics memory.')
       return []
     })
