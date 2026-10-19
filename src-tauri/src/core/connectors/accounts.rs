@@ -2526,6 +2526,83 @@ mod tests {
         );
     }
 
+    struct CountingVault {
+        inner: MemoryVault,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+    impl Vault for CountingVault {
+        fn get(&self, key: &str) -> Result<Option<String>, String> {
+            self.calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.inner.get(key)
+        }
+        fn set(&self, key: &str, value: &str) -> Result<(), String> {
+            self.calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.inner.set(key, value)
+        }
+        fn delete(&self, key: &str) -> Result<(), String> {
+            self.calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.inner.delete(key)
+        }
+    }
+
+    // GCHAT-KEYRING-PROMPT-AT-LAUNCH and GCHAT-WORKSPACE-SIGNIN-RESULT: a saved
+    // account is shown, selected and resolved from metadata alone after a restart.
+    // The credential store is opened only when a token is actually needed.
+    #[tokio::test]
+    async fn reopened_saved_accounts_display_and_resolve_without_credential_access() {
+        let (directory, state, vault) = fixture();
+        state
+            .persist_account(
+                account("saved", Access::ReadOnly),
+                "durable-refresh".into(),
+                token(),
+            )
+            .await
+            .unwrap();
+        drop(state);
+
+        let counting = Arc::new(CountingVault {
+            inner: MemoryVault::default(),
+            calls: Default::default(),
+        });
+        counting
+            .inner
+            .values
+            .lock()
+            .unwrap()
+            .extend(vault.values.lock().unwrap().clone());
+        let reopened = Arc::new(AccountsState {
+            vault: counting.clone(),
+            ..AccountsState::default()
+        });
+        reopened.initialize(directory.path().into()).unwrap();
+
+        let view = reopened.view().unwrap();
+        assert_eq!(view.accounts.len(), 1);
+        assert_eq!(view.accounts[0].id, "saved");
+        assert_eq!(view.selected_accounts[&Provider::Google], "saved");
+        assert!(reopened
+            .has_account(Provider::Google, "calendar", false)
+            .unwrap());
+        assert_eq!(
+            reopened
+                .resolve_account_id(Provider::Google, "", "calendar", false)
+                .unwrap(),
+            "saved"
+        );
+        reopened.select(Provider::Google, "saved").unwrap();
+        let prepared = reopened.prepare("google.calendar.list", json!({})).unwrap();
+        assert_eq!(prepared["account_id"], "saved");
+        assert_eq!(
+            counting.calls.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "passive account display must not open the credential store"
+        );
+    }
+
     #[tokio::test]
     async fn google_restart_refresh_uses_vault_and_retains_unrotated_refresh_token() {
         let (directory, state, vault) = fixture();
