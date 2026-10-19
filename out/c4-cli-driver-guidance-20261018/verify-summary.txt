@@ -76,8 +76,8 @@ stderr | src/services/__tests__/threads.test.ts > DefaultThreadsService > fetchT
  ✓ |@gchat/web-app| src/lib/__tests__/disk-space-warning.test.ts (3 tests) 7ms
  Test Files  338 passed | 1 skipped (339)
       Tests  3357 passed | 6 skipped (3363)
-  chat-warning.ts  |   98.73 |    81.25 |     100 |   98.73 | 65                
-  error.ts         |   91.48 |    86.02 |      80 |   91.48 | ...87,89-90,98-99 
+  chat-warning.ts  |   98.73 |    81.25 |     100 |   98.73 | 65
+  error.ts         |   91.48 |    86.02 |      80 |   91.48 | ...87,89-90,98-99
  Test Files  5 passed (5)
       Tests  121 passed (121)
 Coverage floor passed (6 critical files).
