@@ -13,7 +13,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     time::Instant,
 };
 use tokio_util::sync::CancellationToken;
@@ -754,11 +754,11 @@ impl AccountsState {
             };
             if let Some(mut stream) = browser {
                 let outcome = if result.is_ok() {
-                    super::callback_page::Outcome::SignedIn
+                    crate::core::connectors::callback_page::Outcome::SignedIn
                 } else {
-                    super::callback_page::Outcome::Failed
+                    crate::core::connectors::callback_page::Outcome::Failed
                 };
-                let _ = stream.write_all(&super::callback_page::response(outcome)).await;
+                let _ = stream.write_all(&crate::core::connectors::callback_page::response(outcome)).await;
                 let _ = stream.shutdown().await;
             }
             accounts.publish_auth_result(request.provider, &flow_id, result);
@@ -1849,7 +1849,7 @@ async fn callback_code(
         // The browser is told the real outcome only after the token exchange and the local save, so the
         // page can say plainly whether the account is signed in. Nothing the provider sent is shown.
         if parsed.query_pairs().any(|(key, _)| key == "error") {
-            let _ = stream.write_all(&super::callback_page::response(super::callback_page::Outcome::Declined)).await;
+            let _ = stream.write_all(&crate::core::connectors::callback_page::response(crate::core::connectors::callback_page::Outcome::Declined)).await;
             let _ = stream.shutdown().await;
             if provider == Provider::Google {
                 return Err(GOOGLE_CONSENT_DENIED.into());
@@ -1882,7 +1882,7 @@ async fn callback_code(
             .map(|(_, value)| value.into_owned())
             .collect::<Vec<_>>();
         if codes.len() != 1 || codes[0].is_empty() {
-            let _ = stream.write_all(&super::callback_page::response(super::callback_page::Outcome::Failed)).await;
+            let _ = stream.write_all(&crate::core::connectors::callback_page::response(crate::core::connectors::callback_page::Outcome::Failed)).await;
             let _ = stream.shutdown().await;
             return Err("Provider authorization code missing".into());
         }
@@ -3362,7 +3362,7 @@ mod tests {
                     .unwrap();
             // The real flow answers the browser after the exchange and save; here, as signed in.
             stream
-                .write_all(&super::callback_page::response(super::callback_page::Outcome::SignedIn))
+                .write_all(&crate::core::connectors::callback_page::response(crate::core::connectors::callback_page::Outcome::SignedIn))
                 .await
                 .unwrap();
             stream.shutdown().await.unwrap();
