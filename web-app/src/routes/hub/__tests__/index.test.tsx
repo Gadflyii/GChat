@@ -750,6 +750,7 @@ describe('host-scoped Models', () => {
     mocks.switchModel.mockRejectedValue(Object.assign(new Error('No qualified automatic profile is available for this model.'), { code: 'no_qualified_profile' }))
     const gpu = { uuid: 'gpu-1', name: 'GPU', memory_mib: 32768 }
     const model = { id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'qwen3.8-27b', weights_id: 'w' }, tp_size: 1 } }
+    mocks.localSnapshot = { host_id: 'local-host', gpus: [gpu], models: [model], instances: [] }
     let launched: Record<string, unknown> | undefined
     mocks.command.mockImplementation(async (action, args) => {
       if (action === 'snapshot') return { host_id: 'local-host', gpus: [gpu], models: [model], instances: launched ? [{ instance_id: 'i1', status: 'ready', configuration: { gpu_uuids: ['gpu-1'] } }] : [] }
@@ -770,6 +771,7 @@ describe('host-scoped Models', () => {
   it('shows one plain sentence and one action only when the settings check fails', async () => {
     spyConfirm().mockReturnValueOnce(true)
     mocks.switchModel.mockRejectedValue(Object.assign(new Error('x'), { code: 'no_qualified_profile' }))
+    mocks.localSnapshot = { host_id: 'local-host', gpus: [], models: [], instances: [] }
     mocks.command.mockImplementation(async action => {
       if (action === 'snapshot') return { host_id: 'local-host', gpus: [{ uuid: 'gpu-1', name: 'GPU', memory_mib: 1 }], models: [{ id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'other', weights_id: 'w' }, tp_size: 1 } }], instances: [] }
       if (action === 'quote') throw new Error('Not enough graphics memory.')
