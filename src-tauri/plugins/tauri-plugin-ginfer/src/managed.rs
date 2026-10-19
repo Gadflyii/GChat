@@ -1038,8 +1038,9 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
             sessions.clone(), control.clone(), "desktop-alias".into(),
             artifact.to_string_lossy().into_owned(),
             GinferConfig { use_profile_defaults: true, ..config.clone() }, 5,
-        ).await.unwrap_err();
-        assert_eq!(automatic, "[no_qualified_profile] No tested settings are available for this model on this computer.");
+        ).await.unwrap();
+        // With no tested profile the running instance of this model is used, not refused and not duplicated.
+        assert_eq!(sessions.lock().await[&automatic.pid].owner.connection.instance_id, id);
         assert_eq!(host.processes.lock().await.instances().count(), 1);
         assert!(host.processes.lock().await.endpoint(id).is_ok());
         let changed = GinferConfig {
