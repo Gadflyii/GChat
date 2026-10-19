@@ -1,5 +1,17 @@
 # Gbot design
 
+## Recovered Gbot GUI batch validation — Claude, October 19
+
+Gchat 2 branches `GBOT-COMPANION-SERVICE-ERROR-GUIDANCE`,
+`GBOT-COMPANION-CONNECTION-RETRY-PROGRESS`, `GBOT-TOOLS-RESULT-ERROR-GUIDANCE`,
+`GBOT-LAN-RENAME-FOCUS-RETURN`, `GBOT-DESKTOP-VIEW-CLOSE-FOCUS` and
+`GBOT-BRAIN-EDIT-FOCUS-RETURN` are integrated in
+`fix/claude-recover-gui-batch-20261019` with the same gate as the Models batch
+(see `docs/host-ui/README.md`). The service-error and retry-progress changes both
+edit the connection alert; the merged alert keeps the plain guidance, closed
+Details, Open Gbot settings, the checking-connection status and the disabled
+Retry button. Source/rendered scope only.
+
 ## Recovering a companion connection failure — Gchat 2
 
 `GBOT-COMPANION-SERVICE-ERROR-GUIDANCE`, based on main `e5d0f3c38`,

@@ -1,5 +1,17 @@
 # GInfer host UI
 
+## Recovered GUI batch validation — Claude, October 19
+
+Integration `fix/claude-recover-gui-batch-20261019` merges the Codex 7 rows
+`GUI-HARDWARE-REFRESH-KEYBOARD`, `GUI-PROGRESS-NUMERIC-A11Y`,
+`GUI-DOWNLOADS-A11Y`, `GUI-MODELS-LOAD-LIVE-RESULT` and
+`GUI-MODELS-DELETE-DIALOG-KEYBOARD` with `GUI-SETTINGS-LOGS-ERRORS`, onto
+current main (one ModelManagement.tsx conflict kept both sides). Stop recovery
+`28a48e902` was confirmed already in main. Validation on S1 (booking CPU 32-39,
+no GPU): lint, typecheck, guards, 3,941 app tests (six skipped), 130 extension
+tests, all six coverage floors, and the full Rust suites with current Linux
+catalogs. Source/rendered scope only; no native or Windows claim.
+
 ## Models delete dialog keyboard access — C7, October 18
 
 Active finding `GUI-MODELS-DELETE-DIALOG-KEYBOARD`, source-only candidate
