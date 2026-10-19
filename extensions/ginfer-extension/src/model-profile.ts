@@ -14,8 +14,6 @@ const QWEN_WEIGHTS = new Set([
   'groupwise-int-dflash2-q4w8',
   'groupwise-int-dflash2-w8',
   'smol-q2g64-mix-dflash2-q4',
-  'smol-q2g64-l51down-q4-dflash2-q4',
-  'smol-q2g64-fullattn-gate-value-l51down-q4-dflash2-q4',
   'nvfp4',
   'nvfp4-dflash2-q4',
   'nvfp4-dflash2-q4w8',
