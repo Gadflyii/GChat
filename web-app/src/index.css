@@ -192,7 +192,9 @@
     flex-shrink: 0;
     width: 1rem;
     height: 1rem;
-    border: 1px solid var(--input);
+    /* --input is a hairline tint (about 1.2:1 in light, 1.5:1 in dark), which made an
+       unchecked box nearly invisible. The muted text colour is about 6:1 in both. */
+    border: 1px solid var(--muted-foreground);
     border-radius: 0.25rem;
     background-color: transparent;
     background-position: center;
