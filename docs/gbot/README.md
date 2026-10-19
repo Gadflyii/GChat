@@ -77,6 +77,20 @@ Preparation still requires installation consent; neither opening Details nor
 receiving a failed result repeats a request. Source/rendered mocked-service
 scope only; no guest installation, native or account acceptance.
 
+## Keyboard focus after closing the desktop — Gchat 2
+
+`GBOT-DESKTOP-VIEW-CLOSE-FOCUS`, based on main `919b569dd`, returns keyboard
+focus to View bot’s desktop after Close view removes its focused control.
+Previously, focus fell to the document body. Initial mount does not move focus.
+Closing still stops the media session and releases its lease; reopening requires
+an explicit action and opens a new view. Human control and task state remain.
+
+Rendered keyboard journeys cover view-only and human-control sessions, lease
+cleanup, preserved control and explicit reopen. This is source/rendered mocked
+transport scope, with no native, guest or desktop-input acceptance.
+
+Validation pending focused checks and ONE `make verify`.
+
 ## Saved local computer action recovery — Gchat 2
 
 Saved local setups and connected local bots share Start/Stop error feedback.
