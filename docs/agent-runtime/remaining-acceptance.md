@@ -41,6 +41,39 @@ installed receipts below (no startup code changed), so no new GUI launch was run
 Live OAuth refresh in the running app and an end-to-end Gbot task recovered after a
 crash remain unqualified; the row stays OPEN for those.
 
+## OI-068 Linux Hermes compaction and saved-session recovery — core, October 19
+
+The Linux Hermes compaction leaf **passes** on Codex 3's prepared fixture (release
+desktop `919b569dd`, Engine `b26ec5b8f`, Hermes 0.22.2), S1 PRO 6000 GPU1, Qwen 3.8 27B
+INT, native input in a private X display, nothing injected. The model had to be saved
+through the **Ready Host** route; the other Hermes picker choice (local provider on the
+GChat API port, not running) leaves Hermes retrying "waiting for the provider to recover".
+
+- **Compaction.** A seeded `read_file` of the workshop note (code `copper-finch-4827`, counts
+  37 and 58) sat in the middle of a 30-message session. `/compress project code and
+  inspection counts` compacted **30 to 12 messages, about 38,544 to 17,297 tokens** in 72 s.
+  The summary message (12,226 characters) carries the code and both counts; the original
+  read result and 20 other turns are inactive in `state.db`. The next answer (95) did not
+  reread the file.
+- **Recovery.** Ordinary `/exit`, GChat **Restart** (a new session) and `/resume
+  20261019_031014_05f8db` reopened the saved transcript; a further answer (58 minus 37 =
+  21) was correct at 17k of 65.5k context.
+- **Finding, not closed.** Plain `/compress` never compacted: two attempts refused ("summary
+  would grow", only about 3k tokens were replaceable) and two aborted with the summary
+  truncated at the output cap after about 106 s. A hand-written summary request to the same
+  endpoint finishes in 4 s, so the Hermes summarizer prompt drives the long generation; the
+  cause is not isolated. The recent tail also carried the counts, so the answers prove
+  continuity, not summary-only retention.
+- **Also seen.** The Host profile is bound to the CPU grant: after the container CPU set
+  changed, **Check model settings** failed ("does not cover the current allowed CPU grant")
+  until the card was measured again (8.4 minutes).
+
+Evidence: [result and screenshots](../../out/core-oi068-hermes-compaction-20261019/result.json),
+`hermes-agent-compression.log`, `session-messages.json`. Not claimed: automatic resume,
+abrupt process loss, Windows, full-context input. The parent OI-068 stays PARTIAL.
+All private processes and the GPU booking are released; Codex 3's 52 GB fixture directory
+remains for the coordinator to retire.
+
 ## OI-068 Linux Hermes reply, file tool and continuation — October 18, Codex 3
 
 The Linux Hermes leaf **passes** on normal Release candidate
