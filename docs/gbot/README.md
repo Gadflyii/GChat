@@ -4290,7 +4290,7 @@ zip and failed or interrupted unpacking.
 `GBOT-KEEP-AWAKE`: while a bot task is running, the Gbot service asks the computer it runs on not to go to idle
 sleep (`src-tauri/gbot-service/src/keep_awake.rs`, held for the life of each task's worker, so concurrent tasks each
 hold their own and the hold ends the moment a task stops or waits for a person). Linux uses `systemd-inhibit --what=idle:sleep
---mode=block` as a child process killed on release; Windows uses `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`
+--mode=block` as a child process killed on release, falling back to `--what=idle` when the system refuses to block sleep (it needs an active desktop session; observed in a seatless guest); Windows uses `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`
 on a dedicated thread; other systems, or a Linux machine without systemd, quietly do nothing. It does not stop a person
 pressing sleep or closing the lid, and it cannot wake a sleeping or switched-off computer, so "always on" still means the
 service computer must be on; the Scheduled tasks card now says so in plain words. A task waiting for an answer from the

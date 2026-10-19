@@ -23,7 +23,12 @@ const WHY: &str = "A Gbot task is running";
 pub fn hold() -> Awake {
     #[cfg(target_os = "linux")]
     {
-        return Awake(Inner(start_linux("systemd-inhibit", &["--what=idle:sleep", "--who=GChat", &format!("--why={WHY}"), "--mode=block", "sleep", "infinity"])));
+        // Blocking idle and sleep needs an active desktop session; blocking idle alone is allowed more widely,
+        // so fall back to it. Either one stops the computer sleeping because nobody touched it.
+        let why = format!("--why={WHY}");
+        let both = ["--what=idle:sleep", "--who=GChat", why.as_str(), "--mode=block", "sleep", "infinity"];
+        let idle = ["--what=idle", "--who=GChat", why.as_str(), "--mode=block", "sleep", "infinity"];
+        return Awake(Inner(start_first(&[("systemd-inhibit", &both), ("systemd-inhibit", &idle)])));
     }
     #[cfg(windows)]
     {
@@ -36,6 +41,21 @@ pub fn hold() -> Awake {
         #[cfg(windows)]
         None,
     ))
+}
+
+/// Starts the first holder that is still running a moment later (one refused by the system exits at once).
+#[cfg(unix)]
+fn start_first(candidates: &[(&str, &[&str])]) -> Option<std::process::Child> {
+    for (program, args) in candidates {
+        if let Some(mut child) = start_linux(program, args) {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            if matches!(child.try_wait(), Ok(None)) {
+                return Some(child);
+            }
+            let _ = child.wait();
+        }
+    }
+    None
 }
 
 #[cfg(unix)]
@@ -103,6 +123,13 @@ mod tests {
         drop(Awake(Inner(Some(child))));
         assert!(!alive(pid), "the holder is stopped when the guard is dropped");
         assert!(start_linux("/nonexistent/systemd-inhibit", &[]).is_none());
+        // A holder the system refuses (exits at once) is skipped for the next candidate.
+        let fallback = start_first(&[("false", &[]), ("/nonexistent/x", &[]), ("sleep", &["infinity"])]).expect("fallback holds");
+        let fallback_pid = fallback.id();
+        assert!(alive(fallback_pid));
+        drop(Awake(Inner(Some(fallback))));
+        assert!(!alive(fallback_pid));
+        assert!(start_first(&[("false", &[])]).is_none());
         drop(Awake(Inner(None)));
         // The public entry point never panics, with or without systemd.
         drop(hold());
