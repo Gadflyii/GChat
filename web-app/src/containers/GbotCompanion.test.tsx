@@ -1082,6 +1082,117 @@ it('explains companion resource failure recovery without treating unknown bots a
   ).not.toBeInTheDocument()
 })
 
+it('shows connection retry progress, ignores duplicate activation and allows retry after rejection', async () => {
+  let rejectRetry!: (cause: Error) => void
+  const read = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('Gbot service unavailable'))
+    .mockImplementationOnce(
+      () =>
+        new Promise<BotState>((_, reject) => {
+          rejectRetry = reject
+        })
+    )
+    .mockResolvedValue(snapshot)
+  const fallback = mocks.call.getMockImplementation()!
+  mocks.call.mockImplementation((path, body) =>
+    path === 'state' ? read() : fallback(path, body)
+  )
+  render(
+    <>
+      <GbotAvatars />
+      <GbotCompanion />
+    </>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Open Gbot companion' }))
+  const retry = await screen.findByRole('button', { name: 'Retry connection' })
+  act(() => {
+    retry.click()
+    retry.click()
+  })
+  expect(
+    screen.getByRole('button', { name: 'Checking connection…' })
+  ).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Checking the Gbot service connection'
+  )
+  expect(screen.getByRole('status')).toHaveTextContent('hide this pane')
+  expect(screen.queryByText(/Add a bot computer/)).not.toBeInTheDocument()
+  await waitFor(() => expect(rejectRetry).toBeTypeOf('function'))
+  expect(read).toHaveBeenCalledTimes(2)
+
+  await act(async () => rejectRetry(new Error('Service still unavailable')))
+  const nextRetry = screen.getByRole('button', { name: 'Retry connection' })
+  expect(nextRetry).toBeEnabled()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(read).toHaveBeenCalledTimes(2)
+  fireEvent.click(nextRetry)
+  await screen.findByRole('heading', { name: 'Atlas' })
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(read).toHaveBeenCalledTimes(3)
+  expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
+  expect(mocks.call).not.toHaveBeenCalledWith('view/open', expect.anything())
+})
+
+it('preserves the known bot and draft while a notification supersedes a connection retry', async () => {
+  let rejectRetry!: (cause: Error) => void
+  const reconnected = {
+    ...snapshot,
+    workspaces: snapshot.workspaces.map((bot) =>
+      bot.id === 'a' ? { ...bot, name: 'Atlas reconnected' } : bot
+    ),
+  }
+  const read = vi
+    .fn()
+    .mockResolvedValueOnce(snapshot)
+    .mockRejectedValueOnce(new Error('Connection interrupted'))
+    .mockImplementationOnce(
+      () =>
+        new Promise<BotState>((_, reject) => {
+          rejectRetry = reject
+        })
+    )
+    .mockResolvedValue(reconnected)
+  const fallback = mocks.call.getMockImplementation()!
+  mocks.call.mockImplementation((path, body) =>
+    path === 'state' ? read() : fallback(path, body)
+  )
+  await mount()
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message bot' }), {
+    target: { value: 'Keep this draft until the bot reconnects' },
+  })
+  await act(async () => events.get('gbot-task-update')?.())
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Retry connection' })
+  )
+  await waitFor(() => expect(rejectRetry).toBeTypeOf('function'))
+  expect(
+    screen.getByRole('button', { name: 'Checking connection…' })
+  ).toBeDisabled()
+  expect(screen.getByRole('heading', { name: 'Atlas' })).toBeInTheDocument()
+  expect(screen.getByRole('textbox', { name: 'Message bot' })).toHaveValue(
+    'Keep this draft until the bot reconnects'
+  )
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+  expect(read).toHaveBeenCalledTimes(3)
+
+  await act(async () => events.get('gbot-setup-update')?.())
+  await screen.findByRole('heading', { name: 'Atlas reconnected' })
+  expect(read).toHaveBeenCalledTimes(4)
+  await act(async () => rejectRetry(new Error('Stale retry response')))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('heading', { name: 'Atlas reconnected' })
+  ).toBeInTheDocument()
+  expect(screen.getByRole('textbox', { name: 'Message bot' })).toHaveValue(
+    'Keep this draft until the bot reconnects'
+  )
+  expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
+  expect(read).toHaveBeenCalledTimes(4)
+  expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
+  expect(mocks.call).not.toHaveBeenCalledWith('view/open', expect.anything())
+})
+
 it('explains companion resource failure recovery while preserving a known name and draft', async () => {
   const view = render(
     <>

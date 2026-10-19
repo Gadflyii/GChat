@@ -1999,6 +1999,10 @@ this work continues; hiding the companion does not cancel preparation. An unread
 bot list is a loading state, not evidence that setup or saved identity is missing.
 The companion preserves already loaded bot names during a refresh of the same
 service and offers setup guidance only after a successful empty response.
+Connection retries show **Checking connection…** and disable repeated activation
+until the read finishes. A failed read restores **Retry connection**; retrying
+retains the known bot and draft, while newer service notifications can still
+refresh the connection without replaying task or desktop actions.
 
 The desktop command `bundled_resources_ready` reads the existing retained
 installation result without waiting: `false` means pending, `true` means the
