@@ -41,6 +41,26 @@ installed receipts below (no startup code changed), so no new GUI launch was run
 Live OAuth refresh in the running app and an end-to-end Gbot task recovered after a
 crash remain unqualified; the row stays OPEN for those.
 
+## GCHAT-HERMES-PLAIN-COMPRESS: plain `/compress` fix — core, October 19
+
+Cause (measured on Qwen 3.8 27B INT with the real Hermes summarizer prompt, six runs each):
+Hermes sends the compaction summary with no output cap and no reasoning setting, so the
+model thinks at its default level. That took **6,162 to 8,192 tokens** for a summary that
+needs about 2,000: one run in six hit the server's 8192 cap (the abort), and the rest
+produced more text than the ~3k tokens they replaced (the "would grow" refusal). The focused
+form only worked by chance of a shorter generation. At `reasoning_effort: low` all six
+finished in **1,941 to 2,147 tokens**.
+
+Fix: `configure_hermes_agent` now seeds Hermes' own per-task key
+`auxiliary.compression.reasoning_effort: low`, leaving any value the user set (a unit
+test covers create, merge beside other tasks, preserve and idempotence). Proof on the S1
+fixture: plain `/compress` with no focus compacted **16 to 12 messages, about 34,515 to
+16,025 tokens, in an 18.7 s summary call** (before: 106 s abort or a refusal), and the next
+answer (95) needed no file read. The fixture desktop is the older release build, so the key
+was written with the tested function, not by that desktop's Save. Evidence:
+[result](../../out/core-hermes-compress-20261019/result.json). Not claimed: other models,
+summary-only retention.
+
 ## OI-068 Linux Hermes compaction and saved-session recovery — core, October 19
 
 The Linux Hermes compaction leaf **passes** on Codex 3's prepared fixture (release
