@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { forwardRef, useImperativeHandle, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { mockIPC } from '@tauri-apps/api/mocks'
+import { mockConvertFileSrc, mockIPC } from '@tauri-apps/api/mocks'
 import { AgentWorkspaceLayout } from './AgentWorkspaceLayout'
 import { useArtifactStore } from '@/stores/artifact-store'
 import { useWorkspacePreviewStore } from '@/stores/workspace-preview-store'
@@ -92,13 +92,15 @@ function deferred<T>() {
 
 describe('AgentWorkspaceLayout', () => {
   beforeEach(() => {
-    artifactPreview.command.mockReset().mockImplementation((command: string) => {
-      if (command === 'set_artifact_html' || command === 'clear_artifact_html') {
-        return
+    artifactPreview.command.mockReset().mockImplementation(
+      (command: string, args: { id: string }) => {
+        if (command === 'set_artifact_html') return args.id
+        if (command === 'clear_artifact_html') return
+        throw new Error(`Unexpected artifact preview command: ${command}`)
       }
-      throw new Error(`Unexpected artifact preview command: ${command}`)
-    })
+    )
     mockIPC(artifactPreview.command)
+    mockConvertFileSrc('linux')
     media.desktop = true
     panelLayouts.values = []
     workspace.entries = [
@@ -185,7 +187,7 @@ describe('AgentWorkspaceLayout', () => {
       expect(screen.getByTitle('HTML preview')).toHaveAttribute(
         'src',
         expect.stringMatching(
-          /^(artifact:\/\/localhost|http:\/\/artifact\.localhost)\/[^?]+\?v=1$/
+          /^(gchat-preview:\/\/localhost|http:\/\/gchat-preview\.localhost)\/[A-Za-z0-9_-]+$/
         )
       )
     })

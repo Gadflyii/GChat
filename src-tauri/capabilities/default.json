@@ -3,7 +3,9 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "local": true,
-  "webviews": ["main"],
+  "webviews": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:webview:allow-print",
@@ -21,7 +23,6 @@
     "opener:default",
     "log:default",
     "notification:default",
-    "core:webview:allow-create-webview-window",
     "opener:allow-open-url",
     "store:default",
     "vector-db:default",
@@ -51,7 +52,9 @@
     {
       "identifier": "opener:allow-open-url",
       "description": "opens the default permissions for the core module",
-      "windows": ["*"],
+      "windows": [
+        "*"
+      ],
       "allow": [
         {
           "url": "https://*"
@@ -63,6 +66,7 @@
           "url": "http://0.0.0.0:*"
         }
       ]
-    }
+    },
+    "allow-main-app-commands"
   ]
 }

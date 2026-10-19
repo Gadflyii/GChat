@@ -1,6 +1,6 @@
 import { estimateHtmlProgress } from '@/lib/html-progress'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { Check, Code2, Copy, Download, Eye, Printer, X } from 'lucide-react'
 import { fs } from '@gchat/core'
 import { cn } from '@/lib/utils'
@@ -28,17 +28,6 @@ function buildPreviewDocument(code: string): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base target="_blank"></head><body>${code}</body></html>`
 }
 
-// The preview iframe is sandboxed without `allow-same-origin`; a blob: document
-// would inherit the strict main-window CSP and silently drop inline scripts. On
-// Tauri we instead serve the document through the `artifact://` protocol, which
-// carries its own permissive CSP. Windows exposes custom schemes as
-// `http://<scheme>.localhost`.
-function artifactBaseUrl(): string {
-  return navigator.userAgent.includes('Windows')
-    ? 'http://artifact.localhost'
-    : 'artifact://localhost'
-}
-
 function createArtifactId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()
@@ -62,7 +51,9 @@ function HtmlArtifactComponent({
   const [copying, setCopying] = useState(false)
   const [copyFailed, setCopyFailed] = useState(false)
   const copyPendingRef = useRef(false)
-  const copyResetRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  )
   const [previewUrl, setPreviewUrl] = useState<string>('')
   const [previewFailed, setPreviewFailed] = useState(false)
   const [previewRetry, setPreviewRetry] = useState(0)
@@ -72,7 +63,9 @@ function HtmlArtifactComponent({
   const [printing, setPrinting] = useState(false)
   const [printFailed, setPrintFailed] = useState(false)
   const printPendingRef = useRef(false)
-  const printTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const printTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  )
   const printCleanupRef = useRef<(() => void) | undefined>(undefined)
   const [frameLoaded, setFrameLoaded] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -81,9 +74,6 @@ function HtmlArtifactComponent({
   const codeScrollRef = useRef<HTMLDivElement>(null)
   const codeContentRef = useRef<HTMLDivElement>(null)
   const followCodeRef = useRef(true)
-  const artifactIdRef = useRef<string>('')
-  if (!artifactIdRef.current) artifactIdRef.current = createArtifactId()
-  const versionRef = useRef(0)
 
   const generating = streaming
 
@@ -155,35 +145,36 @@ function HtmlArtifactComponent({
     return () => clearTimeout(timer)
   }, [code, generating])
 
-  // Tauri: serve through the artifact:// protocol, but navigate the iframe only
-  // once the stream has settled. Re-navigating a custom-scheme iframe on every
-  // streamed token races WKURLSchemeTask in WKWebView and aborts the app, so we
-  // load the frame a single time per settled document (the loader covers the
-  // generating phase anyway).
-  const navigatedCodeRef = useRef('')
+  // Tauri: load a private cached document through the isolated preview scheme.
+  // Its CSP permits inline scripts in the opaque sandbox without granting an
+  // application IPC origin. Each settled render owns a different cache entry,
+  // including overlapping deferred writes.
   useEffect(() => {
     if (!isPlatformTauri()) return
     if (generating) {
       setPreviewFailed(false)
       return
     }
-    if (!code || navigatedCodeRef.current === code) return
+    if (!code) return
     let cancelled = false
-    navigatedCodeRef.current = ''
+    const id = createArtifactId()
+    const clearPreview = () =>
+      invoke('clear_artifact_html', { id }).catch(() => {})
     setPreviewFailed(false)
     setPreviewUrl('')
     void (async () => {
       try {
-        await invoke('set_artifact_html', {
-          id: artifactIdRef.current,
+        const previewId = await invoke<string>('set_artifact_html', {
+          id,
           html: buildPreviewDocument(code),
         })
-        if (cancelled) return
-        navigatedCodeRef.current = code
-        versionRef.current += 1
-        setPreviewUrl(
-          `${artifactBaseUrl()}/${artifactIdRef.current}?v=${versionRef.current}`
-        )
+        if (cancelled) {
+          // The effect may have cleared this ID before the native write began.
+          // Clear again after completion so unmounted/stale renders leave no file.
+          void clearPreview()
+          return
+        }
+        setPreviewUrl(convertFileSrc(previewId, 'gchat-preview'))
       } catch (error) {
         if (cancelled) return
         console.error('Failed to register artifact preview:', error)
@@ -192,6 +183,7 @@ function HtmlArtifactComponent({
     })()
     return () => {
       cancelled = true
+      void clearPreview()
     }
   }, [code, generating, previewRetry])
 
@@ -216,14 +208,10 @@ function HtmlArtifactComponent({
   const progressPct = Math.round((generating ? progress : 1) * 100)
 
   useEffect(() => {
-    const id = artifactIdRef.current
     return () => {
       clearTimeout(copyResetRef.current)
       clearTimeout(printTimerRef.current)
       printCleanupRef.current?.()
-      if (isPlatformTauri()) {
-        invoke('clear_artifact_html', { id }).catch(() => {})
-      }
       setPreviewUrl((previous) => {
         if (previous.startsWith('blob:')) URL.revokeObjectURL(previous)
         return ''

@@ -3,8 +3,14 @@
   "identifier": "desktop",
   "description": "enables the default permissions for desktop platforms",
   "local": true,
-  "webviews": ["main"],
-  "platforms": ["linux", "macOS", "windows"],
+  "webviews": [
+    "main"
+  ],
+  "platforms": [
+    "linux",
+    "macOS",
+    "windows"
+  ],
   "permissions": [
     "core:default",
     "core:webview:allow-set-webview-zoom",
@@ -19,7 +25,6 @@
     "os:default",
     "opener:default",
     "log:default",
-    "core:webview:allow-create-webview-window",
     "opener:allow-open-url",
     "store:default",
     "vector-db:default",
@@ -47,7 +52,9 @@
     {
       "identifier": "opener:allow-open-url",
       "description": "opens the default permissions for the core module",
-      "windows": ["*"],
+      "windows": [
+        "*"
+      ],
       "allow": [
         {
           "url": "https://*"
@@ -59,6 +66,7 @@
           "url": "http://0.0.0.0:*"
         }
       ]
-    }
+    },
+    "allow-main-app-commands"
   ]
 }

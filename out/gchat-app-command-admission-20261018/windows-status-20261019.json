@@ -1,0 +1,139 @@
+{
+ "row": "GCHAT-APP-COMMAND-ADMISSION",
+ "updated_at": "2026-10-19T14:50Z",
+ "owner": "claude-gchat-security",
+ "status": "WINDOWS_NATIVE_PASS",
+ "merge_ready": true,
+ "merge": {
+  "commit": "4f76b9aeb702584f9092a91153e91b4179d3328c",
+  "note": "origin/main merged (no rebase); only conflict docs/decisions/INDEX.md, both rows kept"
+ },
+ "make_verify": {
+  "source": "220bd4aac516a8158a62a9fd00a82326a83d7f6d",
+  "status": "PASS",
+  "started": "2026-10-19T01:15:28Z",
+  "finished": "2026-10-19T01:21:48Z",
+  "frontend": "3906 passed / 6 skipped (345 files)",
+  "extension": "130 passed",
+  "rust": "1328 passed / 0 failed / 28 ignored",
+  "coverage_floor": "6 critical files PASS",
+  "log_sha256": "170da3c269d24f5fb51716adb84ba23fd4d4c6fbe83983b982724ff36edc4cb3",
+  "host": "S1 container CPUs 112-119"
+ },
+ "windows_compile": [
+  {
+   "source": "4f76b9aeb",
+   "status": "PASS",
+   "exe_sha256": "d0fad6beddd9f0f73053f4384f3313c6b7eedfd35188044abdf55fac893d6910",
+   "selected_pure_tests": "preview_protocol 2 + webview_security 4 + artifact 4 = 10 PASS (native Windows)"
+  },
+  {
+   "source": "7caa90d5e",
+   "status": "PASS",
+   "exe_sha256": "2739abe224615b91f5218a38eee8a33ecc238e0055c25771ce05861e0d9163b4",
+   "note": "test-only fixture changes since 4f76b9aeb"
+  },
+  {
+   "source": "a282a237d",
+   "status": "PASS",
+   "exe_sha256": "32b642417a4572335ca872160d9f55fc9a74c49e12055feec3c6a4e56b9356b1"
+  }
+ ],
+ "fixture_changes": [
+  "220bd4aac run the fixture as a child process whose process desktop is the private desktop (thread desktop alone fails WebView2 creation)",
+  "ffcc48194 string web messages, deferred popup Handled read, watchdog timeout flag, parent-side UUID browser-data cleanup",
+  "7caa90d5e host-side classification of unanswered preview IPC (CSP-blocked ipc.localhost plus rejection-only host answers), channel and desktop diagnostics",
+  "314078c5b hidden unfocused window on the default desktop: the pinned WebView2 runtime starts its browser through explorer.exe (observed parent), so no private desktop can host the controller",
+  "a282a237d accept join_path's canonicalized \\\\?\\ Windows path"
+ ],
+ "native_runs": [
+  {
+   "host": "Ada 4090 (DESKTOP-DG588BU)",
+   "source": "4f76b9aeb",
+   "result": "FAIL before observations: WebView2 E_INVALIDARG with thread desktop (also with focus:false)"
+  },
+  {
+   "host": "local5090 Windows (RON-9950X3D2)",
+   "source": "220bd4aac",
+   "result": "WebView2 created on the private desktop; FAIL on fixture observation only (main messages lost to Wry's IPC listener)",
+   "observed": [
+    "preview http://gchat-preview.localhost/<id> 200 with preview CSP and nosniff",
+    "5 reserved preview requests (https, :43121, /missing, ?query, %2Foutside) 404 with CSP and nosniff",
+    "blob: frame navigation cancelled",
+    "top-level navigation to preview cancelled",
+    "top-level navigation to https://example.invalid cancelled",
+    "same-origin /logs navigation allowed"
+   ],
+   "observations": "out/gchat-app-command-admission-20261018/windows-local-220bd4aa-observations.json",
+   "note": "bubbs 02:31Z: no fixtures on this PC; run artifacts removed there"
+  },
+  {
+   "host": "laptop (RON-X17R2)",
+   "source": "ffcc48194 and 7caa90d5e",
+   "result": "FAIL before observations: WebView2 0x80070578 Invalid window handle; fixture process confirmed on the private desktop; session locked (LogonUI running)"
+  },
+  {
+   "host": "laptop (RON-X17R2), unlocked",
+   "source": "7caa90d5e",
+   "result": "FAIL 0x80070578 on private desktop; diagnosis: msedgewebview2 browser parent is explorer.exe"
+  },
+  {
+   "host": "4090 box (DESKTOP-DG588BU), unlocked",
+   "source": "7caa90d5e",
+   "result": "FAIL 0x80070578 on private desktop (same cause)"
+  },
+  {
+   "host": "laptop (RON-X17R2)",
+   "source": "a282a237d",
+   "at": "2026-10-19T14:34:27Z",
+   "result": "PASS 1/1, exit 0, no watchdog",
+   "foreign_and_preview_commands_refused": [
+    "initial window with https://example.invalid/ refused by build_window",
+    "top-level navigation to https://example.invalid cancelled",
+    "preview join_path and plugin:os|locale did not run: CSP connect-src blocked http://ipc.localhost/join_path and /plugin%3Aos%7Clocale; the postMessage fallback reached only the frame channel, which no handler executes; zero host answers to the preview's callbacks",
+    "preview asset fetch rejected under connect-src; parent access SecurityError; opaque origin null"
+   ],
+   "app_windows_work": [
+    "main webview: join_path, plugin:os|locale (en-US) and asset marker fetch succeed through the production build_window, real capabilities and CSP",
+    "same-origin /logs route commits and reports"
+   ],
+   "popup_blocked": "window.open(gchat-preview://...) NewWindowRequested Handled=true after Wry's decision",
+   "previews_isolated": [
+    "preview 200 with preview CSP and nosniff",
+    "5 reserved preview-host requests 404 with CSP and nosniff",
+    "blob: frame and top-level preview navigation cancelled"
+   ],
+   "observations": "out/gchat-app-command-admission-20261018/windows-laptop-a282a237-observations.json",
+   "limits": "Windows preview IPC is stopped before Tauri (CSP and unhandled frame channel), so native Remote-origin ACL denial is not exercised on Windows; covered by the focused Rust authority tests. Fixture app, not the installed product; auxiliary windows proven on Linux native."
+  }
+ ],
+ "cleanup": {
+  "laptop": "run root, UUID LocalAppData folders and fixture processes gone after the PASS run",
+  "local5090": "fixture run roots and UUID LocalAppData folder removed; build root E:\\gchat1-app-command-admission-20261018 retained",
+  "ada": "F:\\gchat1-app-command-admission-20261018 (exe copies and logs only) retained",
+  "s1": "/media/ron/SSD_RAID/ai/tmp-claude-gchat-security-app-command-admission (26 GB) retained until merge"
+ },
+ "fixture_source": "a282a237d2b36694a075366133d7427c0b502dd4",
+ "merge_2": {
+  "commit": "0ea2e888fb540e14eae641f0d1b1f0a679a00ee3",
+  "note": "origin/main merged again (no rebase); keep-both unions in src-tauri/Cargo.lock (gchat deps) and src-tauri/src/core/mod.rs (modules); diff vs main is the branch's 30 files only"
+ },
+ "merged_tree_gates": {
+  "source": "0ea2e888f",
+  "host": "S1 container CPUs 120-127",
+  "started": "2026-10-19T14:38:47Z",
+  "finished": "2026-10-19T14:47:17Z",
+  "status": "PASS",
+  "cargo_check": "PASS (--locked)",
+  "focused": "capability_scope 2, artifact 5, webview_security 4, preview_protocol 2 PASS",
+  "make_verify": {
+   "frontend": "3998 passed / 6 skipped (355 files)",
+   "extension": "128 passed",
+   "rust": "1375 passed / 0 failed / 30 ignored",
+   "coverage_floor": "6 critical files PASS"
+  },
+  "env_note": "WHISPER_DONT_GENERATE_BINDINGS=1 as main's lanes use (image has no libclang); cargo allowed to fetch",
+  "log_sha256": "19385b13bb3e0958ad98a45de1dfd2de36cf15b02354e9b58832362dc98a5769"
+ },
+ "windows_note": "Windows native PASS is on fixture source a282a237d; the second merge adds only main's changes outside the admission files"
+}

@@ -34,3 +34,9 @@ pub mod tray_status;
 pub mod updater;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod voice;
+
+#[cfg(not(feature = "cli"))]
+pub mod webview_security;
+
+#[cfg(not(feature = "cli"))]
+pub mod preview_protocol;
