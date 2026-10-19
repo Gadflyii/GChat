@@ -14,37 +14,37 @@ describe('engine-reported and configured settings', () => {
   it('separates the reported context from the configured values and explains the launch controls', () => {
     render(<EngineInstanceSettings instance={instance} online />)
 
-    expect(screen.getByText('Conversation length reported by the model: 8,192 tokens')).toBeVisible()
+    expect(screen.getByText('Context length reported by the model: 8,192 tokens')).toBeVisible()
     const configured = screen.getByRole('region', { name: 'Chosen model settings' })
-    expect(within(configured).getByText('Graphics cards sharing this model: 1')).toBeVisible()
-    expect(within(configured).getByText('Requests at once: 4')).toBeVisible()
-    expect(within(configured).getByText('Chosen conversation limit: 16,384 tokens')).toBeVisible()
+    expect(within(configured).getByText('Tensor parallel (GPUs): 1')).toBeVisible()
+    expect(within(configured).getByText('Concurrency: 4')).toBeVisible()
+    expect(within(configured).getByText('Chosen context length: 16,384 tokens')).toBeVisible()
     expect(within(configured).getByText(/split across several matching cards/i)).toBeVisible()
     expect(within(configured).getByText(/replies the model can generate at the same time/)).toBeVisible()
     expect(screen.getByText(/tokens \(pieces of text\)/)).toBeVisible()
-    expect(screen.queryByText('Conversation length reported by the model: 16,384 tokens')).not.toBeInTheDocument()
+    expect(screen.queryByText('Context length reported by the model: 16,384 tokens')).not.toBeInTheDocument()
   })
 
   it('identifies cached context as last reported when the host is offline', () => {
     render(<EngineInstanceSettings instance={instance} online={false} />)
 
-    expect(screen.getByText('Last reported conversation length: 8,192 tokens')).toBeVisible()
-    expect(screen.queryByText(/Conversation length reported by the model/)).not.toBeInTheDocument()
+    expect(screen.getByText('Last reported context length: 8,192 tokens')).toBeVisible()
+    expect(screen.queryByText(/Context length reported by the model/)).not.toBeInTheDocument()
   })
 
   it.each(['starting', 'stopped'] as const)('does not present stale context as effective when %s', (status) => {
     render(<EngineInstanceSettings instance={{ ...instance, status }} online />)
 
-    expect(screen.getByText('The model has not reported its conversation length yet.')).toBeVisible()
-    expect(screen.queryByText(/Conversation length reported by the model/)).not.toBeInTheDocument()
-    expect(screen.getByText('Chosen conversation limit: 16,384 tokens')).toBeVisible()
+    expect(screen.getByText('The model has not reported its context length yet.')).toBeVisible()
+    expect(screen.queryByText(/Context length reported by the model/)).not.toBeInTheDocument()
+    expect(screen.getByText('Chosen context length: 16,384 tokens')).toBeVisible()
   })
 
   it.each([undefined, 0, 8192.5])('does not invent an effective context for invalid metadata %s', (max_model_len) => {
     render(<EngineInstanceSettings instance={{ ...instance, model_metadata: { max_model_len } }} online />)
 
-    expect(screen.getByText('The model has not reported its conversation length yet.')).toBeVisible()
-    expect(screen.queryByText(/Conversation length reported by the model/)).not.toBeInTheDocument()
+    expect(screen.getByText('The model has not reported its context length yet.')).toBeVisible()
+    expect(screen.queryByText(/Context length reported by the model/)).not.toBeInTheDocument()
   })
 
   it('uses the configured GPU group size when a TP number is absent', () => {
@@ -53,13 +53,13 @@ describe('engine-reported and configured settings', () => {
       configuration: { ...instance.configuration, tp: undefined, gpu_uuids: ['GPU-one', 'GPU-two'] },
     }} online />)
 
-    expect(screen.getByText('Graphics cards sharing this model: 2')).toBeVisible()
+    expect(screen.getByText('Tensor parallel (GPUs): 2')).toBeVisible()
   })
 
   it('labels automatic speculation and KV settings as configuration rather than resolved runtime values', () => {
     render(<EngineInstanceSettings instance={instance} online />)
 
-    expect(screen.getByText('Reply speedup: Automatic')).toBeVisible()
+    expect(screen.getByText('Speculative Decoding: Automatic')).toBeVisible()
     expect(screen.getByText('K/V cache format: Automatic')).toBeVisible()
     expect(screen.getByText(/Drafts text ahead for the model to check/)).toBeVisible()
     expect(screen.getByText(/Stores earlier text so the model can continue the conversation/)).toBeVisible()
@@ -76,9 +76,9 @@ describe('engine-reported and configured settings', () => {
       configuration: { ...instance.configuration, spec, kv_dtype },
     }} online />)
 
-    expect(screen.getByText(`Reply speedup: ${speculation}`)).toBeVisible()
+    expect(screen.getByText(`Speculative Decoding: ${speculation}`)).toBeVisible()
     expect(screen.getByText(`K/V cache format: ${memory}`)).toBeVisible()
-    expect(screen.queryByText('Reply speedup: Automatic')).not.toBeInTheDocument()
+    expect(screen.queryByText('Speculative Decoding: Automatic')).not.toBeInTheDocument()
     expect(screen.queryByText('K/V cache format: Automatic')).not.toBeInTheDocument()
   })
 

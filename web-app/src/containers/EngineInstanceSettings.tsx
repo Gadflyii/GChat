@@ -9,22 +9,22 @@ export function EngineInstanceSettings({ instance, online }: { instance: EngineI
   const kvFormat = config.kv_dtype === undefined || config.kv_dtype === 'auto' ? 'Automatic' : config.kv_dtype.toUpperCase()
 
   return <div className="space-y-3 text-sm text-muted-foreground">
-    <p>{hasReported ? `${online ? 'Conversation length reported by the model' : 'Last reported conversation length'}: ${reported.toLocaleString()} tokens` : 'The model has not reported its conversation length yet.'}</p>
-    <p className="text-xs">Conversation length includes your messages, earlier conversation and the reply. It is measured in tokens (pieces of text).</p>
+    <p>{hasReported ? `${online ? 'Context length reported by the model' : 'Last reported context length'}: ${reported.toLocaleString()} tokens` : 'The model has not reported its context length yet.'}</p>
+    <p className="text-xs">Context length includes your messages, earlier conversation and the reply. It is measured in tokens (pieces of text).</p>
     <section aria-label="Chosen model settings" className="space-y-2">
       <p className="font-medium text-foreground">Chosen model settings</p>
       <p className="text-xs">These are the settings you requested. The running model’s reported limit appears above.</p>
       <div>
-        <p>Graphics cards sharing this model: {gpuCount}</p>
+        <p>Tensor parallel (GPUs): {gpuCount}</p>
         <p className="text-xs">A model can use one graphics card or be split across several matching cards.</p>
       </div>
       <div>
-        <p>Requests at once: {config.concurrency}</p>
+        <p>Concurrency: {config.concurrency}</p>
         <p className="text-xs">The maximum number of replies the model can generate at the same time.</p>
       </div>
-      <p>Chosen conversation limit: {config.max_context.toLocaleString()} tokens</p>
+      <p>Chosen context length: {config.max_context.toLocaleString()} tokens</p>
       <div>
-        <p>Reply speedup: {speculation}</p>
+        <p>Speculative Decoding: {speculation}</p>
         <p className="text-xs">Drafts text ahead for the model to check, which can speed up replies. DFlash and MTP are drafting methods. Automatic lets GInfer choose when the model starts.</p>
       </div>
       <div>

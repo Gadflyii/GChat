@@ -190,17 +190,17 @@ it('checks imported artifact settings without a catalog or download and uses the
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
   await selectImportedModel()
   fireEvent.change(screen.getByLabelText('Model copies'), { target: { value: '2' } })
-  fireEvent.change(screen.getByLabelText('Requests at once'), { target: { value: '4' } })
-  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '65536' } })
+  fireEvent.change(screen.getByLabelText('Concurrency'), { target: { value: '4' } })
+  fireEvent.change(screen.getByLabelText('Context length (tokens)'), { target: { value: '65536' } })
   fireEvent.click(screen.getByLabelText('Structured outputs (JSON)'))
-  fireEvent.change(screen.getByLabelText('Computer conversation memory (bytes)'), { target: { value: '0' } })
+  fireEvent.change(screen.getByLabelText('Host K/V cache (bytes)'), { target: { value: '0' } })
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
   const body = expect.objectContaining({ model_id: 'imported-model', gpu_uuids: ['GPU-one'], remaining_instances: 2,
     max_context: 65536, concurrency: 4, structured_outputs: false, kv_arena_bytes: null, host_kv_cache_bytes: 0 })
   await waitFor(() => expect(engineCommand).toHaveBeenCalledWith('quote', { host_id: 'host', body }))
   expect(await screen.findByRole('status')).toHaveTextContent('Model file checked: Qwen 3.8 27B — INT')
   expect(screen.getByRole('status')).toHaveTextContent('2 model copies')
-  expect(screen.getByRole('status')).toHaveTextContent('1 MiB of graphics-card conversation memory per model copy')
+  expect(screen.getByRole('status')).toHaveTextContent('1 MiB of GPU K/V cache per model copy')
   expect(engineCommand).toHaveBeenCalledTimes(1)
   await waitFor(() => expect(screen.getByRole('button', { name: 'Start model with these settings' })).toBeEnabled())
   fireEvent.click(screen.getByRole('button', { name: 'Start model with these settings' }))
@@ -320,7 +320,7 @@ it('does not show a number error before a model is chosen, then reports an empti
   await userEvent.click(screen.getByLabelText('Installed model'))
   await userEvent.click(screen.getByRole('menuitemradio', { name: /Qwen 3.8 27B/ }))
   expect(screen.queryByText(/Use whole numbers/)).not.toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '' } })
+  fireEvent.change(screen.getByLabelText('Context length (tokens)'), { target: { value: '' } })
   expect(screen.getByRole('alert')).toHaveTextContent('Use whole numbers')
 })
 
@@ -329,7 +329,7 @@ it('labels the advanced launch fields with sentence-case names', () => {
   fireEvent.click(screen.getByText('Model and memory settings'))
   fireEvent.click(screen.getByText('Choose model settings'))
   fireEvent.click(screen.getByText('Advanced model settings'))
-  for (const name of ['Draft ahead length (tokens)', 'Drafting graphics cards (TP)', 'Input batch size (tokens)']) expect(screen.getByLabelText(name)).toBeInTheDocument()
+  for (const name of ['Draft tokens', 'Draft tensor parallel (TP)', 'Prefill chunk (tokens)']) expect(screen.getByLabelText(name)).toBeInTheDocument()
   expect(screen.queryByLabelText('draft tp')).not.toBeInTheDocument()
 })
 
@@ -430,8 +430,8 @@ it.each(['success', 'rejection'] as const)('keeps a completed startup-check %s t
 })
 
 it.each([
-  ['Conversation length (tokens)', '32768'], ['Requests at once', '4'], ['Model copies', '2'],
-  ['Reply speedup', 'auto'], ['K/V cache format', 'int8'],
+  ['Context length (tokens)', '32768'], ['Concurrency', '4'], ['Model copies', '2'],
+  ['Speculative Decoding', 'auto'], ['K/V cache format', 'int8'],
   ['Computer memory headroom for Flash (GiB)', '0'], ['Update the Flash expert cache', 'off'],
   ['GPU memory to keep free (MB)', '600'],
 ])('discards a pending startup check when %s changes', async (label, value) => {
@@ -441,9 +441,9 @@ it.each([
   await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
   if (['Computer memory headroom for Flash (GiB)', 'Update the Flash expert cache', 'GPU memory to keep free (MB)'].includes(label)) fireEvent.click(screen.getByText('Advanced model settings'))
-  if (label === 'Reply speedup' || label === 'K/V cache format') {
+  if (label === 'Speculative Decoding' || label === 'K/V cache format') {
     await userEvent.click(screen.getByLabelText(label))
-    await userEvent.click(screen.getByRole('menuitemradio', { name: label === 'Reply speedup' ? 'Automatic' : 'INT8' }))
+    await userEvent.click(screen.getByRole('menuitemradio', { name: label === 'Speculative Decoding' ? 'Automatic' : 'INT8' }))
   } else if (label === 'Update the Flash expert cache') {
     fireEvent.click(screen.getByRole('checkbox', { name: label }))
   } else fireEvent.change(screen.getByLabelText(label), { target: { value } })
@@ -487,7 +487,7 @@ it('does not restore a completed or pending quote after changing settings and ch
   await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
   expect(await screen.findByRole('status')).toHaveTextContent('Model file checked:')
-  const context = screen.getByLabelText('Conversation length (tokens)')
+  const context = screen.getByLabelText('Context length (tokens)')
   fireEvent.change(context, { target: { value: '32768' } })
   fireEvent.change(context, { target: { value: '262144' } })
   expect(screen.queryByText(/Model file checked:/)).not.toBeInTheDocument()
@@ -529,7 +529,7 @@ it('discards late quote results after settings change and reports a fresh Host r
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
   await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
-  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
+  fireEvent.change(screen.getByLabelText('Context length (tokens)'), { target: { value: '32768' } })
   finishQuote(importedQuote)
   await waitFor(() => expect(screen.getByRole('button', { name: 'Check model settings' })).toBeEnabled())
   expect(screen.queryByText(/Model file checked:/)).not.toBeInTheDocument()
@@ -980,17 +980,17 @@ it.each([
   expect(screen.getByRole('region', { name: 'First-run setup for host' })).toBeInTheDocument()
   fireEvent.click(screen.getByText('Model and memory settings'))
   fireEvent.click(screen.getByText('Choose model settings'))
-  expect(screen.getByLabelText('Conversation length (tokens)')).toHaveDisplayValue('')
+  expect(screen.getByLabelText('Context length (tokens)')).toHaveDisplayValue('')
   expect(screen.getByRole('button', { name: 'Start model with these settings' })).toBeDisabled()
   await userEvent.click(screen.getByLabelText('Installed model'))
   await userEvent.click(screen.getByRole('menuitemradio', { name: target === 'muse-glimmer-30b' ? /Muse 30B/ : target === 'qwen3.8-flash-next' ? /Qwen 3.8 Flash/ : /Qwen 3.8 27B/ }))
-  expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(nativeContext)
+  expect(screen.getByLabelText('Context length (tokens)')).toHaveValue(nativeContext)
   fireEvent.click(screen.getByRole('button', { name: 'Start model with these settings' }))
   await waitFor(() => expect(engineCommand).toHaveBeenCalledWith('launch', expect.objectContaining({
     body: expect.objectContaining({ model_id: 'model', max_context: nativeContext }),
   })))
   await waitFor(() => expect(screen.getByRole('button', { name: 'Start model with these settings' })).toBeEnabled())
-  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '65536' } })
+  fireEvent.change(screen.getByLabelText('Context length (tokens)'), { target: { value: '65536' } })
   fireEvent.click(screen.getByRole('button', { name: 'Start model with these settings' }))
   await waitFor(() => expect(engineCommand).toHaveBeenLastCalledWith('launch', expect.objectContaining({
     body: expect.objectContaining({ max_context: 65536 }),
@@ -1089,7 +1089,7 @@ it.each([
   const memory = screen.getByLabelText('Computer memory headroom for Flash (GiB)')
   expect(memory).toHaveValue(headroom)
   expect(screen.getByRole('checkbox', { name: 'Update the Flash expert cache' })).toHaveProperty('checked', lfu)
-  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
+  fireEvent.change(screen.getByLabelText('Context length (tokens)'), { target: { value: '32768' } })
   const save = screen.getByRole('button', { name: 'Save and restart model' })
   fireEvent.change(memory, { target: { value: '0.5' } })
   expect(save).toBeDisabled()
@@ -1138,7 +1138,7 @@ it.each([
   if (action === 'reload') {
     fireEvent.click(screen.getByText('Model and memory settings'))
     fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
-    fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
+    fireEvent.change(screen.getByLabelText('Context length (tokens)'), { target: { value: '32768' } })
   }
   const control = screen.getByRole('button', { name: label })
   expect(control).toBeEnabled()
@@ -1213,7 +1213,7 @@ it('keeps a multi-copy launch model control result despite a failed first read w
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
   await selectImportedModel()
   fireEvent.change(screen.getByLabelText('Model copies'), { target: { value: '2' } })
-  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '65536' } })
+  fireEvent.change(screen.getByLabelText('Context length (tokens)'), { target: { value: '65536' } })
   const launch = screen.getByRole('button', { name: 'Start model with these settings' })
   fireEvent.click(launch)
   expect(launch).toBeDisabled()
@@ -1346,8 +1346,8 @@ it('completes an accepted model editor save result after a failed read and reope
   })
   fireEvent.click(screen.getByText('Model and memory settings'))
   fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
-  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
-  fireEvent.change(screen.getByLabelText('Requests at once'), { target: { value: '2' } })
+  fireEvent.change(screen.getByLabelText('Context length (tokens)'), { target: { value: '32768' } })
+  fireEvent.change(screen.getByLabelText('Concurrency'), { target: { value: '2' } })
   const save = screen.getByRole('button', { name: 'Save and restart model' })
   fireEvent.click(save)
   expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Save and restart this model?', confirmLabel: 'Save and restart' })
@@ -1375,9 +1375,9 @@ it('completes an accepted model editor save result after a failed read and reope
 
   fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
   expect(screen.getByText('Change model settings').closest('details')).toHaveAttribute('open')
-  expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(32768)
-  expect(screen.getByLabelText('Requests at once')).toHaveValue(2)
-  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '16384' } })
+  expect(screen.getByLabelText('Context length (tokens)')).toHaveValue(32768)
+  expect(screen.getByLabelText('Concurrency')).toHaveValue(2)
+  fireEvent.change(screen.getByLabelText('Context length (tokens)'), { target: { value: '16384' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save and restart model' }))
   expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Save and restart this model?' })
   await act(async () => settleConfirm(true))
@@ -1418,16 +1418,16 @@ it('retains a canceled or rejected model editor save result draft until an expli
   })
   fireEvent.click(screen.getByText('Model and memory settings'))
   fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
-  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
-  fireEvent.change(screen.getByLabelText('Requests at once'), { target: { value: '2' } })
+  fireEvent.change(screen.getByLabelText('Context length (tokens)'), { target: { value: '32768' } })
+  fireEvent.change(screen.getByLabelText('Concurrency'), { target: { value: '2' } })
   const save = screen.getByRole('button', { name: 'Save and restart model' })
   fireEvent.click(save)
   expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Save and restart this model?' })
   await act(async () => settleConfirm(false))
   expect(save).toBeEnabled()
   expect(screen.getByText('Change model settings').closest('details')).toHaveAttribute('open')
-  expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(32768)
-  expect(screen.getByLabelText('Requests at once')).toHaveValue(2)
+  expect(screen.getByLabelText('Context length (tokens)')).toHaveValue(32768)
+  expect(screen.getByLabelText('Concurrency')).toHaveValue(2)
   expect(engineCommand).not.toHaveBeenCalled()
   expect(publishSnapshot).not.toHaveBeenCalled()
   expect(refreshHosts).not.toHaveBeenCalled()
@@ -1448,8 +1448,8 @@ it('retains a canceled or rejected model editor save result draft until an expli
   expect(save).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Cancel editing' })).toBeEnabled()
   expect(screen.getByText('Change model settings').closest('details')).toHaveAttribute('open')
-  expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(32768)
-  expect(screen.getByLabelText('Requests at once')).toHaveValue(2)
+  expect(screen.getByLabelText('Context length (tokens)')).toHaveValue(32768)
+  expect(screen.getByLabelText('Concurrency')).toHaveValue(2)
   expect(screen.getByText(/Saved model.*Ready to chat/)).toBeVisible()
   expect(publishSnapshot).not.toHaveBeenCalled()
   expect(refreshHosts).not.toHaveBeenCalled()

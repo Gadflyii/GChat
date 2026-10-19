@@ -25,7 +25,7 @@ export const DEFAULT_LAUNCH_OPTIONS: EngineLaunchOptions = {
 
 const LADDER = [262144, 131072, 65536, 32768, 16384, 8192]
 
-/** Conversation lengths to try, longest first. Models known to support 262,144 start there. */
+/** Context lengths to try, longest first. Models known to support 262,144 start there. */
 export function conversationLengths(modelId: string): number[] {
   if (modelId === 'qwen3.8-27b' || modelId === 'qwen3.8-flash-next') return LADDER
   return LADDER.slice(1)
@@ -44,7 +44,7 @@ const message = (cause: unknown) => (cause instanceof Error ? cause.message : St
 
 /**
  * For a model file with no tested settings: check settings that fit this computer (the same check as Check model
- * settings, trying shorter conversation lengths when one does not fit), start the model with the first set that
+ * settings, trying shorter context lengths when one does not fit), start the model with the first set that
  * passes, and wait until it is ready. Throws the last check or start problem, in the host's words, if none works.
  */
 export async function startWithCheckedSettings(

@@ -618,7 +618,7 @@ describe('Engines host intake and launch controls', () => {
       screen.getByText('Change model settings').closest('details')
     ).toHaveAttribute('open')
     expect(screen.getByLabelText('Installed model')).toHaveFocus()
-    expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(8192)
+    expect(screen.getByLabelText('Context length (tokens)')).toHaveValue(8192)
     fireEvent.click(screen.getByRole('button', { name: 'Cancel editing' }))
     expect(screen.getByRole('button', { name: 'Restart model' })).toBeDisabled()
     fireEvent.click(within(screen.getByRole('button', { name: 'Stop model', exact: true }).parentElement!).getByRole('button', { name: 'Start model', exact: true }))
@@ -704,7 +704,7 @@ describe('Engines host intake and launch controls', () => {
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
     expect(instance).toHaveTextContent(
-      'Qwen 3.8 27B — NVFP4 · 4 requests at once · 131,072 conversation tokens · Graphics cards 1'
+      'Qwen 3.8 27B — NVFP4 · 4 requests at once · 131,072 context tokens · Graphics cards 1'
     )
     expect(instance).not.toHaveTextContent('internal-id')
     expect(model).toHaveTextContent('Qwen 3.8 27B — NVFP4')
@@ -858,19 +858,19 @@ describe('Engines host intake and launch controls', () => {
     expect(screen.getByLabelText('Graphics card 1: RTX 5090')).toBeChecked()
     const load = screen.getByRole('button', { name: 'Start model with these settings' })
     expect(load).toBeEnabled()
-    fireEvent.change(screen.getByLabelText('Requests at once'), {
+    fireEvent.change(screen.getByLabelText('Concurrency'), {
       target: { value: '1.5' },
     })
     expect(load).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('Use whole numbers')
-    fireEvent.change(screen.getByLabelText('Requests at once'), {
+    fireEvent.change(screen.getByLabelText('Concurrency'), {
       target: { value: '4' },
     })
-    await user.click(screen.getByRole('button', { name: 'Reply speedup' }))
+    await user.click(screen.getByRole('button', { name: 'Speculative Decoding' }))
     await user.click(screen.getByRole('menuitemradio', { name: 'Automatic' }))
     expect(load).toBeEnabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Reply speedup' }))
+    await user.click(screen.getByRole('button', { name: 'Speculative Decoding' }))
     await user.click(screen.getByRole('menuitemradio', { name: 'Off' }))
     fireEvent.click(load)
     await waitFor(() =>
@@ -916,7 +916,7 @@ describe('Engines host intake and launch controls', () => {
       exact: true,
     })
     const cache = screen.getByLabelText(
-      'Computer conversation memory (bytes)'
+      'Host K/V cache (bytes)'
     )
     const load = screen.getByRole('button', { name: 'Start model with these settings' })
     expect(structured).toBeChecked()
@@ -995,7 +995,7 @@ describe('Engines host intake and launch controls', () => {
     ).not.toBeChecked()
     expect(
       screen.getByLabelText(
-        'Computer conversation memory (bytes)'
+        'Host K/V cache (bytes)'
       )
     ).toHaveValue(0)
     fireEvent.click(

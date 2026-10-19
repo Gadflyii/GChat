@@ -18,7 +18,7 @@ import { formatModelBytes } from '@/lib/model-release'
 const MEBIBYTE = 1024 ** 2
 const DEFAULT_GPU_RESERVE_BYTES = 300 * MEBIBYTE
 
-const advancedFieldLabels = { draft_tokens: 'Draft ahead length (tokens)', draft_tp: 'Drafting graphics cards (TP)', prefill_chunk: 'Input batch size (tokens)' } as const
+const advancedFieldLabels = { draft_tokens: 'Draft tokens', draft_tp: 'Draft tensor parallel (TP)', prefill_chunk: 'Prefill chunk (tokens)' } as const
 const instanceStatusLabels = { starting: 'Starting', ready: 'Ready to chat', stopping: 'Stopping', stopped: 'Stopped', failed: 'Could not start' } as const
 const modelActionMessages = {
   start: 'Model start requested.',
@@ -33,7 +33,7 @@ function ModelFailureDetails({ details }: { details: string }) {
   const reserveFailure = details.match(/final KV arena violates physical headroom on rank \d+; free_bytes=\d+; headroom_bytes=\d+/)?.[0]
   return <>
     {reserveFailure && <div className="mt-2 space-y-2">
-      <p>The model could not keep your chosen GPU memory free. Close other apps using the graphics card, lower a fixed graphics-card conversation memory limit, or reduce GPU memory to keep free, then try again.</p>
+      <p>The model could not keep your chosen GPU memory free. Close other apps using the graphics card, lower a fixed GPU K/V cache limit, or reduce GPU memory to keep free, then try again.</p>
       <p className="whitespace-pre-wrap break-all">{reserveFailure}</p>
     </div>}
     <details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{details}</p></details>
@@ -110,9 +110,9 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     (options.kv_arena_bytes !== null && (!Number.isSafeInteger(options.kv_arena_bytes) || options.kv_arena_bytes < 1))
   const launchError = invalidGpuReserve ? 'Enter GPU memory to keep free as a nonnegative number of MB, within the supported size range.'
     : invalidFlashHeadroom ? 'Flash computer-memory headroom must be a whole number of GiB, at least 0, or left blank to use GInfer’s default.'
-    : invalidNumbers ? 'Use whole numbers. Conversation length and model copies must be at least 1. Requests at once must be between 1 and 8. Advanced settings cannot be negative; the graphics-card memory limit must be greater than 0 or left blank.'
+    : invalidNumbers ? 'Use whole numbers. Context length and model copies must be at least 1. Concurrency must be between 1 and 8. Advanced settings cannot be negative; the graphics-card memory limit must be greater than 0 or left blank.'
     : options.kv_dtype === 'nvfp4' && selected?.metadata.nvfp4_kv_available === false
-      ? 'This model cannot use NVFP4 conversation memory. Choose INT8 or BF16, or add a model prepared for NVFP4 memory.' : null
+      ? 'This model cannot use NVFP4 K/V cache. Choose INT8 or BF16, or add a model prepared for NVFP4 memory.' : null
   const act = async (action: keyof typeof modelActionMessages | 'hardware_profile' | 'gbot_grant', args: Record<string, unknown> = {}) => {
     if (busy || actionPending.current) return false
     actionPending.current = true
@@ -315,39 +315,39 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       }} options={[{ value: '', label: 'Choose an installed model' }, ...snapshot.models.map(m => ({ value: m.id, title: weightsDrafterDetail(m.metadata.identity.weights_id), label: `${hostModelLabel(m)} · ${m.metadata.tp_size} ${m.metadata.tp_size === 1 ? 'graphics card' : 'graphics cards'} · ${(m.metadata.size_bytes / 1024 ** 3).toFixed(1)} GiB${m.artifact_set ? ' · multi-file model' : ''}` }))]} /></label>
       <div className="flex flex-wrap gap-3">{snapshot.gpus.map((gpu, index) => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={(e) => setGpus((ids) => e.target.checked ? [...ids, gpu.uuid] : ids.filter((id) => id !== gpu.uuid))} />Graphics card {index + 1}: {gpu.display_name ?? gpu.name}</label>)}</div>
       <div className="flex flex-wrap gap-4">
-        <label className="text-sm">Conversation length (tokens)<Input type="number" min={1} value={context || ''} onChange={(e) => setContext(Number(e.target.value))} /></label>
-        <label className="text-sm">Requests at once<Input type="number" min={1} max={8} value={concurrency} onChange={(e) => setConcurrency(Number(e.target.value))} /></label>
+        <label className="text-sm">Context length (tokens)<Input type="number" min={1} value={context || ''} onChange={(e) => setContext(Number(e.target.value))} /></label>
+        <label className="text-sm">Concurrency<Input type="number" min={1} max={8} value={concurrency} onChange={(e) => setConcurrency(Number(e.target.value))} /></label>
         {!editing && <label className="text-sm">Model copies<Input type="number" min={1} max={4294967295} value={instanceCount} onChange={(e) => setInstanceCount(Number(e.target.value))} /></label>}
       </div>
-      <p className="text-sm text-muted-foreground">Tokens are pieces of text. Conversation length includes your messages, earlier conversation and the reply. Requests at once limits how many replies can be generated together. Each model copy is a separate server and needs its own memory.</p>
+      <p className="text-sm text-muted-foreground">Tokens are pieces of text. Context length includes your messages, earlier conversation and the reply. Concurrency limits how many replies can be generated together. Each model copy is a separate server and needs its own memory.</p>
       {snapshot.model_management?.engine_presets_available === false && <p className="text-sm text-muted-foreground">There are no tested saved settings for these models yet. Choose your own settings below. When changing a running model, it finishes its current replies before restarting.</p>}
       <div className="flex flex-wrap gap-4">
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.vision} onChange={(e) => setOptions({ ...options, vision: e.target.checked })} />Vision</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.vision} onChange={(e) => setOptions({ ...options, vision: e.target.checked })} />Enable Vision</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.structured_outputs} onChange={(e) => setOptions({ ...options, structured_outputs: e.target.checked })} />Structured outputs (JSON)</label>
-        <label className="text-sm">Reply speedup<ChoiceSelect aria-label="Reply speedup" className="ml-2" value={options.spec} onValueChange={value => setOptions({ ...options, spec: value as EngineLaunchOptions['spec'], draft_tokens: 0, draft_tp: 0 })} options={[{ value: 'none', label: 'Off' }, { value: 'auto', label: 'Automatic' }, { value: 'dflash', label: 'DFlash' }]} /></label>
+        <label className="text-sm">Speculative Decoding<ChoiceSelect aria-label="Speculative Decoding" className="ml-2" value={options.spec} onValueChange={value => setOptions({ ...options, spec: value as EngineLaunchOptions['spec'], draft_tokens: 0, draft_tp: 0 })} options={[{ value: 'none', label: 'Off' }, { value: 'auto', label: 'Automatic' }, { value: 'dflash', label: 'DFlash' }]} /></label>
         <label className="text-sm">K/V cache format<ChoiceSelect aria-label="K/V cache format" className="ml-2" value={options.kv_dtype} onValueChange={value => setOptions({ ...options, kv_dtype: value as EngineLaunchOptions['kv_dtype'] })} options={['auto', 'bf16', 'int8', 'nvfp4'].map(value => ({ value, label: value === 'auto' ? 'Automatic' : value.toUpperCase() }))} /></label>
       </div>
-      <p className="text-sm text-muted-foreground">Vision lets the model understand pictures when the model supports it. Structured outputs (JSON) lets apps ask for replies in an exact format, such as JSON. Reply speedup drafts text ahead for the model to check; DFlash is one method. K/V cache format is how the model stores the conversation in GPU memory. Smaller formats fit longer conversations.</p>
+      <p className="text-sm text-muted-foreground">Vision lets the model understand pictures when the model supports it. Structured outputs (JSON) lets apps ask for replies in an exact format, such as JSON. Speculative Decoding drafts text ahead for the model to check; DFlash is one method. K/V cache format is how the model stores the conversation in GPU memory. Smaller formats fit longer conversations.</p>
       {launchError && selected && <p role="alert" className="text-sm text-destructive">{launchError}</p>}
       <details className="space-y-3"><summary className="cursor-pointer text-sm">Advanced model settings</summary>
         <p className="text-sm text-muted-foreground">These settings control how GInfer, the program running your model, uses memory and drafts replies. Leave them at their defaults unless you need to adjust them.</p>
-        <p className="text-sm text-muted-foreground">Draft ahead length is how much text is drafted before the model checks it. Drafting graphics cards is the number of cards used for this work; it must match the model file. Input batch size is how much input text is processed at once. Set these to 0 to let GInfer choose.</p>
-        <p className="text-sm text-muted-foreground">Conversation memory stores earlier text. The limits below are measured in bytes. Computer conversation memory uses this computer’s main memory: leave it blank for automatic sizing, set 0 to turn it off, or enter a positive size. Graphics-card conversation memory limits memory on the graphics cards; leave it blank for automatic sizing. CUDA Graphs reduce repeated setup work on the graphics card.</p>
+        <p className="text-sm text-muted-foreground">Draft tokens is how much text is drafted before the model checks it. Draft tensor parallel is the number of cards used for this work; it must match the model file. Input batch size is how much input text is processed at once. Set these to 0 to let GInfer choose.</p>
+        <p className="text-sm text-muted-foreground">K/V cache stores earlier text. The limits below are measured in bytes. Host K/V cache uses this computer’s main memory: leave it blank for automatic sizing, set 0 to turn it off, or enter a positive size. GPU K/V cache limits memory on the graphics cards; leave it blank for automatic sizing. CUDA Graphs reduce repeated setup work on the graphics card.</p>
         <div className="grid grid-cols-2 gap-3">{(['draft_tokens', 'draft_tp', 'prefill_chunk'] as const).map((key) => <label className="text-sm" key={key}>{advancedFieldLabels[key]}<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} value={options[key]} onChange={(e) => setOptions({ ...options, [key]: Number(e.target.value) })} /></label>)}
-          <label className="text-sm">Computer conversation memory (bytes)<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} value={options.host_kv_cache_bytes ?? ''} onChange={(e) => setOptions({ ...options, host_kv_cache_bytes: e.target.value === '' ? null : Number(e.target.value) })} /></label>
-          <label className="text-sm">Graphics-card conversation memory (bytes)<Input type="number" min={1} max={Number.MAX_SAFE_INTEGER} value={options.kv_arena_bytes ?? ''} onChange={(e) => setOptions({ ...options, kv_arena_bytes: e.target.value ? Number(e.target.value) : null })} /></label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.no_cuda_graph} onChange={(e) => setOptions({ ...options, no_cuda_graph: e.target.checked })} />Turn off CUDA Graphs</label>
+          <label className="text-sm">Host K/V cache (bytes)<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} value={options.host_kv_cache_bytes ?? ''} onChange={(e) => setOptions({ ...options, host_kv_cache_bytes: e.target.value === '' ? null : Number(e.target.value) })} /></label>
+          <label className="text-sm">GPU K/V cache (bytes)<Input type="number" min={1} max={Number.MAX_SAFE_INTEGER} value={options.kv_arena_bytes ?? ''} onChange={(e) => setOptions({ ...options, kv_arena_bytes: e.target.value ? Number(e.target.value) : null })} /></label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.no_cuda_graph} onChange={(e) => setOptions({ ...options, no_cuda_graph: e.target.checked })} />Disable CUDA Graphs</label>
         </div>
         <label className="block text-sm">GPU memory to keep free (MB)<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER / MEBIBYTE} step="any" value={gpuReserve === undefined ? '' : gpuReserve / MEBIBYTE} aria-describedby={`gpu-reserve-help-${host.host_id}`} onChange={(e) => setOptions({ ...options, kv_arena_headroom_bytes: e.target.value === '' ? undefined : Number(e.target.value) * MEBIBYTE })} /></label>
         <p id={`gpu-reserve-help-${host.host_id}`} className="text-sm text-muted-foreground">Raise this if other apps on this GPU, like your desktop or games, cause slowdowns. This amount is kept free on each selected graphics card. 1 MB here is 1,048,576 bytes. It applies when the model starts; use Save and restart to apply changes to a running model.</p>
         <label className="block text-sm">Computer memory headroom for Flash (GiB)<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} step={1} value={flashHeadroom ?? ''} onChange={(e) => setOptions({ ...options, flash_host_ram_headroom_gib: e.target.value === '' ? null : Number(e.target.value) })} /></label>
-        <p className="text-sm text-muted-foreground">For Flash models, choose how much computer memory to leave free, measured in GiB. Leave blank to use GInfer’s default (4 GiB). This is separate from conversation memory.</p>
+        <p className="text-sm text-muted-foreground">For Flash models, choose how much computer memory to leave free, measured in GiB. Leave blank to use GInfer’s default (4 GiB). This is separate from K/V cache.</p>
         {flashHeadroom === 0 && <p className="text-sm text-amber-700 dark:text-amber-400">0 removes the extra computer-memory reserve for Flash. Other apps may have less memory available.</p>}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.expert_lfu ?? true} onChange={(e) => setOptions({ ...options, expert_lfu: e.target.checked })} />Update the Flash expert cache</label>
         <p className="text-sm text-muted-foreground">Experts are parts of a Flash model. This periodically updates which experts are kept in graphics-card memory based on how often they are used (LFU). Turning this off stops those updates; it does not clear the cache or change where uncached experts are loaded from.</p>
       </details>
       {!editing && <>
-        <p className="text-sm text-muted-foreground">Checking settings does not start a model or set aside memory. When starting several copies, automatic sizing divides the available graphics-card conversation memory equally. Available memory is checked again when each model starts.</p>
+        <p className="text-sm text-muted-foreground">Checking settings does not start a model or set aside memory. When starting several copies, automatic sizing divides the available GPU K/V cache equally. Available memory is checked again when each model starts.</p>
         <Button variant="outline" disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {
           const key = quoteKey
           const revision = quoteRevision.current
@@ -357,7 +357,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
             .catch(error => { if (quoteRevision.current === revision) setStartupQuote({ key, error: String(error) }) })
             .finally(() => setBusy(false))
         }}>Check model settings</Button>
-        {currentQuote?.result && <p role="status" className="text-sm">Model file checked: {identityLabel(currentQuote.result.model_identity)}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'model copy' : 'model copies'}. {currentQuote.result.kv_arena_bytes === null ? 'Conversation memory is automatic. Start one copy first so GInfer can measure its memory use before sharing the graphics cards.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of graphics-card conversation memory per model copy.`} This check did not start a model.</p>}
+        {currentQuote?.result && <p role="status" className="text-sm">Model file checked: {identityLabel(currentQuote.result.model_identity)}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'model copy' : 'model copies'}. {currentQuote.result.kv_arena_bytes === null ? 'K/V cache is automatic. Start one copy first so GInfer can measure its memory use before sharing the graphics cards.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of GPU K/V cache per model copy.`} This check did not start a model.</p>}
         {currentQuote?.error && <div role="alert" className="text-sm text-destructive"><p>These model settings could not be checked. Review your choices and available graphics-card memory, then try again.</p><ModelFailureDetails details={currentQuote.error} /></div>}
       </>}
       <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={async () => {

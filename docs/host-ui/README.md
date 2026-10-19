@@ -1063,7 +1063,7 @@ An independently built native development desktop and Host at `66e766a43`
 used S1 GPU1 and the private dev catalog
 `http://192.168.1.109:18761/catalog.json`. Native **Check model settings** returned:
 
-> Model file checked: Qwen 3.8 27B — INT. 2 model copies. 27.5 GiB of graphics-card conversation memory per model copy. This check did not start a model.
+> Model file checked: Qwen 3.8 27B — INT. 2 model copies. 27.5 GiB of GPU K/V cache per model copy. This check did not start a model.
 
 The [reviewed screenshot](../../out/c3-startup-check-sizes-20261018/native-check-result.png)
 and [actual quote](../../out/c3-startup-check-sizes-20261018/native-quote.json)
@@ -1410,7 +1410,7 @@ select CSS and chevron assertion were removed. The current Hosts, Benchmark
 and Workspace connections fields use the app-rendered control.
 
 The inspected [Light 1024×800 Hosts capture](../../out/c3-host-locator-deleted-runtime-20261018/native-model-settings-light-narrow.png)
-shows Installed model, Reply speedup and K/V cache format beside
+shows Installed model, Speculative Decoding and K/V cache format beside
 readable input fields. The retained [Light open-menu capture](../../out/c7-dropdown-host-selectors-20261018/after-light-medium-serving.png)
 shows readable choices, wrapping and the app palette. These close the remaining
 light-theme visual check. The existing
@@ -1647,8 +1647,8 @@ retained `native-model-advanced-dark-wide.png`,
 `native-model-advanced-light-narrow.png` and `native-model-settings.json` in
 `out/c3-host-locator-deleted-runtime-20261018/`. At 06:16Z the ordinary
 **Model and memory settings → Choose model settings → Advanced model settings**
-path showed **Draft ahead length (tokens)**, **Drafting graphics cards (TP)**
-and **Input batch size (tokens)**. The inspected dark 1500×1000 and light
+path showed **Draft tokens**, **Draft tensor parallel (TP)**
+and **Prefill chunk (tokens)**. The inspected dark 1500×1000 and light
 1024×800 screenshots show readable labels without raw keys or horizontal
 overflow. Native controls were exercised and defaults restored.
 
