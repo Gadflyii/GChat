@@ -676,14 +676,6 @@ mod tests {
             },
             MuseSetting {
                 file: "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-vision.json",
-                id: "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c4-6k-int8-vision-calculated",
-                platform: "linux", gpu: "NVIDIA GeForce RTX 3080 Ti Laptop GPU", cc: "8.6", tier: 16, memory: 16384,
-                context: 6144, concurrency: 4, vision: true, arena: None, available: Some(731906048),
-                prefill: 1024, free: 316669952, required: Some(678980608),
-                engine: "c7bdb4673d3f4c3128c69d5b15ca353f85969250",
-            },
-            MuseSetting {
-                file: "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-vision.json",
                 id: "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c2-61k-int8-vision-calculated",
                 platform: "linux", gpu: "NVIDIA GeForce RTX 3080 Ti Laptop GPU", cc: "8.6", tier: 16, memory: 16384,
                 context: 62464, concurrency: 2, vision: true, arena: None, available: Some(1142947840),
