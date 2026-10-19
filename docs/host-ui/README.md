@@ -140,7 +140,7 @@ for three source files, 35 dependencies and eleven read-only catalogs / 48
 profiles to the frozen revision. The component self-check is complete.
 
 S1 `AIS-2-8592-L01` booking3622, CPU88–95 returned **23:09Z** and was canceled.
-The verified candidate is merge-ready. No Ada resource is held; its 23:00–23:30Z quiet window is respected. These checks qualify the source
+Merged on main as **`28a48e902`**. No Ada resource is held; its 23:00–23:30Z quiet window is respected. These checks qualify the source
 correction and Linux gate; they make no installed-app or Windows claim.
 
 The first focused attempt on `d45e01667` stopped at **63 passed / three failed**:
@@ -160,7 +160,8 @@ were retired at **23:11:29Z**, reclaiming **29,370,376,192 allocated bytes**
 after parent terminal review. The inactive RC dependency donor and protected
 catalog inputs remain. Only the result JSON and short summary remain in
 `out/c7-models-stop-status-recovery-20261018/`; no resource is held.
-Next: Bubbs merge, then review C4's pending Windows quote/collision handoff.
+Next: C7's Models, Downloads and Hardware accessibility pass; the Windows
+quote/collision leaves still await C4's installed walkthrough.
 
 ## Models overlapping deletion recovery — C7, October 18
 
