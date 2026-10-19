@@ -4309,3 +4309,18 @@ app's `runtime_pack` run from a fresh folder): first unpack 29 s and the Gbot se
 immediate re-run did not unpack again (0.4 ms); a different zip unpacked again and the old `<hash>` folder was removed;
 a changed app version unpacked again (36 s). Expect roughly 30 s for the first Gbot start after an install or upgrade.
 Log: `out/core-nsis-zip-20261019/laptop-windows-proof.log`; the opt-in test is `real_runtime_zip_unpacks_and_is_accepted_by_the_service`.
+
+## Mail trigger on a connected Gmail or Outlook account
+
+`GBOT-MAIL-TRIGGER-CONNECTED`: besides a local mail folder, an event schedule can watch a Google or Microsoft account
+linked to the bot (Schedules → "When mail arrives in a connected Gmail or Outlook account"). The service polls about once
+a minute through the account's existing read-only mail tools (`google.gmail.search` and `google.gmail.read` with metadata
+headers; `microsoft.outlook.list_messages`), never webhooks or a relay, and the mailbox is only read. The first look records
+what is already there; afterwards each new message from a listed sender (a full address or an `@domain`; at least one is
+required, so by default nobody can start a task) queues one task given who it is from, the subject and the first 2,000
+characters, labelled as untrusted text from the sender. Other senders' mail is ignored. At most five tasks wait at a time and
+messages beyond that wait for room. Unlinked, disconnected or unreadable accounts show plain messages on the schedule
+with no provider detail, and the account must have mail read access granted. Tested with scripted Gmail and Graph
+fixtures behind the connector boundary (priming, sender and domain filtering, look-alike domains, no repeats, a flood limit,
+read-only tool use, unlinked and reconnect-needed accounts); no live mailbox was used. The Gmail and Graph result shapes
+are those of the provider APIs as returned by the adapters and are untested against a live account until Ron OKs one.

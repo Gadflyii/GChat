@@ -17,13 +17,16 @@ type CalendarRule =
 type EventSource =
   | { kind: 'folder_arrival'; path: string }
   | { kind: 'mail_folder'; path: string }
+  | { kind: 'connected_mail'; account_id: string; senders: string[] }
 type Timing =
   | { kind: 'once'; at: number }
   | { kind: 'interval'; first_at: number; every_seconds: number }
   | { kind: 'calendar'; rule: CalendarRule }
   | { kind: 'event'; source: EventSource }
 
-type Kind = 'once' | 'interval' | 'days' | 'monthly' | 'folder' | 'mail'
+type MailAccount = { id: string; provider: string; display_name: string; email: string | null }
+
+type Kind = 'once' | 'interval' | 'days' | 'monthly' | 'folder' | 'mail' | 'account_mail'
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const NTH_NAMES = ['First', 'Second', 'Third', 'Fourth', 'Last']
@@ -53,6 +56,8 @@ export function describeTiming(timing: Timing): string {
       return `${NTH_NAMES[rule.nth - 1]} ${DAY_NAMES[rule.weekday]} of each month at ${clock(rule.hour, rule.minute)}`
     }
     case 'event':
+      if (timing.source.kind === 'connected_mail')
+        return `When new mail arrives in a connected account from ${timing.source.senders.join(', ')}`
       return timing.source.kind === 'folder_arrival'
         ? `When a file arrives in ${timing.source.path} on the bot’s computer`
         : `When new mail arrives in the mail folder ${timing.source.path}`
@@ -112,6 +117,9 @@ function WorkspaceSchedules({
   const [nth, setNth] = useState('1')
   const [weekday, setWeekday] = useState('0')
   const [folder, setFolder] = useState('')
+  const [mailAccounts, setMailAccounts] = useState<MailAccount[]>([])
+  const [mailAccount, setMailAccount] = useState('')
+  const [senders, setSenders] = useState('')
   const [seconds, setSeconds] = useState('3600')
   const [policy, setPolicy] = useState<'run_latest' | 'skip_missed'>(
     'run_latest'
@@ -130,6 +138,25 @@ function WorkspaceSchedules({
   const [refreshError, setRefreshError] = useState('')
   const [stopped, setStopped] = useState<string | null>(null)
   const refreshVersion = useRef(0)
+  useEffect(() => {
+    if (kind !== 'account_mail') return
+    let live = true
+    void gbot<{ account_ids: string[]; accounts: MailAccount[] }>('connectors/get', { workspace_id: workspaceId })
+      .then((value) => {
+        if (!live) return
+        const usable = (value.accounts ?? []).filter(
+          (account) =>
+            (value.account_ids ?? []).includes(account.id) &&
+            (account.provider === 'google' || account.provider === 'microsoft')
+        )
+        setMailAccounts(usable)
+        setMailAccount((current) => current || usable[0]?.id || '')
+      })
+      .catch(() => live && setMailAccounts([]))
+    return () => {
+      live = false
+    }
+  }, [kind, workspaceId])
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current
     try {
@@ -390,6 +417,7 @@ function WorkspaceSchedules({
             const [hour, minute] = time.split(':').map(Number)
             const timed = kind === 'once' || kind === 'interval'
             const needsPath = kind === 'folder' || kind === 'mail'
+            const senderList = senders.split(/[\n,]/).map((line) => line.trim()).filter(Boolean)
             if (
               !prompt.trim() ||
               (timed && (!Number.isFinite(timestamp) || timestamp <= 0)) ||
@@ -399,11 +427,14 @@ function WorkspaceSchedules({
               ((kind === 'days' || kind === 'monthly') &&
                 !Number.isFinite(hour) || !Number.isFinite(minute)) ||
               (kind === 'days' && days.length === 0) ||
-              (needsPath && !folder.trim())
+              (needsPath && !folder.trim()) ||
+              (kind === 'account_mail' && (!mailAccount || senderList.length === 0))
             ) {
               setError({
                 message: timed
                   ? 'Enter a prompt, start time and positive whole interval in seconds.'
+                  : kind === 'account_mail'
+                  ? 'Enter what the bot should do, choose a linked account and list at least one sender.'
                   : needsPath
                     ? 'Enter what the bot should do and the full folder path to watch.'
                     : 'Enter what the bot should do, the time of day and at least one day.',
@@ -435,7 +466,12 @@ function WorkspaceSchedules({
                             minute,
                           },
                         }
-                      : {
+                      : kind === 'account_mail'
+                        ? {
+                            kind: 'event',
+                            source: { kind: 'connected_mail', account_id: mailAccount, senders: senderList },
+                          }
+                        : {
                           kind: 'event',
                           source: {
                             kind: kind === 'folder' ? 'folder_arrival' : 'mail_folder',
@@ -483,6 +519,7 @@ function WorkspaceSchedules({
                 { value: 'monthly', label: 'Once a month on a chosen weekday' },
                 { value: 'folder', label: 'When a file arrives on the bot’s computer' },
                 { value: 'mail', label: 'When new mail arrives in a mail folder' },
+                { value: 'account_mail', label: 'When mail arrives in a connected Gmail or Outlook account' },
               ]}
             />
           </label>
@@ -591,14 +628,58 @@ function WorkspaceSchedules({
               />
             </label>
           )}
+          {kind === 'account_mail' && (
+            <div className="space-y-3 text-sm">
+              {mailAccounts.length === 0 ? (
+                <p className="text-muted-foreground">
+                  Link a Google or Microsoft account to this bot under Linked accounts first, then choose it here.
+                </p>
+              ) : (
+                <label className="block">
+                  Account
+                  <select
+                    aria-label="Mailbox account"
+                    className="ml-2 rounded-md border bg-background p-1"
+                    value={mailAccount}
+                    onChange={(event) => setMailAccount(event.target.value)}
+                    disabled={busy || !assignment}
+                  >
+                    {mailAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.display_name || account.email || account.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className="block">
+                Only start for mail from (one address or @domain per line)
+                <textarea
+                  aria-label="Allowed senders"
+                  className="mt-1 block w-full rounded-md border bg-background p-2"
+                  rows={3}
+                  placeholder={'ada@example.com\n@mycompany.com'}
+                  value={senders}
+                  onChange={(event) => setSenders(event.target.value)}
+                  disabled={busy || !assignment}
+                />
+              </label>
+              <p className="text-xs text-muted-foreground">
+                The bot checks this mailbox about once a minute and starts the task above once for each new message from
+                one of these senders, telling it who the message is from, the subject and the start of the text. Mail
+                already there and mail from anyone else is ignored. At most five tasks wait at a time. The mailbox is
+                only read; nothing is sent or changed unless you approve an action.
+              </p>
+            </div>
+          )}
           {(kind === 'folder' || kind === 'mail') && (
             <p className="text-xs text-muted-foreground">
               {kind === 'folder'
                 ? 'The bot starts the task above once for each new file that appears in this folder, after the file has finished arriving. Files already there are ignored. Up to five tasks wait at a time.'
-                : 'The bot starts the task above once for each new message that appears in this folder (a Maildir or a folder of .eml files), and is told who it is from, the subject and the start of the message. Messages already there are ignored. Mail from connected Google or Microsoft accounts is not watched yet.'}
+                : 'The bot starts the task above once for each new message that appears in this folder (a Maildir or a folder of .eml files), and is told who it is from, the subject and the start of the message. Messages already there are ignored. To watch a connected Gmail or Outlook account, choose that option instead.'}
             </p>
           )}
-          {kind !== 'folder' && kind !== 'mail' && (<><label className="block text-sm">
+          {kind !== 'folder' && kind !== 'mail' && kind !== 'account_mail' && (<><label className="block text-sm">
             Missed runs
             <ChoiceSelect
               aria-label="Missed run policy"

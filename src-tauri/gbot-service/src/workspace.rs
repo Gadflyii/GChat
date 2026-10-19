@@ -462,6 +462,59 @@ impl WorkspaceRuntime {
             .map_err(WorkspaceError::Connector)
     }
 
+    /// Reads the newest messages of a connected Gmail or Outlook account linked to this bot, with the account's own
+    /// mail tools. `skip_details` (the first look) returns ids only. Errors are plain words with no provider detail.
+    pub async fn read_mail(
+        &self,
+        workspace_id: WorkspaceId,
+        account_id: &str,
+        seen: &[String],
+        skip_details: bool,
+    ) -> Result<Vec<crate::triggers::Mail>, String> {
+        use crate::triggers as t;
+        use serde_json::json;
+        const UNREADABLE: &str = "GChat could not read this mailbox. Check that the account is linked to this bot, allows reading mail, and is connected in Settings.";
+        let host = self.connectors.as_ref().ok_or(UNREADABLE)?;
+        let links = self.service.connector_accounts(workspace_id).await.map_err(|_| UNREADABLE.to_owned())?;
+        if !links.iter().any(|id| id == account_id) {
+            return Err("This account is not linked to this bot any more. Link it again under Linked accounts.".into());
+        }
+        let accounts = host.accounts().await.map_err(|_| UNREADABLE.to_owned())?;
+        let account = accounts.iter().find(|a| a.id == account_id).ok_or(UNREADABLE)?;
+        if account.needs_reconnect {
+            return Err("This account needs to be reconnected in Settings, then the trigger will work again.".into());
+        }
+        let linked = [account_id.to_owned()];
+        let call = |name: &'static str, args: serde_json::Value| {
+            let linked = &linked;
+            async move {
+                let prepared = host.prepare(linked, name, args).await.map_err(|_| UNREADABLE.to_owned())?;
+                if prepared.write {
+                    return Err(UNREADABLE.to_owned());
+                }
+                host.execute(&prepared).await.map_err(|_| UNREADABLE.to_owned())
+            }
+        };
+        match account.provider.as_str() {
+            "google" => {
+                let found = call("google.gmail.search", json!({"query": "in:inbox", "max_results": 25})).await?;
+                let ids = t::parse_gmail_ids(&found);
+                let mut mails = Vec::new();
+                for id in ids.into_iter().take(25) {
+                    if skip_details || seen.contains(&id) {
+                        mails.push(t::Mail { id, from: String::new(), subject: String::new(), preview: String::new() });
+                        continue;
+                    }
+                    let read = call("google.gmail.read", json!({"message_id": id, "format": "metadata", "metadata_headers": ["From", "Subject"]})).await?;
+                    mails.push(t::parse_gmail_message(&read).unwrap_or(t::Mail { id, from: String::new(), subject: String::new(), preview: String::new() }));
+                }
+                Ok(mails)
+            }
+            "microsoft" => Ok(t::parse_graph_messages(&call("microsoft.outlook.list_messages", json!({})).await?)),
+            _ => Err(UNREADABLE.into()),
+        }
+    }
+
     pub async fn site_rules(
         &self,
         workspace_id: WorkspaceId,

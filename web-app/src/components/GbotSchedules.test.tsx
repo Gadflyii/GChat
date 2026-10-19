@@ -1306,7 +1306,7 @@ it('creates file-arrival and mail-folder schedules and explains them', async () 
   fireEvent.change(screen.getByLabelText('Scheduled task prompt'), { target: { value: 'Reply to this email' } })
   await user.click(screen.getByRole('button', { name: 'Schedule repetition' }))
   await user.click(screen.getByRole('menuitemradio', { name: 'When new mail arrives in a mail folder' }))
-  expect(screen.getByText(/Mail from connected Google or Microsoft accounts is not watched yet/)).toBeVisible()
+  expect(screen.getByText(/To watch a connected Gmail or Outlook account, choose that option instead/)).toBeVisible()
   fireEvent.change(screen.getByLabelText('Mail folder to watch'), { target: { value: '/home/me/Mail/inbox' } })
   fireEvent.submit(screen.getByRole('form', { name: 'Schedule a bot task' }))
   await waitFor(() =>
@@ -1358,3 +1358,48 @@ it('starts a run now for the chosen schedule and says plainly when it cannot', a
   fireEvent.click(within(screen.getByRole('alert')).getByText('Details'))
   expect(screen.getByText('A run of this schedule is already going or needs your review.')).toBeVisible()
 })
+
+it('creates a connected-mailbox trigger for linked accounts and an allowed sender list', async () => {
+  const user = userEvent.setup()
+  request.mockImplementation(async (route: string, input?: Record<string, unknown>) => {
+    if (route === 'connectors/get')
+      return {
+        account_ids: ['g-1'],
+        accounts: [
+          { id: 'g-1', provider: 'google', display_name: 'Work Gmail', email: 'me@example.com' },
+          { id: 'g-2', provider: 'google', display_name: 'Not linked', email: null },
+        ],
+      }
+    if (route === 'schedules') return { schedules: [schedule], stopped: null }
+    if (route === 'schedules/create') return { ...schedule, id: 'created', ...input }
+  })
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), { target: { value: 'Summarise this email' } })
+  await user.click(screen.getByRole('button', { name: 'Schedule repetition' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'When mail arrives in a connected Gmail or Outlook account' }))
+  fireEvent.submit(screen.getByRole('form', { name: 'Schedule a bot task' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('list at least one sender')
+  const account = await screen.findByLabelText('Mailbox account')
+  expect(within(account).getByRole('option', { name: 'Work Gmail' })).toBeVisible()
+  expect(within(account).queryByRole('option', { name: 'Not linked' })).toBeNull()
+  expect(screen.getByText(/only read; nothing is sent or changed/)).toBeVisible()
+  fireEvent.change(screen.getByLabelText('Allowed senders'), { target: { value: 'ada@example.com\n@corp.test' } })
+  fireEvent.submit(screen.getByRole('form', { name: 'Schedule a bot task' }))
+  await waitFor(() =>
+    expect(request).toHaveBeenCalledWith('schedules/create', {
+      workspace_id: 'bot-one',
+      prompt: 'Summarise this email',
+      timing: { kind: 'event', source: { kind: 'connected_mail', account_id: 'g-1', senders: ['ada@example.com', '@corp.test'] } },
+      missed_run_policy: 'run_latest',
+    })
+  )
+})
+
+it('describes a connected-mailbox schedule in plain words', () => {
+  expect(
+    describeTiming({ kind: 'event', source: { kind: 'connected_mail', account_id: 'g-1', senders: ['ada@example.com', '@corp.test'] } })
+  ).toBe('When new mail arrives in a connected account from ada@example.com, @corp.test')
+})
+
