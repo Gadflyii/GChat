@@ -1,0 +1,25 @@
+{
+ "host": "laptop Ron-X17R2, Windows 11 build 26200",
+ "app": "installed GChat 2.0.42 (C:\\Users\\Ron\\AppData\\Local\\GChat\\gchat.exe)",
+ "method": "Windows UI Automation TogglePattern on the real Settings > Integrations 'Gbot integration' switch; registry read with Get-ItemProperty",
+ "gchat_run_entries_by_step": {
+  "before": [],
+  "afterEnable": [
+   {
+    "Name": "GChat-Gbot-f0251df9b302a64b4aa701155927da4c629482baf9a04e3f75711b989324b6dc",
+    "Value": "\"C:\\Users\\Ron\\AppData\\Local\\GChat\\gchat.exe\" \"--gbot-service\" \"--data-folder\" \"C:\\Users\\Ron\\AppData\\Roaming\\GChat\\data\" \"--resources\" \"\\\\?\\C:\\Users\\Ron\\AppData\\Local\\GChat\""
+   }
+  ],
+  "afterDisable": [],
+  "afterReenable": [
+   {
+    "Name": "GChat-Gbot-f0251df9b302a64b4aa701155927da4c629482baf9a04e3f75711b989324b6dc",
+    "Value": "\"C:\\Users\\Ron\\AppData\\Local\\GChat\\gchat.exe\" \"--gbot-service\" \"--data-folder\" \"C:\\Users\\Ron\\AppData\\Roaming\\GChat\\data\" \"--resources\" \"\\\\?\\C:\\Users\\Ron\\AppData\\Local\\GChat\""
+   }
+  ]
+ },
+ "other_run_entries_unchanged": true,
+ "service_launch": "the Run value executed through cmd start started gchat.exe --gbot-service with the exact arguments and wrote gbot/service.json",
+ "not_done": "actual Windows sign-out/sign-in",
+ "cleanup": "switch Off, Run entry removed, service and desktop stopped by PID, stale discovery file removed"
+}
