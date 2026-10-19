@@ -894,7 +894,8 @@ impl Schedules {
                         .filter(|o| !matches!(o.state, OccurrenceState::Completed | OccurrenceState::Skipped))
                         .count();
                     let mut room = t::MAX_OUTSTANDING.saturating_sub(outstanding);
-                    for mail in mails.iter().filter(|m| !seen.contains(&m.id)) {
+                    let already = seen.clone();
+                    for mail in mails.iter().filter(|m| !already.contains(&m.id)) {
                         if room == 0 {
                             break; // left unseen: it starts a task once there is room
                         }
