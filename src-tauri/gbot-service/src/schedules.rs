@@ -62,6 +62,9 @@ pub enum EventSource {
     /// the service computer. Connected Google and Microsoft mailboxes are not
     /// watched yet.
     MailFolder { path: String },
+    /// New mail in a connected Gmail or Outlook account linked to the bot, from the listed senders
+    /// only. Read with the account's own mail tools by polling; no webhook or relay.
+    ConnectedMail { account_id: String, senders: Vec<String> },
 }
 
 impl CalendarRule {
@@ -166,12 +169,20 @@ impl CalendarRule {
 
 impl EventSource {
     fn valid(&self) -> bool {
+        if let Self::ConnectedMail { account_id, senders } = self {
+            return !account_id.trim().is_empty()
+                && account_id.len() <= 256
+                && (1..=20).contains(&senders.len())
+                && senders.iter().all(|s| crate::triggers::sender_entry_valid(s));
+        }
         let path = match self {
             Self::FolderArrival { path } | Self::MailFolder { path } => path,
+            Self::ConnectedMail { .. } => unreachable!(),
         };
         let full = match self {
             Self::FolderArrival { .. } => path.starts_with('/'),
             Self::MailFolder { .. } => std::path::Path::new(path).is_absolute(),
+            Self::ConnectedMail { .. } => unreachable!(),
         };
         full && !path.contains('\0') && path.len() <= 1024
     }
@@ -689,8 +700,19 @@ impl Schedules {
                 .lock()
                 .map_err(|_| ServiceError::InvalidState)?
                 .get(&schedule.id)
-                .is_none_or(|look| at >= look.at + t::POLL_SECONDS);
+                .is_none_or(|look| {
+                    at >= look.at
+                        + if matches!(source, EventSource::ConnectedMail { .. }) {
+                            t::CONNECTED_POLL_SECONDS
+                        } else {
+                            t::POLL_SECONDS
+                        }
+                });
             if !due {
+                continue;
+            }
+            if let EventSource::ConnectedMail { account_id, senders } = source {
+                self.poll_connected_mail(&schedule, account_id, senders, at, runtime).await?;
                 continue;
             }
             let listing: Result<Option<Vec<t::Entry>>, String> = match source {
@@ -763,6 +785,7 @@ impl Schedules {
                     .await
                     .unwrap_or_else(|_| Err("The mail folder could not be read.".into()))
                 }
+                EventSource::ConnectedMail { .. } => unreachable!(),
             };
             let (entries, error) = match listing {
                 Ok(Some(entries)) => (entries, None),
@@ -800,6 +823,7 @@ impl Schedules {
                     for entry in t::arrivals(&entries, &seen, &before, room) {
                         let context = match source {
                             EventSource::FolderArrival { path } => t::file_context(path, &entry),
+                            EventSource::ConnectedMail { .. } => unreachable!(),
                             EventSource::MailFolder { path } => {
                                 let location = std::path::Path::new(path);
                                 let file = if location.join("new").is_dir() {
@@ -833,6 +857,58 @@ impl Schedules {
                 .await?;
         }
         Ok(())
+    }
+
+    /// Looks at a connected mailbox through the account's own mail tools and queues one occurrence per new
+    /// message from an allowed sender. The first look only records what is already there.
+    async fn poll_connected_mail(
+        &self,
+        schedule: &Schedule,
+        account_id: &str,
+        senders: &[String],
+        at: u64,
+        runtime: &WorkspaceRuntime,
+    ) -> Result<(), WorkspaceError> {
+        use crate::triggers as t;
+        self.looks
+            .lock()
+            .map_err(|_| ServiceError::InvalidState)?
+            .entry(schedule.id)
+            .or_default()
+            .at = at;
+        let primed = schedule.watch.primed;
+        let listed = runtime
+            .read_mail(schedule.workspace_id, account_id, &schedule.watch.seen, !primed)
+            .await;
+        let mut seen = schedule.watch.seen.clone();
+        let mut contexts: Vec<String> = Vec::new();
+        let (error, primed) = match listed {
+            Err(message) => (Some(message), primed),
+            Ok(mails) => {
+                if !primed {
+                    t::remember(&mut seen, mails.iter().map(|m| m.id.clone()));
+                } else {
+                    let outstanding = schedule
+                        .occurrences
+                        .iter()
+                        .filter(|o| !matches!(o.state, OccurrenceState::Completed | OccurrenceState::Skipped))
+                        .count();
+                    let mut room = t::MAX_OUTSTANDING.saturating_sub(outstanding);
+                    for mail in mails.iter().filter(|m| !seen.contains(&m.id)) {
+                        if room == 0 {
+                            break; // left unseen: it starts a task once there is room
+                        }
+                        t::remember(&mut seen, [mail.id.clone()]);
+                        if t::sender_allowed(&mail.from, senders) {
+                            contexts.push(t::connected_context(mail));
+                            room -= 1;
+                        }
+                    }
+                }
+                (None, true)
+            }
+        };
+        self.apply_watch(schedule.id, seen, primed, error, contexts, at).await
     }
 
     async fn apply_watch(
@@ -1795,5 +1871,167 @@ mod tests {
         schedules.run_now_at(RunNow { id: created.id }, 150).await.unwrap();
         let off = schedules.set_enabled_at(SetEnabled { id: created.id, enabled: false }, 160).await.unwrap();
         assert_eq!(off.occurrences.last().unwrap().state, OccurrenceState::Skipped);
+    }
+    /// A scripted mailbox behind the connector boundary: only read tools exist and every call is recorded.
+    struct MailHost {
+        provider: &'static str,
+        reconnect: bool,
+        mail: std::sync::Mutex<Vec<(String, String, String, String)>>, // id, from, subject, preview
+        calls: std::sync::Mutex<Vec<String>>,
+    }
+    impl crate::connectors::ConnectorHost for MailHost {
+        fn accounts(&self) -> crate::connectors::ConnectorFuture<'_, Vec<crate::connectors::ConnectorAccount>> {
+            Box::pin(async move {
+                Ok(vec![crate::connectors::ConnectorAccount {
+                    id: "acct-1".into(),
+                    provider: self.provider.into(),
+                    display_name: "Fixture".into(),
+                    email: None,
+                    services: vec!["mail".into()],
+                    access: "read_only".into(),
+                    granted_scopes: vec![],
+                    needs_reconnect: self.reconnect,
+                }])
+            })
+        }
+        fn catalog<'a>(&'a self, _: &'a [String]) -> crate::connectors::ConnectorFuture<'a, Vec<crate::connectors::ConnectorTool>> {
+            Box::pin(async { Ok(vec![]) })
+        }
+        fn prepare<'a>(&'a self, linked: &'a [String], name: &'a str, arguments: serde_json::Value) -> crate::connectors::ConnectorFuture<'a, crate::connectors::PreparedConnector> {
+            Box::pin(async move {
+                Ok(crate::connectors::PreparedConnector { name: name.into(), account_id: linked[0].clone(), arguments, write: false })
+            })
+        }
+        fn execute<'a>(&'a self, request: &'a crate::connectors::PreparedConnector) -> crate::connectors::ConnectorFuture<'a, serde_json::Value> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push(request.name.clone());
+                let mail = self.mail.lock().unwrap().clone();
+                match request.name.as_str() {
+                    "google.gmail.search" => Ok(json!({"messages": mail.iter().map(|m| json!({"id": m.0, "threadId": m.0})).collect::<Vec<_>>()})),
+                    "google.gmail.read" => {
+                        let id = request.arguments["message_id"].as_str().unwrap();
+                        let m = mail.iter().find(|m| m.0 == id).unwrap();
+                        Ok(json!({"id": m.0, "snippet": m.3, "payload": {"headers": [{"name": "From", "value": m.1}, {"name": "Subject", "value": m.2}]}}))
+                    }
+                    "microsoft.outlook.list_messages" => Ok(json!({"value": mail.iter().map(|m| json!({"id": m.0, "subject": m.2, "bodyPreview": m.3, "from": {"emailAddress": {"address": m.1}}})).collect::<Vec<_>>()})),
+                    other => Err(format!("unexpected tool {other}")),
+                }
+            })
+        }
+    }
+
+    async fn mail_trigger_fixture(
+        provider: &'static str,
+        reconnect: bool,
+        linked: bool,
+    ) -> (tempfile::TempDir, Arc<MailHost>, WorkspaceRuntime, Arc<Service>, Schedules, Schedule) {
+        use crate::contract::{BotPc, ServicePc, SshConnection, SshEndpoint, SshHostPublicKey, VaultCredentialRef, WorkspaceConfig, WorkspaceConnection};
+        use russh::keys::{Algorithm, PrivateKey};
+        let dir = tempfile::tempdir().unwrap();
+        let assignment = assignment();
+        let service = Arc::new(Service::open(dir.path().join("service.json")).await.unwrap());
+        let private = PrivateKey::random(&mut russh::keys::key::safe_rng(), Algorithm::Ed25519).unwrap();
+        let public = private.public_key().to_openssh().unwrap();
+        let (algorithm, public_key) = public.split_once(' ').unwrap();
+        service
+            .register_workspace(WorkspaceConfig {
+                id: assignment.workspace_id,
+                name: "Mail fixture".into(),
+                service_pc: ServicePc::Local,
+                bot_pc: BotPc::Lan { computer_id: Uuid::new_v4() },
+                connection: WorkspaceConnection::Ssh(SshConnection {
+                    endpoint: SshEndpoint { hostname: "127.0.0.1".into(), port: 2222, user: "fixture".into() },
+                    pinned_host_key: SshHostPublicKey { algorithm: algorithm.into(), public_key: public_key.into() },
+                    credential_ref: VaultCredentialRef::new(),
+                }),
+            })
+            .await
+            .unwrap();
+        if linked {
+            service
+                .save_connector_accounts(crate::connectors::BotConnectorAccounts { workspace_id: assignment.workspace_id, account_ids: vec!["acct-1".into()] })
+                .await
+                .unwrap();
+        }
+        let host = Arc::new(MailHost {
+            provider,
+            reconnect,
+            mail: std::sync::Mutex::new(vec![("m1".into(), "Old <old@example.com>".into(), "Before".into(), "already here".into())]),
+            calls: Default::default(),
+        });
+        let runtime = WorkspaceRuntime::new(service.clone(), Arc::new(NativeVault)).with_connectors(host.clone());
+        let schedules = Schedules::open_at(dir.path().join("schedules.json"), 0).await.unwrap();
+        let source = EventSource::ConnectedMail { account_id: "acct-1".into(), senders: vec!["ada@example.com".into(), "@corp.test".into()] };
+        let created = schedules
+            .create_at(input(&assignment, Timing::Event { source }, MissedRunPolicy::RunLatest), assignment.clone(), 100)
+            .await
+            .unwrap();
+        (dir, host, runtime, service, schedules, created)
+    }
+
+    #[tokio::test]
+    async fn new_mail_from_an_allowed_sender_in_a_connected_account_starts_one_task_each() {
+        for provider in ["google", "microsoft"] {
+            let (_dir, host, runtime, service, schedules, _created) = mail_trigger_fixture(provider, false, true).await;
+            // The first look records what is already there and reads no message bodies.
+            schedules.poll_events(100, &service, &runtime).await.unwrap();
+            assert!(schedules.list().await[0].watch.primed && schedules.list().await[0].occurrences.is_empty());
+            assert!(!host.calls.lock().unwrap().iter().any(|c| c == "google.gmail.read"));
+            {
+                let mut mail = host.mail.lock().unwrap();
+                mail.push(("m2".into(), "Ada <ADA@example.com>".into(), "Invoice 42".into(), "Please pay.".into()));
+                mail.push(("m3".into(), "stranger@evil.test".into(), "Win a prize".into(), "click here".into()));
+                mail.push(("m4".into(), "bob@corp.test".into(), "Lunch".into(), "Noon?".into()));
+            }
+            // Too soon to look again.
+            schedules.poll_events(130, &service, &runtime).await.unwrap();
+            assert!(schedules.list().await[0].occurrences.is_empty());
+            schedules.poll_events(170, &service, &runtime).await.unwrap();
+            let listed = schedules.list().await.remove(0);
+            let contexts: Vec<_> = listed.occurrences.iter().map(|o| o.context.clone().unwrap()).collect();
+            assert_eq!(contexts.len(), 2, "{provider}: allowed sender and allowed domain only");
+            assert!(contexts.iter().any(|c| c.contains("Invoice 42") && c.contains("Please pay.") && c.contains("untrusted")));
+            assert!(contexts.iter().any(|c| c.contains("Lunch")));
+            assert!(contexts.iter().all(|c| !c.contains("Win a prize")));
+            // Nothing starts twice, and only read tools were ever called.
+            schedules.poll_events(240, &service, &runtime).await.unwrap();
+            assert_eq!(schedules.list().await[0].occurrences.len(), 2);
+            assert!(host.calls.lock().unwrap().iter().all(|c| c.ends_with("search") || c.ends_with("read") || c.ends_with("list_messages")));
+        }
+    }
+
+    #[tokio::test]
+    async fn an_unlinked_or_disconnected_mailbox_is_reported_in_plain_words_and_a_flood_is_limited() {
+        let (_dir, _host, runtime, service, schedules, _) = mail_trigger_fixture("google", false, false).await;
+        schedules.poll_events(100, &service, &runtime).await.unwrap();
+        let error = schedules.list().await[0].watch.last_error.clone().unwrap();
+        assert!(error.contains("not linked to this bot"), "{error}");
+        let (_dir, _host, runtime, service, schedules, _) = mail_trigger_fixture("microsoft", true, true).await;
+        schedules.poll_events(100, &service, &runtime).await.unwrap();
+        assert!(schedules.list().await[0].watch.last_error.clone().unwrap().contains("reconnected"));
+        let (_dir, host, runtime, service, schedules, _) = mail_trigger_fixture("microsoft", false, true).await;
+        schedules.poll_events(100, &service, &runtime).await.unwrap();
+        for n in 0..9 {
+            host.mail.lock().unwrap().push((format!("n{n}"), "ada@example.com".into(), format!("Message {n}"), "x".into()));
+        }
+        schedules.poll_events(170, &service, &runtime).await.unwrap();
+        assert_eq!(schedules.list().await[0].occurrences.len(), crate::triggers::MAX_OUTSTANDING);
+        assert!(schedules.list().await[0].watch.last_error.is_none());
+    }
+
+    #[test]
+    fn allowed_senders_are_full_addresses_or_whole_domains() {
+        use crate::triggers::{sender_allowed, sender_entry_valid};
+        assert!(sender_entry_valid("ada@example.com") && sender_entry_valid("@corp.test"));
+        for bad in ["", "example.com", "@", "a@b", "ada@@example.com", "ada @example.com", "@.com"] {
+            assert!(!sender_entry_valid(bad), "{bad:?}");
+        }
+        let allowed = vec!["ada@example.com".to_owned(), "@corp.test".to_owned()];
+        assert!(sender_allowed("Ada Lovelace <Ada@Example.com>", &allowed));
+        assert!(sender_allowed("bob@corp.test", &allowed));
+        assert!(!sender_allowed("evil@corp.test.evil.net", &allowed));
+        assert!(!sender_allowed("ada@example.com.evil.net", &allowed));
+        assert!(!sender_allowed("not an address", &allowed));
+        assert!(!Timing::Event { source: EventSource::ConnectedMail { account_id: "a".into(), senders: vec![] } }.valid(), "a sender is required");
     }
 }
