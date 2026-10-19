@@ -259,7 +259,9 @@ function WorkspaceSchedules({
         <p className="mb-3 text-sm text-muted-foreground">
           Set a time for this bot to carry out a task. Scheduled tasks can keep
           running after GChat closes, but the Gbot service, the bot’s computer
-          and its model server must stay on and connected.
+          and its model server must stay on and connected. While a task is
+          running, GChat asks this computer not to go to sleep, but it cannot
+          wake a computer that is asleep or switched off.
         </p>
         <p className="mb-3 text-xs text-muted-foreground">
           Schedules use the model saved in this bot’s brain settings and the

@@ -4284,3 +4284,14 @@ the typed Bot unavailable message. An upgrade from an NSIS install that still ha
 new installer replaces `resources/gbot` and the app reads only the unpacked copy; a build without the zip (Linux, or
 any loose tree) is used as installed. Four Rust cases cover unpack-once and reuse, version and zip changes, a damaged
 zip and failed or interrupted unpacking.
+
+## Keep the computer awake while a task runs (always-on gap)
+
+`GBOT-KEEP-AWAKE`: while a bot task is running, the Gbot service asks the computer it runs on not to go to idle
+sleep (`src-tauri/gbot-service/src/keep_awake.rs`, held for the life of each task's worker, so concurrent tasks each
+hold their own and the hold ends the moment a task stops or waits for a person). Linux uses `systemd-inhibit --what=idle:sleep
+--mode=block` as a child process killed on release; Windows uses `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`
+on a dedicated thread; other systems, or a Linux machine without systemd, quietly do nothing. It does not stop a person
+pressing sleep or closing the lid, and it cannot wake a sleeping or switched-off computer, so "always on" still means the
+service computer must be on; the Scheduled tasks card now says so in plain words. A task waiting for an answer from the
+person does not hold the computer awake.

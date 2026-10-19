@@ -374,6 +374,9 @@ it('lists this bot schedules, states the background lifetime requirement and dis
   ).toHaveTextContent(
     'the Gbot service, the bot’s computer and its model server must stay on and connected.'
   )
+  expect(
+    screen.getByText(/Scheduled tasks can keep running after GChat closes/)
+  ).toHaveTextContent('asks this computer not to go to sleep')
   await screen.findByText('Check the calendar')
   expect(screen.queryByText('Other bot task')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Disable schedule' }))
