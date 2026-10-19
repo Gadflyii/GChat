@@ -1334,3 +1334,24 @@ it('shows what an event schedule is watching and why a look failed', async () =>
   expect(screen.getByText(/Watching for new arrivals/)).toBeVisible()
   expect(screen.getByRole('alert')).toHaveTextContent('Check that it exists')
 })
+
+it('starts a run now for the chosen schedule and says plainly when it cannot', async () => {
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+  request.mockImplementation(async (route: string, input?: Record<string, unknown>) => {
+    if (route === 'schedules/run_now') return { ...schedule }
+    if (route === 'schedules') return { schedules: [schedule], stopped: null }
+    return { ...schedule, ...input }
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Run now' }))
+  await waitFor(() => expect(request).toHaveBeenCalledWith('schedules/run_now', { id: 'schedule-one' }))
+  request.mockImplementation(async (route: string) => {
+    if (route === 'schedules/run_now') throw new Error('A run of this schedule is already going or needs your review.')
+    return { schedules: [schedule], stopped: null }
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Run now' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not start a run now')
+  fireEvent.click(within(screen.getByRole('alert')).getByText('Details'))
+  expect(screen.getByText('A run of this schedule is already going or needs your review.')).toBeVisible()
+})

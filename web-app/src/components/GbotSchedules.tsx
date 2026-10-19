@@ -339,6 +339,21 @@ function WorkspaceSchedules({
                   ? 'Disable schedule'
                   : 'Enable schedule'}
             </Button>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                void perform(
+                  'Starting run…',
+                  () =>
+                    gbot<Schedule>('schedules/run_now', { id: schedule.id }),
+                  'Could not start a run now. It may already be running or waiting for your review.',
+                  schedule.id
+                )
+              }
+            >
+              Run now
+            </Button>
             {!!schedule.occurrences.length && (
               <details>
                 <summary className="cursor-pointer text-xs">

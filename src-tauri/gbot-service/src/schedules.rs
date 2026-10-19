@@ -217,6 +217,11 @@ pub struct CreateSchedule {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct RunNow {
+    pub id: Uuid,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SetEnabled {
     pub id: Uuid,
     pub enabled: bool,
@@ -244,6 +249,9 @@ pub struct Occurrence {
     /// What happened, for an event schedule; added to the task's prompt.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    /// Started by the person with Run now, so it runs even while the schedule is off.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub manual: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -446,6 +454,43 @@ impl Schedules {
         self.set_enabled_at(input, now()).await
     }
 
+    /// Starts one run now, whatever the timing and even while the schedule is off. Refused while an earlier
+    /// run is still going or waiting for review, so runs never overlap.
+    pub async fn run_now(&self, input: RunNow) -> Result<Schedule, WorkspaceError> {
+        self.run_now_at(input, now()).await
+    }
+
+    async fn run_now_at(&self, input: RunNow, at: u64) -> Result<Schedule, WorkspaceError> {
+        let mut state = self.state.lock().await;
+        let mut next = state.journal.clone();
+        let schedule = next
+            .schedules
+            .iter_mut()
+            .find(|schedule| schedule.id == input.id)
+            .ok_or(WorkspaceError::NotFound)?;
+        if schedule
+            .occurrences
+            .iter()
+            .any(|o| !matches!(o.state, OccurrenceState::Completed | OccurrenceState::Skipped))
+        {
+            return Err(WorkspaceError::Connector(
+                "A run of this schedule is already going or needs your review.".into(),
+            ));
+        }
+        schedule.occurrences.push(Occurrence {
+            task_id: Uuid::new_v4(),
+            due_at: at,
+            state: OccurrenceState::Queued,
+            note: Some("Started with Run now".into()),
+            retry_at: None,
+            context: None,
+            manual: true,
+        });
+        let saved = schedule.clone();
+        self.publish(&mut state, next).await?;
+        Ok(saved)
+    }
+
     async fn set_enabled_at(&self, input: SetEnabled, at: u64) -> Result<Schedule, WorkspaceError> {
         let mut state = self.state.lock().await;
         let mut next = state.journal.clone();
@@ -539,6 +584,7 @@ impl Schedules {
                 },
                 retry_at: None,
                 context: None,
+                manual: false,
             });
             schedule.next_at = following;
             changed = true;
@@ -823,6 +869,7 @@ impl Schedules {
                 note: None,
                 retry_at: None,
                 context: Some(context),
+                manual: false,
             });
         }
         // Keep the history of a busy schedule bounded: forget the oldest finished runs.
@@ -900,7 +947,7 @@ impl Schedules {
         self.plan_due(at).await?;
         for schedule in self.list().await {
             for occurrence in &schedule.occurrences {
-                if !schedule.enabled
+                if (!schedule.enabled && !occurrence.manual)
                     || occurrence.state != OccurrenceState::Queued
                     || occurrence.retry_at.is_some_and(|retry| retry > at)
                 {
@@ -1080,6 +1127,7 @@ async fn workspace_removal_requires_disabled_schedules_and_resolved_runs() {
             note: None,
             retry_at: None,
             context: None,
+                manual: false,
         }];
         assert_eq!(
             schedules
@@ -1711,5 +1759,41 @@ mod tests {
         assert!(!EventSource::FolderArrival { path: "Inbox".into() }.valid());
         assert!(!EventSource::MailFolder { path: "relative/mail".into() }.valid());
         assert!(Timing::Event { source: EventSource::MailFolder { path: "/var/mail/me".into() } }.valid());
+    }
+    #[tokio::test]
+    async fn run_now_queues_one_manual_run_even_when_the_schedule_is_off_and_never_overlaps() {
+        let dir = tempfile::tempdir().unwrap();
+        let assignment = assignment();
+        let schedules = Schedules::open_at(dir.path().join("schedules.json"), 0).await.unwrap();
+        let created = schedules
+            .create_at(
+                input(&assignment, Timing::Once { at: 4_000_000_000 }, MissedRunPolicy::RunLatest),
+                assignment.clone(),
+                100,
+            )
+            .await
+            .unwrap();
+        schedules.set_enabled_at(SetEnabled { id: created.id, enabled: false }, 110).await.unwrap();
+        let started = schedules.run_now_at(RunNow { id: created.id }, 120).await.unwrap();
+        assert_eq!(started.occurrences.len(), 1);
+        let run = &started.occurrences[0];
+        assert!(run.manual && run.state == OccurrenceState::Queued && run.due_at == 120);
+        // A second press while that run is going is refused with a plain reason.
+        let refused = schedules.run_now_at(RunNow { id: created.id }, 121).await.unwrap_err();
+        assert!(refused.to_string().contains("already going"), "{refused}");
+        // Once it has finished, it can run again; the scheduled time is unchanged.
+        schedules.update(run.task_id, OccurrenceState::Completed, None).await.unwrap();
+        let again = schedules.run_now_at(RunNow { id: created.id }, 130).await.unwrap();
+        assert_eq!(again.occurrences.len(), 2);
+        assert_eq!(again.next_at, created.next_at);
+        assert!(matches!(
+            schedules.run_now_at(RunNow { id: Uuid::new_v4() }, 140).await,
+            Err(WorkspaceError::NotFound)
+        ));
+        // Turning the schedule on and off again skips a manual run that was still waiting.
+        schedules.update(again.occurrences[1].task_id, OccurrenceState::Completed, None).await.unwrap();
+        schedules.run_now_at(RunNow { id: created.id }, 150).await.unwrap();
+        let off = schedules.set_enabled_at(SetEnabled { id: created.id, enabled: false }, 160).await.unwrap();
+        assert_eq!(off.occurrences.last().unwrap().state, OccurrenceState::Skipped);
     }
 }

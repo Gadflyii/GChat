@@ -325,6 +325,7 @@ pub fn supported_route(path: &str) -> bool {
             | "/v1/schedules"
             | "/v1/schedules/create"
             | "/v1/schedules/enabled"
+            | "/v1/schedules/run_now"
             | "/v1/setup/kvm/preflight"
             | "/v1/setup/kvm/start"
             | "/v1/setup/kvm/status"

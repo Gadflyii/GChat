@@ -4284,3 +4284,10 @@ the typed Bot unavailable message. An upgrade from an NSIS install that still ha
 new installer replaces `resources/gbot` and the app reads only the unpacked copy; a build without the zip (Linux, or
 any loose tree) is used as installed. Four Rust cases cover unpack-once and reuse, version and zip changes, a damaged
 zip and failed or interrupted unpacking.
+
+## Run now for a schedule
+
+`GBOT-RUN-NOW`: each schedule in the Scheduled tasks card has a **Run now** button that starts one run immediately,
+whatever the timing and even while the schedule is turned off (`POST /v1/schedules/run_now`). The run is a normal
+occurrence marked `manual`: it uses the same one-at-a-time rule, so a second press while a run is going or waiting for
+review is refused in plain words, the scheduled time is unchanged, and turning the schedule off before it starts skips it.
