@@ -16,6 +16,8 @@ import GbotDesktopView, {
 } from '@/components/GbotDesktopView'
 import GbotHumanHelp from '@/components/GbotHumanHelp'
 import GbotTaskApproval from '@/components/GbotTaskApproval'
+import { GbotSubAgents } from '@/components/GbotSubAgents'
+import { gbotTopLevelTasks } from '@/lib/gbot-sub-agents'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -448,7 +450,7 @@ export default function GbotCompanion() {
                   }
                 />
               ))}
-              {history.map((task) => (
+              {gbotTopLevelTasks(history).map((task) => (
                 <article
                   key={task.id}
                   className="space-y-3 rounded-lg border p-3"
@@ -520,6 +522,26 @@ export default function GbotCompanion() {
                       }
                     />
                   ))}
+                  <GbotSubAgents
+                    parent={task}
+                    tasks={history}
+                    approvals={approvals}
+                    busy={busy}
+                    onStop={(id) =>
+                      void perform(() => gbot('tasks/cancel', { id }))
+                    }
+                    onAnswer={(id, requestId, response) =>
+                      perform(
+                        () =>
+                          gbot('tasks/help', {
+                            id,
+                            request_id: requestId,
+                            response,
+                          }),
+                        true
+                      )
+                    }
+                  />
                 </article>
               ))}
               {state.executorError && (

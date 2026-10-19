@@ -147,6 +147,7 @@ export type SubAgentPhase =
   | 'working'
   | 'approval'
   | 'folder'
+  | 'question'
   | SubAgentOutcome
 
 export function liveSubAgentPhase(run: AgentRunState): SubAgentPhase {
@@ -172,6 +173,7 @@ export const SUBAGENT_PHASE_LABELS: Record<SubAgentPhase, string> = {
   working: 'Working',
   approval: 'Waiting for your approval',
   folder: 'Waiting for folder access',
+  question: 'Waiting for your answer',
   done: 'Done',
   stopped: 'Stopped',
   failed: 'Failed',
@@ -184,6 +186,7 @@ export function isActiveSubAgentPhase(phase: SubAgentPhase): boolean {
     phase === 'waiting' ||
     phase === 'working' ||
     phase === 'approval' ||
-    phase === 'folder'
+    phase === 'folder' ||
+    phase === 'question'
   )
 }

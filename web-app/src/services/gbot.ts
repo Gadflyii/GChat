@@ -181,6 +181,9 @@ export type Task = {
   help_requests: HelpRequest[]
   calls?: { call_id: string; name: string; reply: unknown | null; not_executed?: boolean }[]
   connector_calls?: { call_id: string; name: string; reply: unknown | null }[]
+  /** Set on a sub-agent task started by another task's dispatch. */
+  sub_agent?: { parent: string; call_id: string; index: number; title: string } | null
+  dispatches?: { call_id: string; reply: unknown | null }[]
 }
 export type HelpRequest = {
   id: string

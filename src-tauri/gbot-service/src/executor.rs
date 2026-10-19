@@ -97,6 +97,8 @@ pub enum ToolBinding {
     CuaGuide,
     AskHuman,
     Connector { name: String },
+    /// Starts child tasks through the service-owned task runner.
+    Dispatch,
 }
 
 impl FunctionTool {
@@ -136,9 +138,10 @@ impl FunctionTool {
                     .and_then(Value::as_u64)
                     .ok_or(ExecutorError::InvalidMessage)?,
             },
-            ToolBinding::CuaGuide | ToolBinding::AskHuman | ToolBinding::Connector { .. } => {
-                return Err(ExecutorError::InvalidMessage)
-            }
+            ToolBinding::CuaGuide
+            | ToolBinding::AskHuman
+            | ToolBinding::Connector { .. }
+            | ToolBinding::Dispatch => return Err(ExecutorError::InvalidMessage),
             ToolBinding::WriteFile => GuestOperationKind::Write {
                 path: GuestPath(text("path")?),
                 offset: 0,
@@ -229,6 +232,11 @@ pub struct TaskRecord {
     pub history: Vec<TaskEvent>,
     #[serde(default)]
     pub replan_after_takeover: bool,
+    /// Set when this task is a sub-agent of another task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sub_agent: Option<crate::sub_agents::SubAgentLink>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dispatches: Vec<crate::sub_agents::DispatchCall>,
 }
 
 pub struct CuaTask {
@@ -510,6 +518,8 @@ impl CuaTask {
             context: vec![],
             history: vec![],
             replan_after_takeover: false,
+            sub_agent: None,
+            dispatches: vec![],
         };
         record.transition(TaskState::Ready, "created");
         store.save(&record).await?;
@@ -558,6 +568,14 @@ impl CuaTask {
     }
     pub fn snapshot(&self) -> &TaskRecord {
         &self.record
+    }
+    /// Links a new, not yet launched child task to its parent's dispatch.
+    pub(crate) async fn link_sub_agent(
+        &mut self,
+        link: crate::sub_agents::SubAgentLink,
+    ) -> Result<()> {
+        self.record.sub_agent = Some(link);
+        self.save().await
     }
     pub(crate) fn subscribe(&self) -> watch::Receiver<TaskRecord> {
         self.updates.subscribe()
@@ -903,6 +921,9 @@ impl CuaTask {
         if matches!(tool.binding, ToolBinding::AskHuman) {
             return self.ask_human(&call_id, &args).await;
         }
+        if matches!(tool.binding, ToolBinding::Dispatch) {
+            return self.dispatch(runtime, &call_id, &args).await;
+        }
         if let ToolBinding::Connector {
             name: provider_name,
         } = &tool.binding
@@ -969,6 +990,117 @@ impl CuaTask {
         if uncertain(&reply) {
             return Err(ExecutorError::NeedsReview);
         }
+        Ok(result)
+    }
+
+    /// Runs one child task per brief at once and returns their results in
+    /// brief order. Children are ordinary tasks: they keep their own approvals,
+    /// questions, Stop and history. A restarted parent reattaches to the
+    /// children it already started instead of starting them again.
+    async fn dispatch(
+        &mut self,
+        runtime: &WorkspaceRuntime,
+        call_id: &str,
+        args: &Value,
+    ) -> Result<Value> {
+        use crate::sub_agents::{self, DispatchCall, SubAgentLink};
+        if let Some(reply) = self
+            .record
+            .dispatches
+            .iter()
+            .find(|call| call.call_id == call_id)
+            .and_then(|call| call.reply.clone())
+        {
+            self.record_tool_message(call_id, &reply);
+            self.save().await?;
+            return Ok(reply);
+        }
+        let refused = |error: String| json!({"error": error, "effect": "none"});
+        let briefs = match (runtime.task_runner(), self.record.sub_agent.is_some()) {
+            (None, _) => Err("Sub-agents are unavailable for this task.".to_owned()),
+            (Some(_), true) => Err("A sub-agent cannot dispatch more sub-agents.".to_owned()),
+            (Some(_), false) => sub_agents::parse_briefs(args),
+        };
+        let briefs = match briefs {
+            Ok(briefs) => briefs,
+            Err(error) => {
+                let result = refused(error);
+                self.record_tool_message(call_id, &result);
+                self.save().await?;
+                return Ok(result);
+            }
+        };
+        let runner = runtime.task_runner().ok_or(ExecutorError::InvalidMessage)?;
+        if !self.record.dispatches.iter().any(|call| call.call_id == call_id) {
+            self.record.dispatches.push(DispatchCall {
+                call_id: call_id.into(),
+                reply: None,
+            });
+            self.save().await?;
+        }
+        let mut children = runner.sub_agents_of(self.record.id, call_id).await;
+        for (index, brief) in briefs.iter().enumerate() {
+            if children.iter().any(|(link, _)| link.index == index) {
+                continue;
+            }
+            let link = SubAgentLink {
+                parent: self.record.id,
+                call_id: call_id.into(),
+                index,
+                title: brief.title.clone(),
+            };
+            match runner
+                .start_sub_agent(self.record.identity, link.clone(), &brief.task)
+                .await
+            {
+                Ok(id) => children.push((link, id)),
+                Err(error) => {
+                    // A partial dispatch would hide a missing part: stop what started.
+                    for (_, id) in &children {
+                        let _ = runner.cancel(*id).await;
+                    }
+                    let result = refused(format!(
+                        "Could not start sub-agent {}: {error}",
+                        index + 1
+                    ));
+                    return self.finish_dispatch(call_id, result).await;
+                }
+            }
+        }
+        // A parent resumed after an interruption resumes its unfinished children.
+        runner.resume_sub_agents(&children).await;
+        let mut waits = tokio::task::JoinSet::new();
+        for (link, id) in &children {
+            let runner = runner.clone();
+            let (index, id) = (link.index, *id);
+            waits.spawn(async move { (index, runner.wait_sub_agent(id).await) });
+        }
+        let mut agents = vec![Value::Null; briefs.len()];
+        while let Some(joined) = waits.join_next().await {
+            let (index, record) = joined.map_err(|_| ExecutorError::ChildFailed)?;
+            let Some(brief) = briefs.get(index) else {
+                continue;
+            };
+            agents[index] = match record {
+                Ok(record) => sub_agents::outcome(brief, &record),
+                Err(crate::tasks::TaskRunnerError::Closed) => return Err(ExecutorError::Cancelled),
+                Err(error) => sub_agents::failed(brief, &error.to_string()),
+            };
+        }
+        self.finish_dispatch(call_id, json!({ "agents": agents })).await
+    }
+
+    async fn finish_dispatch(&mut self, call_id: &str, result: Value) -> Result<Value> {
+        if let Some(call) = self
+            .record
+            .dispatches
+            .iter_mut()
+            .find(|call| call.call_id == call_id)
+        {
+            call.reply = Some(result.clone());
+        }
+        self.record_tool_message(call_id, &result);
+        self.save().await?;
         Ok(result)
     }
 
@@ -1093,7 +1225,27 @@ impl CuaTask {
             .filter_map(|call| call["id"].as_str().map(str::to_owned))
             .collect();
         for id in pending {
-            let result = if let Some(call) = self
+            let dispatched = self
+                .record
+                .dispatches
+                .iter()
+                .find(|call| call.call_id == id)
+                .map(|call| call.reply.clone());
+            let result = if let Some(reply) = dispatched {
+                match reply {
+                    Some(reply) => reply,
+                    None => {
+                        // An unanswered dispatch is an obsolete proposal like any other:
+                        // its unfinished sub-agents stop and the parent replans.
+                        if let Some(runner) = runtime.task_runner() {
+                            for (_, child) in runner.sub_agents_of(self.record.id, &id).await {
+                                let _ = runner.cancel(child).await;
+                            }
+                        }
+                        json!({"status":"skipped","effect":"none","reason":"human_takeover_replan"})
+                    }
+                }
+            } else if let Some(call) = self
                 .record
                 .connector_calls
                 .iter()

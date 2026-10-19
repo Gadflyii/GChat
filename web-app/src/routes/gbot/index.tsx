@@ -9,6 +9,8 @@ import GbotTaskActions from '@/components/GbotTaskActions'
 import GbotTaskInterruption from '@/components/GbotTaskInterruption'
 import HumanHelp from '@/components/GbotHumanHelp'
 import GbotTaskApproval from '@/components/GbotTaskApproval'
+import { GbotSubAgents } from '@/components/GbotSubAgents'
+import { gbotTopLevelTasks } from '@/lib/gbot-sub-agents'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
 import GbotLanBot from '@/components/GbotLanBot'
 import GbotConnectors from '@/components/GbotConnectors'
@@ -1462,7 +1464,7 @@ function GbotPage() {
                         }
                       />
                     ))}
-                  {history.map((task) => (
+                  {gbotTopLevelTasks(history).map((task) => (
                     <article
                       key={task.id}
                       className="space-y-2 rounded-lg border p-3"
@@ -1523,6 +1525,26 @@ function GbotPage() {
                           }
                         />
                       ))}
+                      <GbotSubAgents
+                        parent={task}
+                        tasks={history}
+                        approvals={approvals}
+                        busy={busy}
+                        onStop={(id) =>
+                          void perform(() => gbot('tasks/cancel', { id }))
+                        }
+                        onAnswer={(id, requestId, response) =>
+                          perform(
+                            () =>
+                              gbot('tasks/help', {
+                                id,
+                                request_id: requestId,
+                                response,
+                              }),
+                            true
+                          )
+                        }
+                      />
                     </article>
                   ))}
                   <p

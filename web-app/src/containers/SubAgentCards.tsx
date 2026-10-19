@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { CheckIcon, CircleSlashIcon, TriangleAlertIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -99,8 +100,8 @@ function SubAgentCard({
   const steps = (live?.trace.tools ?? []).filter(
     (tool) => tool.call.tool !== 'reply' && tool.call.tool !== 'finish'
   )
-  const progress = steps.slice(-PROGRESS_LINES).map((tool) =>
-    presentGenericTool({
+  const progress = steps.slice(-PROGRESS_LINES).map((tool) => {
+    const step = presentGenericTool({
       toolName: tool.call.tool,
       input: tool.call.args,
       state: tool.outcome
@@ -109,15 +110,52 @@ function SubAgentCard({
           : 'output-error'
         : 'input-available',
     })
+    return step.subtitle ? `${step.title} · ${step.subtitle}` : step.title
+  })
+  return (
+    <SubAgentCardView
+      title={brief.title}
+      task={brief.task}
+      phase={phase}
+      stepCount={steps.length}
+      steps={progress}
+      result={saved?.result ?? (active ? undefined : live?.trace.assistantText)}
+      error={
+        saved?.error ?? (phase === 'failed' ? live?.trace.error?.message : undefined)
+      }
+      onStop={runId && onStop ? () => onStop(runId) : undefined}
+    />
   )
-  const result = saved?.result ?? (active ? undefined : live?.trace.assistantText)
-  const error =
-    saved?.error ?? (phase === 'failed' ? live?.trace.error?.message : undefined)
-  const label = SUBAGENT_PHASE_LABELS[phase]
+}
 
+/** One sub-agent as the user sees it; shared by Chat and Gbot. */
+export function SubAgentCardView({
+  title,
+  task,
+  phase,
+  stepCount = 0,
+  steps = [],
+  result,
+  error,
+  onStop,
+  children,
+}: {
+  title: string
+  task: string
+  phase: SubAgentPhase
+  stepCount?: number
+  /** The most recent steps, already worded for the user. */
+  steps?: readonly string[]
+  result?: string
+  error?: string
+  onStop?: () => void
+  children?: ReactNode
+}) {
+  const active = isActiveSubAgentPhase(phase)
+  const label = SUBAGENT_PHASE_LABELS[phase]
   return (
     <article
-      aria-label={`${brief.title}: ${label}`}
+      aria-label={`${title}: ${label}`}
       className="rounded-xl border border-border/70 bg-card/40 p-3 text-sm"
     >
       <div className="flex items-start gap-2">
@@ -134,45 +172,45 @@ function SubAgentCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
-            <span className="font-medium text-foreground">{brief.title}</span>
+            <span className="font-medium text-foreground">{title}</span>
             <span role="status" className="text-xs text-muted-foreground">
               {label}
-              {steps.length > 0 && active
-                ? ` · ${steps.length} ${steps.length === 1 ? 'step' : 'steps'} done`
+              {stepCount > 0 && active
+                ? ` · ${stepCount} ${stepCount === 1 ? 'step' : 'steps'} done`
                 : ''}
             </span>
           </div>
-          {brief.task && (
+          {task && (
             <p
               className="mt-1 line-clamp-2 text-xs text-muted-foreground"
-              title={brief.task}
+              title={task}
             >
-              {brief.task}
+              {task}
             </p>
           )}
         </div>
-        {active && runId && onStop && (
+        {active && onStop && (
           <Button
             variant="ghost"
             size="sm"
             className="shrink-0"
-            aria-label={`Stop ${brief.title}`}
-            onClick={() => onStop(runId)}
+            aria-label={`Stop ${title}`}
+            onClick={onStop}
           >
             Stop
           </Button>
         )}
       </div>
-      {active && progress.length > 0 && (
+      {active && steps.length > 0 && (
         <ul aria-label="Recent steps" className="mt-2 space-y-0.5 pl-6 text-xs text-muted-foreground">
-          {progress.map((step, index) => (
+          {steps.slice(-PROGRESS_LINES).map((step, index) => (
             <li key={index} className="truncate">
-              {step.title}
-              {step.subtitle ? ` · ${step.subtitle}` : ''}
+              {step}
             </li>
           ))}
         </ul>
       )}
+      {children}
       {error && (
         <div
           role="alert"
