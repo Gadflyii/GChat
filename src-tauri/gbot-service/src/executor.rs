@@ -99,6 +99,8 @@ pub enum ToolBinding {
     Connector { name: String },
     /// Starts child tasks through the service-owned task runner.
     Dispatch,
+    /// Copies a finished file from the bot's computer into the task's files.
+    HandBack,
 }
 
 impl FunctionTool {
@@ -141,7 +143,8 @@ impl FunctionTool {
             ToolBinding::CuaGuide
             | ToolBinding::AskHuman
             | ToolBinding::Connector { .. }
-            | ToolBinding::Dispatch => return Err(ExecutorError::InvalidMessage),
+            | ToolBinding::Dispatch
+            | ToolBinding::HandBack => return Err(ExecutorError::InvalidMessage),
             ToolBinding::WriteFile => GuestOperationKind::Write {
                 path: GuestPath(text("path")?),
                 offset: 0,
@@ -237,6 +240,9 @@ pub struct TaskRecord {
     pub sub_agent: Option<crate::sub_agents::SubAgentLink>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dispatches: Vec<crate::sub_agents::DispatchCall>,
+    /// Files the bot handed back to the person.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<crate::task_files::TaskOutput>,
 }
 
 pub struct CuaTask {
@@ -520,6 +526,7 @@ impl CuaTask {
             replan_after_takeover: false,
             sub_agent: None,
             dispatches: vec![],
+            outputs: vec![],
         };
         record.transition(TaskState::Ready, "created");
         store.save(&record).await?;
@@ -924,6 +931,9 @@ impl CuaTask {
         if matches!(tool.binding, ToolBinding::Dispatch) {
             return self.dispatch(runtime, &call_id, &args).await;
         }
+        if matches!(tool.binding, ToolBinding::HandBack) {
+            return self.hand_back(runtime, approval, &call_id, &args).await;
+        }
         if let ToolBinding::Connector {
             name: provider_name,
         } = &tool.binding
@@ -990,6 +1000,148 @@ impl CuaTask {
         if uncertain(&reply) {
             return Err(ExecutorError::NeedsReview);
         }
+        Ok(result)
+    }
+
+    /// Copies one finished file from the bot's computer into this task's files after the
+    /// person approves it. A file already handed back under this call is not fetched again.
+    async fn hand_back(
+        &mut self,
+        runtime: &WorkspaceRuntime,
+        approval: &dyn ToolApproval,
+        call_id: &str,
+        args: &Value,
+    ) -> Result<Value> {
+        use crate::task_files as files;
+        let refused = |reason: String| json!({"status": "not_handed_back", "effect": "none", "reason": reason});
+        if let Some(output) = self.record.outputs.iter().find(|o| o.call_id == call_id) {
+            let result = json!({"status": "handed_back", "file": output.name, "bytes": output.bytes, "effect": "copied"});
+            self.record_tool_message(call_id, &result);
+            self.save().await?;
+            return Ok(result);
+        }
+        let (path, name) = match files::parse(args) {
+            Ok(parsed) => parsed,
+            Err(reason) => {
+                let result = refused(reason);
+                self.record_tool_message(call_id, &result);
+                self.save().await?;
+                return Ok(result);
+            }
+        };
+        if self.record.outputs.len() >= files::MAX_FILES {
+            let result = refused(format!("At most {} files can be handed back in one task.", files::MAX_FILES));
+            self.record_tool_message(call_id, &result);
+            self.save().await?;
+            return Ok(result);
+        }
+        let first = GuestRequest {
+            identity: self.record.identity,
+            operation_id: OperationId::new(),
+            operation: GuestOperationKind::Read {
+                path: GuestPath(path.clone()),
+                offset: 0,
+                length: files::CHUNK_BYTES,
+            },
+        };
+        first.operation.validate().map_err(|_| ExecutorError::InvalidMessage)?;
+        if !approval.approve(self.record.id, &first).await {
+            return Err(ExecutorError::Denied);
+        }
+        let mut data: Vec<u8> = Vec::new();
+        let mut request = first;
+        loop {
+            let reply = match runtime.request(request.clone()).await {
+                Ok(reply) => reply,
+                Err(WorkspaceError::State(ServiceError::BotPaused)) => {
+                    self.record.replan_after_takeover = true;
+                    return Err(ExecutorError::State(ServiceError::BotPaused));
+                }
+                Err(_) => {
+                    let result = refused("The bot's computer could not be reached to copy the file.".into());
+                    self.record_tool_message(call_id, &result);
+                    self.save().await?;
+                    return Ok(result);
+                }
+            };
+            match reply.outcome {
+                GuestOutcome::Success { result: GuestResult::Read { data: chunk } } => {
+                    let done = (chunk.len() as u64) < files::CHUNK_BYTES;
+                    data.extend_from_slice(&chunk);
+                    if data.len() as u64 > files::MAX_FILE_BYTES {
+                        let result = refused("The file is larger than 16 MB. Hand back a smaller file, or split or compress it.".into());
+                        self.record_tool_message(call_id, &result);
+                        self.save().await?;
+                        return Ok(result);
+                    }
+                    if done {
+                        break;
+                    }
+                }
+                _ => {
+                    let result = refused("The file could not be read. Check the path and that the file is saved.".into());
+                    self.record_tool_message(call_id, &result);
+                    self.save().await?;
+                    return Ok(result);
+                }
+            }
+            request = GuestRequest {
+                identity: self.record.identity,
+                operation_id: OperationId::new(),
+                operation: GuestOperationKind::Read {
+                    path: GuestPath(path.clone()),
+                    offset: data.len() as u64,
+                    length: files::CHUNK_BYTES,
+                },
+            };
+        }
+        if data.is_empty() {
+            let result = refused("The file is empty, so nothing was handed back.".into());
+            self.record_tool_message(call_id, &result);
+            self.save().await?;
+            return Ok(result);
+        }
+        let id = Uuid::new_v4();
+        let stored = files::file_name_on_disk(self.record.outputs.len() + 1, id, &name);
+        let directory = self.store.files_dir();
+        let bytes = data.len() as u64;
+        let target = directory.join(&stored);
+        tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+                let mut builder = std::fs::DirBuilder::new();
+                builder.recursive(true).mode(0o700);
+                builder.create(&directory)?;
+                use std::io::Write;
+                let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&target)?;
+                file.write_all(&data)?;
+                file.sync_all()
+            }
+            #[cfg(not(unix))]
+            {
+                std::fs::create_dir_all(&directory)?;
+                std::fs::write(&target, &data)
+            }
+        })
+        .await
+        .map_err(|_| ExecutorError::InvalidMessage)??;
+        let at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or_default();
+        self.record.outputs.push(files::TaskOutput {
+            id,
+            call_id: call_id.to_owned(),
+            name: name.clone(),
+            guest_path: path,
+            stored,
+            bytes,
+            at,
+        });
+        let result = json!({"status": "handed_back", "file": name, "bytes": bytes, "effect": "copied"});
+        self.record_tool_message(call_id, &result);
+        self.save().await?;
         Ok(result)
     }
 
@@ -1812,6 +1964,85 @@ mod tests {
             Err(ExecutorError::Denied)
         ));
         assert!(task.snapshot().calls.is_empty());
+    }
+
+    struct CountingDeny(std::sync::atomic::AtomicUsize);
+    impl ToolApproval for CountingDeny {
+        fn approve<'a>(&'a self, _: Uuid, _: &'a GuestRequest) -> ApprovalFuture<'a> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async { false })
+        }
+    }
+
+    #[tokio::test]
+    async fn handing_back_a_file_needs_a_full_path_and_the_persons_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut task, runtime) = fixture(dir.path()).await;
+        task.record.tools.push(crate::task_files::tool());
+        let deny = CountingDeny(Default::default());
+        // A relative path is explained to the model without asking the person anything.
+        let call = json!({"call_id":"f-1","name":"hand_back_file","arguments":{"path":"report.docx"}});
+        let reply = task.tool(&runtime, &deny, &call).await.unwrap();
+        assert_eq!(reply["status"], "not_handed_back");
+        assert_eq!(reply["effect"], "none");
+        assert_eq!(deny.0.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert!(task.snapshot().outputs.is_empty());
+        // A real path asks first; a refusal copies nothing and records nothing.
+        let call = json!({"call_id":"f-2","name":"hand_back_file","arguments":{"path":"/home/gbot/report.docx"}});
+        assert!(matches!(
+            task.tool(&runtime, &deny, &call).await,
+            Err(ExecutorError::Denied)
+        ));
+        assert_eq!(deny.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(task.snapshot().outputs.is_empty());
+        assert!(!task.store.files_dir().exists());
+    }
+
+    #[tokio::test]
+    async fn a_file_already_handed_back_is_not_fetched_or_approved_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut task, runtime) = fixture(dir.path()).await;
+        task.record.tools.push(crate::task_files::tool());
+        task.record.outputs.push(crate::task_files::TaskOutput {
+            id: Uuid::new_v4(),
+            call_id: "f-9".into(),
+            name: "report.csv".into(),
+            guest_path: "/home/gbot/report.csv".into(),
+            stored: "01-x-report.csv".into(),
+            bytes: 12,
+            at: 1,
+        });
+        let deny = CountingDeny(Default::default());
+        let call = json!({"call_id":"f-9","name":"hand_back_file","arguments":{"path":"/home/gbot/report.csv"}});
+        let reply = task.tool(&runtime, &deny, &call).await.unwrap();
+        assert_eq!(reply["status"], "handed_back");
+        assert_eq!(reply["file"], "report.csv");
+        assert_eq!(deny.0.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(task.snapshot().outputs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_task_hands_back_at_most_twelve_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut task, runtime) = fixture(dir.path()).await;
+        task.record.tools.push(crate::task_files::tool());
+        for index in 0..crate::task_files::MAX_FILES {
+            task.record.outputs.push(crate::task_files::TaskOutput {
+                id: Uuid::new_v4(),
+                call_id: format!("old-{index}"),
+                name: format!("f{index}.txt"),
+                guest_path: "/x".into(),
+                stored: format!("{index}"),
+                bytes: 1,
+                at: 1,
+            });
+        }
+        let deny = CountingDeny(Default::default());
+        let call = json!({"call_id":"f-13","name":"hand_back_file","arguments":{"path":"/home/gbot/more.txt"}});
+        let reply = task.tool(&runtime, &deny, &call).await.unwrap();
+        assert_eq!(reply["status"], "not_handed_back");
+        assert!(reply["reason"].as_str().unwrap().contains("12"));
+        assert_eq!(deny.0.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

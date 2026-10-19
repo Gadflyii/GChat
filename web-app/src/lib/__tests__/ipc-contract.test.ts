@@ -17,6 +17,7 @@ const EXPECTED_DESKTOP_ONLY = new Set([
   'bundled_resources_ready',
   'engine_hosts_command',
   'connector_accounts',
+  'gbot_task_file',
   'connector_saved_accounts',
   'connector_configure',
   'connector_begin_auth',

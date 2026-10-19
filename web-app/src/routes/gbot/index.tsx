@@ -1,3 +1,4 @@
+import { GbotTaskFiles } from '@/components/GbotTaskFiles'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { listen } from '@tauri-apps/api/event'
@@ -1525,6 +1526,7 @@ function GbotPage() {
                           }
                         />
                       ))}
+                      <GbotTaskFiles task={task} />
                       <GbotSubAgents
                         parent={task}
                         tasks={history}
