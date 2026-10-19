@@ -79,7 +79,21 @@ export async function startWithCheckedSettings(
   if (!covered) {
     // A new computer has no graphics-card measurements yet; settings cannot be checked without them.
     report('Measuring your graphics card so GChat can pick safe settings (one time, a few minutes)…')
-    await command('hardware_profile', { host_id: hostId, body: { action: 'ensure', gpu_uuids } })
+    // Measure only what the launch below reads. Host finishes the other formats later while idle.
+    // A model set spread over several files has no single package path, so it measures every format.
+    const artifact =
+      !model.artifact_set && model.path.endsWith('.ginfer')
+        ? {
+            path: model.path,
+            tp: needed,
+            draft_tp: DEFAULT_LAUNCH_OPTIONS.draft_tp,
+            spec: DEFAULT_LAUNCH_OPTIONS.spec,
+          }
+        : undefined
+    await command('hardware_profile', {
+      host_id: hostId,
+      body: { action: 'ensure', gpu_uuids, ...(artifact ? { artifact } : {}) },
+    })
     const measureDeadline = Date.now() + (deps.timeoutMs ?? 30 * 60 * 1000)
     for (;;) {
       if (deps.signal?.aborted) throw new Error('Model startup cancelled.')
