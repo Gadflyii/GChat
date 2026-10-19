@@ -2217,9 +2217,9 @@ All35 dependency manifests matched the retained cache. The tested export is
 `reset-relocated-candidate/bin/gchat` (SHA256
 `70e9aef690f23040ea45b5f3f6cd2f5db40efb993ff683bd6c95f5c2a669c131`),
 with a private pre-install copy and linkage to retained runnable resources.
-Native app/session/display stopped and booking3039 returned05:56Z. The source and native acceptance are merge-ready; the exported binary is retained until merge.
+Native app/session/display stopped and booking3039 returned05:56Z. Handoff `5693c8b8f` is merged in main `eebad02f2`. The tested native export was removed06:00Z after reference checks (254,697,472 allocated bytes); concise acceptance evidence remains in `out/c3-current-main-release-20261018/merged-reset-export-cleanup-0601.json`.
 Shared source/cache is handed serially to the Host-locator gate; the installed
-AppDir/home, reset/autostart/folder/badge candidates, runnable resources and
+AppDir/home, active locator candidate, runnable resources and
 tools remain protected. No GPU/model run is needed.
 
 ## Graphics-card setup command results — Gchat 3, October 18
