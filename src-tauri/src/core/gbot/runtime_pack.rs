@@ -207,19 +207,26 @@ mod tests {
         assert!(ready.join("resources/gbot/runtime.json").is_file() && !leftover.exists());
     }
 
-    /// Opt-in proof with the real installed zip: `GCHAT_RUNTIME_ZIP_RESOURCES=<install resource dir>
-    /// cargo test ... real_runtime_zip -- --ignored --nocapture` (the directory holding `resources/gbot/runtime.zip`
-    /// and `bun.exe`). Unpacks into a temporary data folder and checks that the Gbot service accepts the result.
+    /// Opt-in proof with the real installed zip on a real profile. Environment:
+    /// `GCHAT_RUNTIME_ZIP_RESOURCES` (the directory holding `resources/gbot/runtime.zip`, `runtime-zip.json` and `bun.exe`),
+    /// `GCHAT_RUNTIME_ZIP_DATA` (a data folder that persists between runs) and `GCHAT_RUNTIME_ZIP_VERSION`.
+    /// It prints `UNPACKED=true|false` (whether this run unpacked again) and checks the Gbot service accepts the result.
     #[test]
     #[ignore]
     fn real_runtime_zip_unpacks_and_is_accepted_by_the_service() {
         let resources = PathBuf::from(std::env::var("GCHAT_RUNTIME_ZIP_RESOURCES").expect("GCHAT_RUNTIME_ZIP_RESOURCES"));
-        let data = tempfile::tempdir().unwrap();
+        let data = PathBuf::from(std::env::var("GCHAT_RUNTIME_ZIP_DATA").expect("GCHAT_RUNTIME_ZIP_DATA"));
+        let version = std::env::var("GCHAT_RUNTIME_ZIP_VERSION").unwrap_or_else(|_| "real-zip-check".into());
+        let before = fs::metadata(data.join("gbot/runtime")).ok().and_then(|_| {
+            fs::read_dir(data.join("gbot/runtime")).ok()?.flatten().filter_map(|e| fs::metadata(e.path().join(MARKER)).ok()?.modified().ok()).max()
+        });
         let started = std::time::Instant::now();
-        let ready = ensure(&resources, data.path(), "real-zip-check").unwrap();
-        println!("unpacked in {:?} to {}", started.elapsed(), ready.display());
+        let ready = ensure(&resources, &data, &version).unwrap();
+        let after = fs::metadata(ready.join(MARKER)).unwrap().modified().unwrap();
+        println!("UNPACKED={} elapsed={:?} folder={}", before != Some(after), started.elapsed(), ready.display());
+        let entries: Vec<String> = fs::read_dir(data.join("gbot/runtime")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        println!("RUNTIME_FOLDERS={entries:?}");
         let processes = gbot_service::executor::ExecutorProcesses::packaged(&ready).unwrap();
         assert!(processes.is_some(), "the service must accept the unpacked runtime");
-        assert_eq!(ensure(&resources, data.path(), "real-zip-check").unwrap(), ready);
     }
 }

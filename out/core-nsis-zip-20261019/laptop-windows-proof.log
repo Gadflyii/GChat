@@ -1,0 +1,21 @@
+=== 1 first unpack (zip A, version 1)
+test core::gbot::runtime_pack::tests::real_runtime_zip_unpacks_and_is_accepted_by_the_service ... UNPACKED=true elapsed=29.1361918s folder=C:\Users\Ron\gchat-unpack-proof\data\gbot\runtime\048e9efcf71613d5
+RUNTIME_FOLDERS=["048e9efcf71613d5"]
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 738 filtered out; finished in 29.19s
+exit 0
+=== 2 re-run, nothing changed (must not unpack again)
+test core::gbot::runtime_pack::tests::real_runtime_zip_unpacks_and_is_accepted_by_the_service ... UNPACKED=false elapsed=370.8-¦s folder=C:\Users\Ron\gchat-unpack-proof\data\gbot\runtime\048e9efcf71613d5
+RUNTIME_FOLDERS=["048e9efcf71613d5"]
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 738 filtered out; finished in 0.02s
+exit 0
+=== 3 forced zip change (zip B, must unpack again and drop the old folder)
+test core::gbot::runtime_pack::tests::real_runtime_zip_unpacks_and_is_accepted_by_the_service ... UNPACKED=true elapsed=29.7461114s folder=C:\Users\Ron\gchat-unpack-proof\data\gbot\runtime\23626ce9522c7b50
+RUNTIME_FOLDERS=["23626ce9522c7b50"]
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 738 filtered out; finished in 29.79s
+exit 0
+=== 4 app version change (must unpack again)
+test core::gbot::runtime_pack::tests::real_runtime_zip_unpacks_and_is_accepted_by_the_service ... UNPACKED=true elapsed=35.7807971s folder=C:\Users\Ron\gchat-unpack-proof\data\gbot\runtime\23626ce9522c7b50
+RUNTIME_FOLDERS=["23626ce9522c7b50"]
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 738 filtered out; finished in 35.84s
+exit 0
+DONE

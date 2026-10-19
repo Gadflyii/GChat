@@ -4303,3 +4303,9 @@ which is why the fallback exists) and showed none once every task was stopped.
 whatever the timing and even while the schedule is turned off (`POST /v1/schedules/run_now`). The run is a normal
 occurrence marked `manual`: it uses the same one-at-a-time rule, so a second press while a run is going or waiting for
 review is refused in plain words, the scheduled time is unchanged, and turning the schedule off before it starts skips it.
+
+Windows proof of the runtime zip (laptop RON-X17R2, unlocked Windows 11 profile, real 53,737,869-byte zip, test build of the
+app's `runtime_pack` run from a fresh folder): first unpack 29 s and the Gbot service accepted the unpacked runtime; an
+immediate re-run did not unpack again (0.4 ms); a different zip unpacked again and the old `<hash>` folder was removed;
+a changed app version unpacked again (36 s). Expect roughly 30 s for the first Gbot start after an install or upgrade.
+Log: `out/core-nsis-zip-20261019/laptop-windows-proof.log`; the opt-in test is `real_runtime_zip_unpacks_and_is_accepted_by_the_service`.
