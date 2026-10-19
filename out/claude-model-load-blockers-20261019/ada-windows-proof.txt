@@ -1,0 +1,34 @@
+GCHAT-MODEL-LOAD-BLOCKERS native Windows proof (claude-gchat-load, 2026-10-19 15:05-15:32Z)
+Host: Ada .143 Windows profile, NVIDIA GeForce RTX 4090 (signed Windows profile exists for package 483343c2).
+The laptop (.153, RTX 3080 Ti) was not used: its GPU was booked by claude-gchat-core to 15:35Z and by claude-arch
+15:36-17:36Z, and no Windows RTX 3080 Ti launch profile is signed (only Linux laptop entries exist).
+Neither Windows box can reach \\UNAS-Pro-1 from an ssh session, so the import used the release-waves copy on the
+box's WSL disk through the UNC redirector \\wsl.localhost (sha256sum 483343c2...6e4ca4, 10667321600 B), the same
+\\?\UNC\... model.yml shape as Ron's NAS import.
+
+Build installed: GChat_2.0.42_x64-setup.exe sha256 3df986df9ae9ae99f6e2424fa373d788437df1ba585b6e35a198de4bb0efd832
+(source 0b3c8860211a8030f25313fdcd732de0a4001cb6, Engine 6b85ecf77). Installed ginfer-host.exe = build output
+(sha256 prefix e6fcf19c3a01bac5). Bundled catalog: 106 profiles incl.
+rtx4090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-windows-screened.
+
+1. Import (UI: Models > Installed > Add local model, file dialog path
+   \\wsl.localhost\Ubuntu\ai\ginfer-artifacts\release-waves\v1\qwen38_27b_smol_df2.ginfer)
+   model.yml: model_path \\?\UNC\wsl.localhost\...\qwen38_27b_smol_df2.ginfer, source external,
+   identity qwen3.8-27b/smol-q2g64-mix-dflash2-q4, size_bytes 10667321600.
+2. Load model with "Automatic (all available graphics cards)" checked (ada-automatic-load-ui.log):
+   15:24:46 click; "Checking the model file" 2.4 -> 9.9 GiB progress; 15:25:26 profiling job
+   spec=dflash draft_tokens=7 package_sha256=483343c2...; 15:26:37 "Model loaded and ready to use." (111 s).
+   Host saved instance qualified_profile_id = rtx4090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-windows-screened,
+   131072 context, 8 requests. Receipt: payload_verifications[\\?\UNC\wsl.localhost\...\qwen38_27b_smol_df2.ginfer]
+   sha256 483343c2..., identity {windows, volume_serial 0, file_index 1112742} (reusable; the older-build receipt for
+   the INT import on the same redirector has identity null).
+   Job selected_artifact: directory_sha256 bbc11166...6b5 (same as Ron's failed job), package_sha256 483343c2...,
+   tp 1, draft_tp 1, spec dflash, draft_tokens 7, status completed.
+3. Chat (UI: New Chat, model qwen38_27b_smol_df2, "What is the capital of France? Answer in one short sentence."):
+   reply "The capital of France is Paris." in 3.2 s.
+4. Ron's failing request shape, after Stop model: installed gchat-cli.exe prepare-hardware --gpu <4090>
+   --artifact \\?\UNC\wsl.localhost\...\qwen38_27b_smol_df2.ginfer --tp 1 --spec dflash (no width):
+   selected_artifact spec dflash draft_tokens 4, package_sha256 483343c2... (from the receipt, no second read),
+   job completed in 147 ms with error null. Ron's RC: failed after 28 ms, "--spec dflash requires --draft-tokens in [1,15]",
+   draft_tokens null, package_sha256 null.
+GPU idle afterwards (399 MiB); booking cancelled. Gbot service process left running as installed.

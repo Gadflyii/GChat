@@ -1,0 +1,10 @@
+﻿{
+    "nsis":  {
+                 "path":  "E:\\claude-model-load-blockers-20261019\\source\\src-tauri\\target\\release\\bundle\\nsis\\GChat_2.0.42_x64-setup.exe",
+                 "sha256":  "3df986df9ae9ae99f6e2424fa373d788437df1ba585b6e35a198de4bb0efd832",
+                 "bytes":  1536936037
+             },
+    "status":  "PASS",
+    "source_commit":  "0b3c8860211a8030f25313fdcd732de0a4001cb6",
+    "engine_commit":  "6b85ecf77da129fe332818b8bcaec9467b56bdaa"
+}

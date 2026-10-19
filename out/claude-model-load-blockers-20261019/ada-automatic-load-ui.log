@@ -1,0 +1,9 @@
+15:24:46 Automatic checkbox: On
+15:24:46 click Load model (qwen38_27b_smol_df2)
+15:24:56 Model load status | Text| GiB memory || Text|Checking the model file || Button|Startup details || Text|Startup details || Text|Time since you chose Load model:  || Text| seconds || Text|2.4 GiB || Text|9.9 GiB || Button|Cancel load | job=failed/preparing spec=dflash tokens=4 pkg= err=Native hardware profiling exited exit code: 1
+15:25:06 Model load status | Text| GiB memory || Text|Checking the model file || Button|Startup details || Text|Startup details || Text|Time since you chose Load model:  || Text| seconds || Text|5.2 GiB || Text|9.9 GiB || Button|Cancel load | job=failed/preparing spec=dflash tokens=4 pkg= err=Native hardware profiling exited exit code: 1
+15:25:16 Model load status | Text| GiB memory || Text|Checking the model file || Button|Startup details || Text|Startup details || Text|Time since you chose Load model:  || Text| seconds || Text|7.9 GiB || Text|9.9 GiB || Button|Cancel load | job=failed/preparing spec=dflash tokens=4 pkg= err=Native hardware profiling exited exit code: 1
+15:25:26 Model load status | Text| GiB memory || Button|Startup details || Text|Startup details || Text|Time since you chose Load model:  || Text| seconds || Button|Cancel load | job=running/preparing spec=dflash tokens=7 pkg=483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4 err=
+15:26:07 Model load status | Text| GiB memory || Button|Startup details || Text|Startup details || Text|Time since you chose Load model:  || Text| seconds || Button|Cancel load | job=completed/cpu_experts spec=dflash tokens=7 pkg=483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4 err=
+15:26:37 Model load status | Text| GiB memory || Text|Model loaded and ready to use. | job=completed/cpu_experts spec=dflash tokens=7 pkg=483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4 err=
+15:26:37 done
