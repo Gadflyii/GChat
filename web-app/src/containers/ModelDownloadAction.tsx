@@ -17,7 +17,7 @@ import { CatalogModel } from '@/services/models/types'
 import { switchToModel } from '@/utils/switchModel'
 import { IconDownload, IconX } from '@tabler/icons-react'
 import { useNavigate } from '@tanstack/react-router'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { toast } from 'sonner'
 
 export const ModelDownloadAction = ({
@@ -36,6 +36,7 @@ export const ModelDownloadAction = ({
   deletable?: boolean
 }) => {
   const serviceHub = useServiceHub()
+  const primaryActionRef = useRef<HTMLButtonElement>(null)
 
   const { t } = useTranslation()
   const huggingfaceToken = useGeneralSetting((state) => state.huggingfaceToken)
@@ -191,6 +192,7 @@ export const ModelDownloadAction = ({
     return (
       <div className="flex shrink-0 items-center gap-1">
         <Button
+          ref={primaryActionRef}
           variant="default"
           size="sm"
           onClick={() => handleUseModel(installed.modelId)}
@@ -202,6 +204,7 @@ export const ModelDownloadAction = ({
           <DeleteModelAction
             modelId={installed.modelId}
             provider={installed.provider}
+            returnFocusRef={primaryActionRef}
           />
         )}
       </div>
@@ -211,6 +214,7 @@ export const ModelDownloadAction = ({
   if (asButton) {
     return (
       <Button
+        ref={primaryActionRef}
         type="button"
         variant="outline"
         size="sm"
@@ -225,6 +229,7 @@ export const ModelDownloadAction = ({
 
   return (
     <Button
+      ref={primaryActionRef}
       type="button"
       variant="ghost"
       size="icon-sm"
