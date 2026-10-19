@@ -25,6 +25,24 @@ confirmation also lost keyboard focus, so acceptance now moves focus to Close
 before disabling confirmation. The pending keyboard test protects that handoff.
 Root owns this worktree and its source. The corrected focused gate is next. Native preparation
 must reuse the existing private-app workflow and retained valid fixture inputs.
+## Models load result announcements — C7, October 18
+
+Active finding `GUI-MODELS-LOAD-LIVE-RESULT`, source-only candidate
+`fix/c7-models-load-a11y-20261018`, based on Hardware candidate `37345d00c`.
+The previous live region wrapped an elapsed timer, diagnostic details and
+buttons, then disappeared on success. A persistent, atomic polite status now
+announces startup phase and the terminal ready, cancelled or failed result.
+The ticking timer, byte counters, details and controls remain outside it;
+failed cancellation is an alert. Existing load/cancel ownership is unchanged.
+
+Acceptance: existing rendered long-load/poll/cancel behavior, phase changes,
+persistent success/cancel/failure result, no timer/detail chatter; focused tests,
+lint, exactly one `make verify`, and native Light/Dark Models keyboard/focus
+screenshots in the same branch. Native inspection makes no model-load or
+Windows qualification claim; phase/terminal behavior is covered by the rendered
+service fixture. Root owns the source and this record; implementation is ready
+for a focused gate. No resource is reserved and no new harness or dependency is
+needed.
 
 ## Models, Downloads and Hardware accessibility — C7, October 18
 

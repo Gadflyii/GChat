@@ -719,6 +719,7 @@ describe('host-scoped Models', () => {
     expect(screen.getByText('Failed to load Qwen: Not enough graphics memory.')).toBeVisible()
     expect(alert).not.toHaveTextContent(/^Error:/)
     expect(alert).not.toHaveTextContent('Saved inventory may be out of date')
+    expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model could not be loaded. Check the error below before trying again.')
     mocks.switchModel.mockResolvedValue(undefined)
   })
   it('directs a named model without automatic settings to start from GInfer Hosts', async () => {
@@ -936,14 +937,14 @@ describe('host-scoped Models', () => {
     const view = render(<ModelManagement />)
     const loadButton = screen.getByRole('button', { name: 'Load model' })
     expect(loadButton).toBeDisabled()
-    expect(screen.getByRole('status')).toHaveTextContent('Preparing GInfer to run models on this computer…')
+    expect(screen.getByText('Preparing GInfer to run models on this computer…')).toHaveAttribute('role', 'status')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     fireEvent.click(loadButton)
     expect(mocks.switchModel).not.toHaveBeenCalled()
 
     mocks.resources = { ready: true, error: '' }
     view.rerender(<ModelManagement />)
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByText('Preparing GInfer to run models on this computer…')).not.toBeInTheDocument()
     expect(loadButton).toBeEnabled()
     fireEvent.click(loadButton)
     await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledWith({
@@ -1035,11 +1036,16 @@ describe('host-scoped Models', () => {
     expect(screen.getByText('Selected-model CPU experts')).not.toBeVisible()
     fireEvent.click(screen.getByText('Startup details'))
     expect(screen.getByText('Selected-model CPU experts')).toBeVisible()
-    expect(screen.getByRole('status')).toHaveTextContent('Time since you chose Load model: 601 seconds')
+    expect(screen.getByText('Time since you chose Load model: 601 seconds')).toBeVisible()
+    expect(screen.getByRole('status')).not.toHaveTextContent('Time since')
+    expect(screen.getByRole('status')).not.toHaveTextContent('Selected-model CPU experts')
     expect(screen.getByRole('status')).not.toHaveTextContent(/remaining|expected/i)
     expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
     await act(async () => { finish() })
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model loaded and ready to use.')
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.getByRole('status')).toHaveAttribute('aria-atomic', 'true')
+    expect(screen.queryByText(/Time since you chose Load model/)).not.toBeInTheDocument()
     expect(mocks.switchModel).toHaveBeenCalledTimes(1)
   })
 
@@ -1087,6 +1093,7 @@ describe('host-scoped Models', () => {
     await act(async () => { reject(new DOMException('Cancelled', 'AbortError')) })
     expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model startup cancelled.')
     expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_load_cancel')).toHaveLength(1)
   })
 
