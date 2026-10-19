@@ -1,0 +1,36 @@
+{
+ "row": "GBOT-LINUX-USER-JOURNEY-20261015 (+ viewer check of GBOT-LINUX-VIEWER-WEBPROCESS-EXIT-20261015)",
+ "status": "PASS stage 1 and the reboot leg",
+ "package": "GChat_2.0.42_amd64.deb, SHA256 2c579df0055ddc045e9bb7c450b0aade116ba41db5cef4dc30c262387756a1a7 (accepted RC 3e32ad0c9, Engine b26ec5b8f), ordinary apt install",
+ "fixture": "fresh Debian 13 cloud guest on S1 (4 vCPU pinned 32-35, 12 GiB, nested KVM, XFCE under tigervnc, private keyring), harness cloned from g3-linux-rc-deb-20261016; GUI driven through AT-SPI actions and xdotool",
+ "steps": [
+  "fresh install and first run Welcome",
+  "Settings > Integrations > Enable Gbot, Start Gbot service (keyring unlocked in session)",
+  "Add bot wizard: name, This PC service, separate local VM, prerequisites pass, Create; Computer ready in ~2 min; Use this computer",
+  "brain: API endpoint http://10.0.2.2:18092/v1 (ginfer-serve, Qwen 3.8 27B INT, GPU0) saved",
+  "model-driven task: Mousepad created and saved ~/journey-hello.txt; 25 calls, 5 approvals Allowed, Completed in 5 min; bot desktop viewer showed the saved file",
+  "viewer: View bot's desktop streamed 70+ s, WebKitWebProcess and gchat alive, no crash in the user journal",
+  "outer guest reboot: Gbot service auto-started at sign-in (06:26:55), bot VM recovered, reopened GChat after explicit Start Gbot service shows the same bot, Connected, brain configured and the completed task",
+  "second model-driven task after the reboot read ~/journey-hello.txt back exactly: Hello from Gbot. (16 bytes), Completed"
+ ],
+ "limits": [
+  "brain used the API endpoint route, not a paired GInfer Host",
+  "Fedora 42 emoji/Markdown crash: no reproducer and no Fedora guest here, not built for",
+  "physical audio: no hardware here, not qualified",
+  "viewer check covers the default Debian guest for about 70 s plus the task run, not the original Fedora failure",
+  "no independent SSH readback into the bot VM (the key stays in secure storage); proof is the task's accessibility read-back and the viewer image",
+  "a stray polkit colour-managed-device prompt from XFCE appeared after reboot (unrelated, cancelled)"
+ ],
+ "images": [
+  "01-fresh-first-run.png",
+  "02-wizard-service-step.png",
+  "03-computer-ready.png",
+  "04-brain-configured.png",
+  "05-approval-request.png",
+  "06-task-completed.png",
+  "07-viewer-streaming-70s.png",
+  "08-after-reboot-same-bot-history.png",
+  "09-second-task-done.png",
+  "task-audit.json"
+ ]
+}
