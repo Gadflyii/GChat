@@ -1,0 +1,77 @@
+{
+ "row": "GCHAT-APP-COMMAND-ADMISSION",
+ "updated_at": "2026-10-19T02:50Z",
+ "owner": "claude-gchat-security",
+ "status": "WINDOWS_NATIVE_OPEN_HOST_BLOCKED",
+ "merge_ready": false,
+ "branch_head": "7caa90d5e2ff9f49d1495c4b804929962ec1d3d6",
+ "merge": {
+  "commit": "4f76b9aeb702584f9092a91153e91b4179d3328c",
+  "note": "origin/main merged (no rebase); only conflict docs/decisions/INDEX.md, both rows kept"
+ },
+ "make_verify": {
+  "source": "220bd4aac516a8158a62a9fd00a82326a83d7f6d",
+  "status": "PASS",
+  "started": "2026-10-19T01:15:28Z",
+  "finished": "2026-10-19T01:21:48Z",
+  "frontend": "3906 passed / 6 skipped (345 files)",
+  "extension": "130 passed",
+  "rust": "1328 passed / 0 failed / 28 ignored",
+  "coverage_floor": "6 critical files PASS",
+  "log_sha256": "170da3c269d24f5fb51716adb84ba23fd4d4c6fbe83983b982724ff36edc4cb3",
+  "host": "S1 container CPUs 112-119"
+ },
+ "windows_compile": [
+  {
+   "source": "4f76b9aeb",
+   "status": "PASS",
+   "exe_sha256": "d0fad6beddd9f0f73053f4384f3313c6b7eedfd35188044abdf55fac893d6910",
+   "selected_pure_tests": "preview_protocol 2 + webview_security 4 + artifact 4 = 10 PASS (native Windows)"
+  },
+  {
+   "source": "7caa90d5e",
+   "status": "PASS",
+   "exe_sha256": "2739abe224615b91f5218a38eee8a33ecc238e0055c25771ce05861e0d9163b4",
+   "note": "test-only fixture changes since 4f76b9aeb"
+  }
+ ],
+ "fixture_changes": [
+  "220bd4aac run the fixture as a child process whose process desktop is the private desktop (thread desktop alone fails WebView2 creation)",
+  "ffcc48194 string web messages, deferred popup Handled read, watchdog timeout flag, parent-side UUID browser-data cleanup",
+  "7caa90d5e host-side classification of unanswered preview IPC (CSP-blocked ipc.localhost plus rejection-only host answers), channel and desktop diagnostics"
+ ],
+ "native_runs": [
+  {
+   "host": "Ada 4090 (DESKTOP-DG588BU)",
+   "source": "4f76b9aeb",
+   "result": "FAIL before observations: WebView2 E_INVALIDARG with thread desktop (also with focus:false)"
+  },
+  {
+   "host": "local5090 Windows (RON-9950X3D2)",
+   "source": "220bd4aac",
+   "result": "WebView2 created on the private desktop; FAIL on fixture observation only (main messages lost to Wry's IPC listener)",
+   "observed": [
+    "preview http://gchat-preview.localhost/<id> 200 with preview CSP and nosniff",
+    "5 reserved preview requests (https, :43121, /missing, ?query, %2Foutside) 404 with CSP and nosniff",
+    "blob: frame navigation cancelled",
+    "top-level navigation to preview cancelled",
+    "top-level navigation to https://example.invalid cancelled",
+    "same-origin /logs navigation allowed"
+   ],
+   "observations": "out/gchat-app-command-admission-20261018/windows-local-220bd4aa-observations.json",
+   "note": "bubbs 02:31Z: no fixtures on this PC; run artifacts removed there"
+  },
+  {
+   "host": "laptop (RON-X17R2)",
+   "source": "ffcc48194 and 7caa90d5e",
+   "result": "FAIL before observations: WebView2 0x80070578 Invalid window handle; fixture process confirmed on the private desktop; session locked (LogonUI running)"
+  }
+ ],
+ "blocked_on": "An unlocked interactive Windows session on Ada or the laptop (Ada WSL down since 01:31Z), or bubbs approval to run on local5090 Windows",
+ "cleanup": {
+  "laptop": "run root and UUID LocalAppData folders removed",
+  "local5090": "fixture run roots and UUID LocalAppData folder removed; build root E:\\gchat1-app-command-admission-20261018 retained",
+  "ada": "unreachable; F:\\gchat1-app-command-admission-20261018 retained",
+  "s1": "/media/ron/SSD_RAID/ai/tmp-claude-gchat-security-app-command-admission (26 GB) retained until merge"
+ }
+}
