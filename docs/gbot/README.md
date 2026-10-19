@@ -4192,3 +4192,38 @@ the server appeared under Linked accounts as a Tool server, was linked and saved
 brain was offered `mcp__office-notes__lookup_vault_code`. The task showed an approval titled
 "Use a tool server on the Gbot service computer"; after Allow the bot answered with the
 fixture's code. No account or sign-in was involved.
+
+## Speak a task and hear the reply (voice)
+
+`GBOT-VOICE` adds a Speak button beside Run in the task box and a Read aloud button under a
+task's last reply.
+
+- **Speak a task**: Speak records the default microphone; Stop listening turns the speech into
+  text on this computer with whisper.cpp (`whisper-rs` 0.16.0, `ggml-base.en.bin`) and puts the text
+  in the task box for the user to check before choosing Run. The first use asks before a one-time
+  download of the speech model (about 148 MB) from a pinned Hugging Face revision; the file is kept
+  only if its size and SHA-256 (`a03779c8…c6d002`) match, otherwise it is discarded. Nothing the user says
+  leaves the computer. English only for now.
+- **Hear the reply**: the operating system's own speech service. Windows uses SAPI through the
+  .NET speech synthesizer; Linux loads speech-dispatcher's `libspeechd` at run time (dlopen, LGPL,
+  never linked or bundled). With no speech service the button says "Install a speech service to hear
+  replies" and the text reply stays. No OS fallback, Piper or cloud voice is used.
+- **Dependencies**: `whisper-rs` and `cpal` (microphone). The Linux deb now depends on
+  `libasound2t64` and recommends `libspeechd2` and `speech-dispatcher`. Licenses are in
+  `THIRD_PARTY_NOTICES.md`.
+- **Build prerequisites**: cmake, a C++ compiler and libclang (bindgen) on every builder. Linux: `cmake`,
+  `libclang-dev`, `libasound2-dev` (added to `scripts/linux-release.Dockerfile`). Without libclang on Linux,
+  `WHISPER_DONT_GENERATE_BINDINGS=1` uses the pre-generated bindings. Windows (proven in `E:\\gchat-voice-probe-20261019`,
+  MSVC Build Tools 2022 with its bundled CMake): `LIBCLANG_PATH` must point to a folder holding
+  `libclang.dll` (the PyPI `libclang` 18.1.1 win_amd64 wheel carries one), and the Windows pre-generated
+  bindings are not usable, so do not set `WHISPER_DONT_GENERATE_BINDINGS` there. `cargo build` of
+  `whisper-rs =0.16.0` + `cpal =0.18.2` finished in 18 s after the C++ build.
+- **Checks**: four web cases (record and review, download consent and progress, error wording,
+  read aloud with and without a speech service) and four Rust cases (checksum and resampling); an opt-in
+  Rust case runs the real model on a spoken sample (`GCHAT_VOICE_MODEL`, `GCHAT_VOICE_WAV`, `--ignored`) and
+  heard the public-domain JFK sample correctly. In a Debian 13 guest the model downloaded and verified, Speak
+  recorded from the guest's capture device and put the transcript in the task box, Read aloud reported the
+  missing speech service before speech-dispatcher was installed and started speaking after.
+- **Not covered**: a physical microphone and speakers (the guest has none; recognition accuracy and audible
+  playback on real hardware, and Windows SAPI playback, are untested), and a Windows run of GChat itself
+  (only the dependency build was proven).
