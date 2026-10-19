@@ -732,8 +732,10 @@ impl AccountsState {
             // Cancellation never drops the vault/metadata transaction. Publish its result
             // under the same owner lock before Cancel or another flow can proceed.
             let _operation = accounts.operation.lock().await;
+            let mut browser = None;
             let result = match code {
-                Ok(code) => {
+                Ok((code, stream)) => {
+                    browser = Some(stream);
                     accounts
                         .finish_auth(
                             &config,
@@ -750,6 +752,15 @@ impl AccountsState {
                 }
                 Err(error) => Err(error),
             };
+            if let Some(mut stream) = browser {
+                let outcome = if result.is_ok() {
+                    super::callback_page::Outcome::SignedIn
+                } else {
+                    super::callback_page::Outcome::Failed
+                };
+                let _ = stream.write_all(&super::callback_page::response(outcome)).await;
+                let _ = stream.shutdown().await;
+            }
             accounts.publish_auth_result(request.provider, &flow_id, result);
         });
         Ok((flow, url.into()))
@@ -1794,7 +1805,7 @@ async fn callback_code(
     expected: &str,
     provider: Provider,
     cancellation: &CancellationToken,
-) -> Result<String, String> {
+) -> Result<(String, TcpStream), String> {
     loop {
         let (mut stream, peer) = tokio::select! { _ = cancellation.cancelled() => return Err("Sign-in cancelled".into()), accepted = listener.accept() => accepted.map_err(|_| "Sign-in callback unavailable")? };
         if !peer.ip().is_loopback() {
@@ -1835,23 +1846,11 @@ async fn callback_code(
                 continue;
             }
         };
-        // The browser callback arrives before token exchange and durable credential
-        // storage. Never claim that the account is connected on this page, and never
-        // render provider-controlled query values (including codes or error details).
-        let message = r#"<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Return to GChat</title><style>
-:root{color-scheme:light dark;font-family:system-ui,sans-serif;background:#f6f7fb;color:#171927}
-body{margin:0;min-height:100vh;display:grid;place-items:center}.card{max-width:28rem;margin:1.5rem;padding:2.5rem;border:1px solid #dfe2ed;border-radius:1.25rem;background:#fff;text-align:center}
-.brand{display:inline-grid;place-items:center;width:3rem;height:3rem;border-radius:.8rem;background:#5145cd;color:white;font-size:1.8rem;font-weight:700}.name{font-weight:650;margin:.75rem 0 1.5rem}h1{font-size:1.6rem}p{line-height:1.6;color:#53576c}
-@media(prefers-color-scheme:dark){:root{background:#11121a;color:#f3f4fb}.card{background:#1b1d29;border-color:#35384a}p{color:#c2c6d8}}
-</style></head><body><main class="card"><div class="brand" aria-hidden="true">G</div><div class="name">GChat</div>
-<h1>Sign-in received</h1><p>Return to GChat to see whether your account was connected and saved.</p><p>You can close this tab.</p>
-</main></body></html>"#.as_bytes();
-        let reply = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", message.len());
-        let _ = stream.write_all(reply.as_bytes()).await;
-        let _ = stream.write_all(message).await;
+        // The browser is told the real outcome only after the token exchange and the local save, so the
+        // page can say plainly whether the account is signed in. Nothing the provider sent is shown.
         if parsed.query_pairs().any(|(key, _)| key == "error") {
+            let _ = stream.write_all(&super::callback_page::response(super::callback_page::Outcome::Declined)).await;
+            let _ = stream.shutdown().await;
             if provider == Provider::Google {
                 return Err(GOOGLE_CONSENT_DENIED.into());
             }
@@ -1883,9 +1882,11 @@ body{margin:0;min-height:100vh;display:grid;place-items:center}.card{max-width:2
             .map(|(_, value)| value.into_owned())
             .collect::<Vec<_>>();
         if codes.len() != 1 || codes[0].is_empty() {
+            let _ = stream.write_all(&super::callback_page::response(super::callback_page::Outcome::Failed)).await;
+            let _ = stream.shutdown().await;
             return Err("Provider authorization code missing".into());
         }
-        return Ok(codes[0].clone());
+        return Ok((codes[0].clone(), stream));
     }
 }
 
@@ -2866,7 +2867,9 @@ mod tests {
                 .await
                 .unwrap();
             assert!(response.status().is_success());
-            assert!(response.text().await.unwrap().contains("Sign-in received"));
+            // The browser hears the real outcome: here the local save failed.
+            let page = response.text().await.unwrap();
+            assert!(page.contains("Sign-in didn't finish.") && !page.contains("Sign-in received"));
             let result = settled_auth(&state, &flow).await;
             assert_eq!(result.status, "failed");
             assert!(result.account_id.is_none());
@@ -3353,9 +3356,17 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let cancellation = CancellationToken::new();
         let worker = tokio::spawn(async move {
-            callback_code(listener, "bound-state", Provider::Google, &cancellation)
+            let (code, mut stream) =
+                callback_code(listener, "bound-state", Provider::Google, &cancellation)
+                    .await
+                    .unwrap();
+            // The real flow answers the browser after the exchange and save; here, as signed in.
+            stream
+                .write_all(&super::callback_page::response(super::callback_page::Outcome::SignedIn))
                 .await
-                .unwrap()
+                .unwrap();
+            stream.shutdown().await.unwrap();
+            code
         });
         let mut wrong = tokio::net::TcpStream::connect(address).await.unwrap();
         wrong
@@ -3377,9 +3388,8 @@ mod tests {
         assert!(response.contains("Referrer-Policy: no-referrer"));
         assert!(response.contains("Content-Security-Policy: default-src 'none'"));
         let body = response.split_once("\r\n\r\n").unwrap().1;
-        assert!(body.contains("<title>Return to GChat</title>"));
-        assert!(body.contains("Sign-in received"));
-        assert!(body.contains("see whether your account was connected and saved"));
+        assert!(body.contains("<title>You're signed in - GChat</title>"));
+        assert!(body.contains("You can close this tab and return to GChat."));
         assert!(!body.contains("bound-state"));
         assert!(!body.contains("code=right"));
         assert!(!body.contains("<script"));
@@ -3411,7 +3421,7 @@ mod tests {
         correct.write_all(b"GET /oauth/callback?state=bound-state&error=interaction_required&suberror=consent_required&error_description=private-provider-detail HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
         let mut response = String::new();
         correct.read_to_string(&mut response).await.unwrap();
-        assert!(response.contains("<title>Return to GChat</title>"));
+        assert!(response.contains("<title>Sign-in wasn't approved - GChat</title>"));
         for private in [
             "private-provider-detail",
             "interaction_required",
