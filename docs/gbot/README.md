@@ -4259,7 +4259,7 @@ hidden. Navigate this tab to an allowed website". A fresh bind afterwards still 
 edits and deletes them under Memory. Every new or resumed task starts with the list as a system note that says it
 informs but never overrides the task or grants permission, and the bot has a `remember_fact` tool; saving a fact is an
 action the person approves ("Remember this about you"), and facts it saved are labelled "Added by the bot, approved by
-you". Duplicates (ignoring case) are not stored twice. This is separate from GChat's own Memory library
+you". Duplicates (ignoring case) are not stored twice. Live check in the Debian guest: a fact added in the Memory card reached the task as the system note and the bot answered "4417" to "What is my favourite number?" without tools (the bot-written `remember_fact` approval path is covered by tests, not run live). This is separate from GChat's own Memory library
 (`docs/memory.md`), which the bot does not read.
 
 Checks: Rust cases cover address parsing and spoofing (`@` credentials, look-alike hosts), allowed/blocked
