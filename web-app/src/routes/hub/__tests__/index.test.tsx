@@ -767,7 +767,7 @@ describe('host-scoped Models', () => {
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
     await waitFor(() => expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model loaded and ready to use.'))
-    expect(ensured).toEqual({ action: 'ensure', gpu_uuids: ['gpu-1'] })
+    expect(ensured).toEqual({ action: 'ensure', gpu_uuids: ['gpu-1'], artifact: { path: '/models/local.ginfer', tp: 1, draft_tp: 0, spec: 'none' } })
     expect(launched).toMatchObject({ model_id: 'host-model', gpu_uuids: ['gpu-1'], max_context: 131072 })
     expect(screen.queryByRole('link', { name: 'Open GInfer Hosts' })).toBeNull()
     mocks.switchModel.mockResolvedValue(undefined)

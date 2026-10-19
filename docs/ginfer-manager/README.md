@@ -15,6 +15,37 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Automatic first-run measurement scope — October 19
+
+Row FIRST-RUN-MEASURE-TIME. Automatic (`startWithCheckedSettings`) needs a hardware
+profile before its first startup quote. It used to send `hardware_profile {action: ensure,
+gpu_uuids}`, which Host runs as the all-format scope, so a fresh PRO 6000 install measured
+every CPU-expert format (about 540 s of the 664 s) before the first chat.
+
+It now adds the selected package to that request
+(`artifact: {path, tp, draft_tp: 0, spec: none}`, the launch options Automatic starts with).
+Host already resolves this as the package-scoped ensure; no Host or Engine change and no new
+setting. A package spread over several files (`artifact_set`) keeps the all-format request.
+The other formats are finished by Host's existing idle completion
+(`idle_maintenance` starts `complete_remaining_formats` when no model is loading or running, and
+the web app already treats that scope as background), so the UI shows nothing for it.
+
+Measured on S1 (RTX PRO 6000, GPU0, CPUs 32-39, fresh Host data directory, Qwen 2-bit mix
+`483343c2`, a local copy of the NAS package, one run each). Each run drives the same Host
+requests Automatic sends (`snapshot`, `hardware_profile`, `startup-quote`, instance launch,
+one chat request through the Host); it did not use the desktop window.
+
+| Engine / request | Measure | Load to Ready | Automatic start to first chat reply |
+| --- | ---: | ---: | ---: |
+| `6b85ecf77` (bundled), all formats (before) | 664.3 s | 349.3 s | 1018.0 s |
+| `6b85ecf77` (bundled), package-scoped (this change) | 123.3 s | 264.0 s | 391.3 s |
+| `25a8399bb` (GInfer dev/next), package-scoped | 72.2 s | 280.2 s | 356.3 s |
+
+`6b85ecf77` already has the package-scoped `profile-hardware --model --tp --spec` interface
+(from `90efcbbcb`); `25a8399bb` adds the faster scoped probes. Load-to-Ready differs by
+tens of seconds between runs on page-cache state and is not part of this change.
+Idle completion of the remaining formats started 1 s after the Host reopened with no model loaded and finished in 584 s (`scope_complete` true) with no foreground state. Receipts, driver and logs: `out/first-run-measure-20261019/`. Engines built from `git archive` of `6b85ecf77` and `25a8399bb`, sm_120a Release; Host and web app from this branch.
+
 ## Native Windows local-model startup quote — C7, October 18
 
 Remaining deliverable for `GCHAT-LOCAL-MODEL-STARTUP-QUOTE-20261016`:
