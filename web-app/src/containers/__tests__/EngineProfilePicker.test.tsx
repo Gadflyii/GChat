@@ -59,7 +59,7 @@ it('preserves saved structured-output OFF when applying a qualified profile', as
   const launch = vi.fn().mockResolvedValue(undefined)
   spyConfirm().mockReturnValue(true)
   render(<EngineProfilePicker snapshot={data} instanceId="existing" disabled={false} launch={launch} />)
-  const structured = screen.getByRole('checkbox', { name: 'Follow a response format' })
+  const structured = screen.getByRole('checkbox', { name: 'Structured outputs (JSON)' })
   expect(structured).not.toBeChecked()
   await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
   await user.click(screen.getByRole('menuitemradio', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }))
@@ -78,7 +78,7 @@ it('defaults a new profile launch to ON and distinguishes recorded structured-ou
     data.launch_profiles![0].profile.options.structured_outputs = enabled
     const launch = vi.fn().mockResolvedValue(undefined)
     const view = render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-    expect(screen.getByRole('checkbox', { name: 'Follow a response format' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Structured outputs (JSON)' })).toBeChecked()
     expect(screen.getByText(/These settings have not been tested together/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
     await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ structured_outputs: true })))

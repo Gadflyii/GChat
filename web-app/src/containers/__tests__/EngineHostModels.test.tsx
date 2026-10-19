@@ -192,7 +192,7 @@ it('checks imported artifact settings without a catalog or download and uses the
   fireEvent.change(screen.getByLabelText('Model copies'), { target: { value: '2' } })
   fireEvent.change(screen.getByLabelText('Requests at once'), { target: { value: '4' } })
   fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '65536' } })
-  fireEvent.click(screen.getByLabelText('Follow a response format'))
+  fireEvent.click(screen.getByLabelText('Structured outputs (JSON)'))
   fireEvent.change(screen.getByLabelText('Computer conversation memory (bytes)'), { target: { value: '0' } })
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
   const body = expect.objectContaining({ model_id: 'imported-model', gpu_uuids: ['GPU-one'], remaining_instances: 2,
@@ -431,7 +431,7 @@ it.each(['success', 'rejection'] as const)('keeps a completed startup-check %s t
 
 it.each([
   ['Conversation length (tokens)', '32768'], ['Requests at once', '4'], ['Model copies', '2'],
-  ['Reply speedup', 'auto'], ['Conversation memory format', 'int8'],
+  ['Reply speedup', 'auto'], ['K/V cache format', 'int8'],
   ['Computer memory headroom for Flash (GiB)', '0'], ['Update the Flash expert cache', 'off'],
   ['GPU memory to keep free (MB)', '600'],
 ])('discards a pending startup check when %s changes', async (label, value) => {
@@ -441,7 +441,7 @@ it.each([
   await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
   if (['Computer memory headroom for Flash (GiB)', 'Update the Flash expert cache', 'GPU memory to keep free (MB)'].includes(label)) fireEvent.click(screen.getByText('Advanced model settings'))
-  if (label === 'Reply speedup' || label === 'Conversation memory format') {
+  if (label === 'Reply speedup' || label === 'K/V cache format') {
     await userEvent.click(screen.getByLabelText(label))
     await userEvent.click(screen.getByRole('menuitemradio', { name: label === 'Reply speedup' ? 'Automatic' : 'INT8' }))
   } else if (label === 'Update the Flash expert cache') {

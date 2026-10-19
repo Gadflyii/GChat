@@ -912,7 +912,7 @@ describe('Engines host intake and launch controls', () => {
     await user.click(screen.getByRole('button', { name: 'Installed model' }))
     await user.click(screen.getByRole('menuitemradio', { name: /^Qwen 3.8 27B — NVFP4/ }))
     const structured = screen.getByRole('checkbox', {
-      name: 'Follow a response format',
+      name: 'Structured outputs (JSON)',
       exact: true,
     })
     const cache = screen.getByLabelText(
@@ -991,7 +991,7 @@ describe('Engines host intake and launch controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
     fireEvent.click(screen.getByText('Advanced model settings'))
     expect(
-      screen.getByRole('checkbox', { name: 'Follow a response format', exact: true })
+      screen.getByRole('checkbox', { name: 'Structured outputs (JSON)', exact: true })
     ).not.toBeChecked()
     expect(
       screen.getByLabelText(

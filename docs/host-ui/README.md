@@ -1021,7 +1021,7 @@ to Gchat 2; signed-in Workspace and Windows remain open.
 
 An independent private desktop connected to a genuine idle Host with real S1
 NVIDIA inventory. In **Light and Dark, 1280×900**, Tab focuses the checked
-Follow a response format box and Space unchecks it. Both states retain the
+Structured outputs (JSON) box and Space unchecks it. Both states retain the
 2px theme-colored focus ring with 2px offset. The checked fill/tick and
 unchecked border use the app palette: [Light checked](../../out/c3-checkbox-theme-20261018/light-checked.png),
 [Light unchecked](../../out/c3-checkbox-theme-20261018/light-unchecked.png),
@@ -1410,7 +1410,7 @@ select CSS and chevron assertion were removed. The current Hosts, Benchmark
 and Workspace connections fields use the app-rendered control.
 
 The inspected [Light 1024×800 Hosts capture](../../out/c3-host-locator-deleted-runtime-20261018/native-model-settings-light-narrow.png)
-shows Installed model, Reply speedup and Conversation memory format beside
+shows Installed model, Reply speedup and K/V cache format beside
 readable input fields. The retained [Light open-menu capture](../../out/c7-dropdown-host-selectors-20261018/after-light-medium-serving.png)
 shows readable choices, wrapping and the app palette. These close the remaining
 light-theme visual check. The existing

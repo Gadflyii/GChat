@@ -60,7 +60,7 @@ describe('engine-reported and configured settings', () => {
     render(<EngineInstanceSettings instance={instance} online />)
 
     expect(screen.getByText('Reply speedup: Automatic')).toBeVisible()
-    expect(screen.getByText('Conversation memory format: Automatic')).toBeVisible()
+    expect(screen.getByText('K/V cache format: Automatic')).toBeVisible()
     expect(screen.getByText(/Drafts text ahead for the model to check/)).toBeVisible()
     expect(screen.getByText(/Stores earlier text so the model can continue the conversation/)).toBeVisible()
     expect(screen.getByText(/Automatic means GInfer chooses a value/)).toBeVisible()
@@ -77,9 +77,9 @@ describe('engine-reported and configured settings', () => {
     }} online />)
 
     expect(screen.getByText(`Reply speedup: ${speculation}`)).toBeVisible()
-    expect(screen.getByText(`Conversation memory format: ${memory}`)).toBeVisible()
+    expect(screen.getByText(`K/V cache format: ${memory}`)).toBeVisible()
     expect(screen.queryByText('Reply speedup: Automatic')).not.toBeInTheDocument()
-    expect(screen.queryByText('Conversation memory format: Automatic')).not.toBeInTheDocument()
+    expect(screen.queryByText('K/V cache format: Automatic')).not.toBeInTheDocument()
   })
 
   it('keeps technical details collapsed until requested, without losing configured facts or reporting limits', async () => {
@@ -87,18 +87,18 @@ describe('engine-reported and configured settings', () => {
     render(<EngineInstanceSettings instance={instance} online />)
 
     const summary = screen.getByText('Technical details')
-    const vision = screen.getByText('Read images: on')
+    const vision = screen.getByText('Vision: on')
     const graphs = screen.getByText('CUDA Graphs enabled')
     expect(summary).toBeVisible()
     expect(vision).not.toBeVisible()
     expect(graphs).not.toBeVisible()
-    expect(screen.getByText('Follow a response format: not reported')).not.toBeVisible()
+    expect(screen.getByText('Structured outputs (JSON): not reported')).not.toBeVisible()
 
     await user.click(summary)
 
     expect(vision).toBeVisible()
     expect(graphs).toBeVisible()
-    expect(screen.getByText('Follow a response format: not reported')).toBeVisible()
+    expect(screen.getByText('Structured outputs (JSON): not reported')).toBeVisible()
     expect(screen.getByText(/does not currently report the memory format, amount of text drafted ahead or CUDA Graphs setting actually in use/)).toBeVisible()
 
     await user.click(summary)
@@ -113,14 +113,14 @@ describe('engine-reported and configured settings', () => {
     }} online />)
     await user.click(screen.getByText('Technical details'))
 
-    expect(screen.getByText('Read images: off')).toBeVisible()
+    expect(screen.getByText('Vision: off')).toBeVisible()
     expect(screen.getByText('CUDA Graphs disabled')).toBeVisible()
-    expect(screen.getByText('Follow a response format: on')).toBeVisible()
+    expect(screen.getByText('Structured outputs (JSON): on')).toBeVisible()
 
     view.rerender(<EngineInstanceSettings instance={{
       ...instance,
       configuration: { ...instance.configuration, structured_outputs: false },
     }} online />)
-    expect(screen.getByText('Follow a response format: off')).toBeVisible()
+    expect(screen.getByText('Structured outputs (JSON): off')).toBeVisible()
   })
 })

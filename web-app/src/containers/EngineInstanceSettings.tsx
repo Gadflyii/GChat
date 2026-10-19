@@ -28,16 +28,16 @@ export function EngineInstanceSettings({ instance, online }: { instance: EngineI
         <p className="text-xs">Drafts text ahead for the model to check, which can speed up replies. DFlash and MTP are drafting methods. Automatic lets GInfer choose when the model starts.</p>
       </div>
       <div>
-        <p>Conversation memory format: {kvFormat}</p>
+        <p>K/V cache format: {kvFormat}</p>
         <p className="text-xs">Stores earlier text so the model can continue the conversation. Automatic lets GInfer choose the memory format when the model starts.</p>
       </div>
       <p className="text-xs">Automatic means GInfer chooses a value; it does not show which value the running model is using.</p>
     </section>
     <details className="space-y-1">
       <summary className="cursor-pointer">Technical details</summary>
-      <p>Read images: {config.vision ? 'on' : 'off'}</p>
+      <p>Vision: {config.vision ? 'on' : 'off'}</p>
       <p>CUDA Graphs {config.no_cuda_graph ? 'disabled' : 'enabled'}</p>
-      <p>Follow a response format: {config.structured_outputs === undefined ? 'not reported' : config.structured_outputs ? 'on' : 'off'}</p>
+      <p>Structured outputs (JSON): {config.structured_outputs === undefined ? 'not reported' : config.structured_outputs ? 'on' : 'off'}</p>
       <p className="text-xs">Response formats let apps request replies such as JSON. CUDA Graphs reduce repeated setup work on the graphics card. GInfer does not currently report the memory format, amount of text drafted ahead or CUDA Graphs setting actually in use.</p>
     </details>
   </div>
