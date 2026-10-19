@@ -3,6 +3,21 @@ import { render, screen } from '@testing-library/react'
 import { Progress } from '../progress'
 
 describe('Progress', () => {
+  it.each([0, 50, 100])('exposes %s percent to assistive technology', value => {
+    render(<Progress value={value} aria-label="Download progress" />)
+
+    const progress = screen.getByRole('progressbar', { name: 'Download progress' })
+    expect(progress).toHaveAttribute('aria-valuenow', String(value))
+    expect(progress).toHaveAttribute('aria-valuemin', '0')
+    expect(progress).toHaveAttribute('aria-valuemax', '100')
+  })
+
+  it('keeps unknown progress indeterminate', () => {
+    render(<Progress aria-label="Checking hardware" />)
+
+    expect(screen.getByRole('progressbar', { name: 'Checking hardware' })).not.toHaveAttribute('aria-valuenow')
+  })
+
   it('renders progress element', () => {
     render(<Progress value={50} />)
     
