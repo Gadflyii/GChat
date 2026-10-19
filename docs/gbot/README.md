@@ -4096,3 +4096,25 @@ window is focused on the Gbot page and follows the same master switch as reply
 notifications. Eight focused cases cover the diff rules and the hook; ONE `make verify`
 passes. Not run: an installed notification on a real desktop, and the sleep or
 notification-permission behaviour of each OS. Closes parity row 18 at source level.
+
+## Fresh-user Linux journey and viewer check — core, October 19
+
+`GBOT-LINUX-USER-JOURNEY-20261015` passes a refreshed stage 1 and its reboot leg on the
+accepted RC DEB (`2c579df0`, GChat `3e32ad0c9` / Engine `b26ec5b8f`), installed with ordinary
+`apt` into a fresh Debian 13 guest (nested KVM, XFCE, private keyring) on S1: first run,
+**Enable Gbot**, **Start Gbot service**, the Add bot wizard (name, This PC, separate local VM,
+prerequisites, Create, Computer ready in about two minutes), brain saved, and one
+model-driven task. Qwen 3.8 27B INT (API endpoint route) drove Mousepad to create and save
+`~/journey-hello.txt`: 25 calls, five approvals Allowed, Completed in five minutes, and
+**View bot's desktop** showed the saved file. The viewer streamed for 70 s with the WebKit web
+process alive and nothing in the user journal (the default Debian guest only).
+
+After rebooting the guest the Gbot service started by itself at sign-in and the bot VM
+recovered; reopening GChat and choosing **Start Gbot service** showed the same bot, Connected,
+brain configured and the completed task, and a second task read the file back exactly
+(`Hello from Gbot.`, 16 bytes). [Result and images](../../out/core-gbot-journey-20261019/result.json).
+
+Explicit limits: the brain used the API endpoint route, not a paired Host; the **Fedora 42
+emoji/Markdown viewer crash has no reproducer and no Fedora guest here and was not built for**;
+**physical audio has no hardware here and stays unqualified**; there is no independent SSH
+readback into the bot VM (the key stays in secure storage). The rows stay OPEN for those.
