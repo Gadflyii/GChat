@@ -1,5 +1,57 @@
 # Gbot design
 
+## Sub-agents — October 19
+
+`GBOT-SUBAGENTS` (Ron, 10-19): a bot can dispatch sub-agents, and the user
+sees them. Design record:
+[ADR 2026-10-19](../decisions/2026-10-19-dispatch-gbot-sub-agents-as-child-tasks.md).
+
+- **Tool.** Bot tasks get Chat's `agent_dispatch` contract: 1–8
+  `{title, task}` briefs; the result lists `{title, taskId, status, result,
+  error, note}` in brief order with status `done`, `stopped`, `failed` or
+  `not_finished`. A stopped entry notes that the user stopped it.
+- **Children.** Each brief becomes an ordinary task on the same computer with
+  the bot's tools except `agent_dispatch`, its own model lease, approvals,
+  questions and Stop. Children run together; the Host admits their model
+  requests within its concurrency. Cancelling the parent cancels unfinished
+  children; a resumed parent reattaches instead of starting them again.
+- **Shared desktop.** Sub-agents share the bot's one desktop and foreground
+  input, so each is told to use only its own apps, windows and files and to
+  observe before acting. Do not split work that needs the same window.
+- **What the user sees.** The Gbot page and the companion list only
+  top-level tasks. Inside the parent task, "N sub-agents" shows one card per
+  child with its title, task, status (Starting, Working, Waiting for your
+  approval, Waiting for your answer, Done, Stopped, Failed, Did not finish),
+  recent steps, result or reason, a **Stop** button and any pending question.
+  Approvals for children appear with the bot's other approval requests.
+
+Native Linux check on S1 (Phase 2 source `c49be20a9`, Release desktop with
+the linked Gbot service, private HOME/XDG/keyring/D-Bus, Xvfb). The ordinary
+setup wizard created **Helper**'s local KVM computer from the pinned Debian
+image and Cua archives; it reached Computer ready in about three minutes. Qwen
+3.8 27B NVFP4 ran on GPU0 at 32768 context with four requests at once and was
+saved as the brain from the paired Host. The task "Dispatch 2 sub-agents.
+Sub-agent 1: use list_windows … report their titles. Sub-agent 2: use
+get_desktop_state … report the screen size. Then tell me both results."
+produced one `agent_dispatch` call. Both child tasks started in the same
+second, showed Working, then Waiting for your approval; after **Allow** on each
+request they finished 74 and 78 seconds after starting, approval wait included. Their cards showed the four
+window titles and 1920 × 1080; the parent completed with both results. The
+companion pane rendered the same two cards (DOM check). Models > **Stop model**, Stop
+computer and Quit Gbot service then returned GPU0 and the VM CPUs.
+
+Gates: `sub_agents` unit test and the loopback test
+`sub_agents_run_together_report_each_outcome_and_stop_with_their_parent`
+(children must both start before either can finish; one child's Stop returns
+`stopped` with the note while its sibling finishes; Stop on the parent stops
+the running child), all 118 service unit and 18 loopback tests, strict
+gbot-service Clippy, 177 focused UI tests, lint, typecheck and test-quality;
+ONE `make verify` (02:58–03:05Z) passes 3911 app tests (six skipped), 130
+extension tests and 1325 Rust tests (28 ignored), with the six critical
+coverage floors. Receipts:
+`/ai/gchat/out/claude-gbot-subagents-20261019/`. Not covered: Windows/Hyper-V,
+LAN and cloud computers, and sub-agents that need the same window at once.
+
 ## Companion keyboard focus with no saved bot — Gchat 2
 
 `GBOT-EMPTY-COMPANION-FOCUS-RETURN` restores keyboard focus to the sidebar
