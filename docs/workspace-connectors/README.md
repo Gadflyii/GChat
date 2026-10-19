@@ -241,6 +241,36 @@ or paid Arbitor implementation is authorized by this task.
 See [connection setup and supported operations](operations.md) and the
 [account/runtime decision](../decisions/2026-10-10-own-native-workspace-connectors.md).
 
+## GCHAT-WORKSPACE-SIGNIN-RESULT: everything except the live sign-in — core, October 19
+
+Source on main already reports a terminal outcome (`Connected`, `failed` with the
+reason, or `cancelled`), keeps the latest result per provider across navigation and
+stores large Microsoft token sets on Windows (`c3daf93f3`). Checked this session:
+
+- **Windows credential save.** On the 4090 Windows box the credential-store suite
+  passed natively (14 tests, including a real Credential Manager round trip of
+  values above the 2560-byte entry limit):
+  [log](../../out/core-signin-20261019/windows-credential-store-test.log). This is
+  the failure that made the earlier Microsoft sign-in look like nothing happened.
+- **Reopen path.** After a sign-in is saved and GChat is reopened, the Workspace page
+  used to show only **Connect account service** until secure storage was unlocked. It
+  now also lists the saved accounts (name, email, provider, Saved or Reconnect
+  required) from the non-secret `workspace-connections.json` metadata, through the new
+  `connector_saved_accounts` command. That command reads only metadata, in a state whose
+  credential store refuses every call, so it cannot open secure storage or start the
+  service. Account actions (default, reconnect, sign-in, disconnect) still need
+  **Connect account service**, which keeps the October 16 launch rule.
+  `cold_session_lists_the_saved_account_without_credentials` (Rust) and two page cases
+  (list shown; nothing shown when unavailable) cover it.
+
+**What the account holder does to close the row, once:** open Settings, Workspace
+connections, **Connect account service**, choose services on the Microsoft card, sign in
+in the browser. Expect the card to show **Connected** and the account under
+**Connected accounts**; or the visible reason. Then quit and reopen GChat: the page lists
+the account under **Saved accounts on this computer** before any prompt, and after
+**Connect account service** shows it under **Connected accounts** with its services.
+Nothing else is needed from the developers; no credentials are requested here.
+
 ## Provider authorities
 
 - [Google native-app OAuth](https://developers.google.com/identity/protocols/oauth2/native-app)
