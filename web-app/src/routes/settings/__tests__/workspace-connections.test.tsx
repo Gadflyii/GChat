@@ -124,17 +124,14 @@ afterEach(() => {
 })
 
 describe('Workspace connections', () => {
-  it('loads saved accounts only after an explicit connection from a cold session', async () => {
+  it('connects the account service on its own from a cold session, with no button to press', async () => {
     api.connectorAccounts
       .mockRejectedValueOnce(new Error('Connect the account service first'))
       .mockResolvedValue(initialView())
     render(<WorkspaceConnections />)
-    const connect = await screen.findByRole('button', {
-      name: 'Connect account service',
-    })
-    expect(api.connectorAccounts).toHaveBeenCalledExactlyOnceWith()
-    await userEvent.setup().click(connect)
     await screen.findByRole('button', { name: 'Connect Google Workspace' })
+    expect(screen.queryByRole('button', { name: 'Connect account service' })).toBeNull()
+    expect(api.connectorAccounts).toHaveBeenNthCalledWith(1)
     expect(api.connectorAccounts).toHaveBeenNthCalledWith(2, true)
     expect(api.connectorAccounts).toHaveBeenCalledTimes(2)
   })
@@ -175,19 +172,19 @@ describe('Workspace connections', () => {
     expect(within(saved).getByText('Ada Lovelace')).toBeVisible()
     expect(saved).toHaveTextContent('ada@example.com · Microsoft · Saved')
     expect(saved).toHaveTextContent('Grace Hopper · Google · Reconnect required')
-    expect(
-      screen.getByRole('button', { name: 'Connect account service' })
-    ).toBeVisible()
-    // Listing saved accounts never connects the service or authorizes credentials.
+    // The automatic connection failed, so the only control left is a retry.
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Connect account service' })).toBeNull()
+    // Listing saved accounts reads only plain metadata; the one connection attempt is the automatic one.
     expect(api.savedConnectorAccounts).toHaveBeenCalledExactlyOnceWith()
-    expect(api.connectorAccounts).toHaveBeenCalledExactlyOnceWith()
+    expect(api.connectorAccounts).toHaveBeenCalledTimes(2)
   })
 
   it('shows no saved-account list when nothing is saved or the list is unavailable', async () => {
     api.connectorAccounts.mockRejectedValue(new Error('Connect the account service first'))
     api.savedConnectorAccounts.mockRejectedValue(new Error('unreadable'))
     render(<WorkspaceConnections />)
-    await screen.findByRole('button', { name: 'Connect account service' })
+    await screen.findByRole('button', { name: 'Try again' })
     expect(screen.queryByRole('region', { name: 'Saved accounts' })).toBeNull()
   })
 
@@ -212,11 +209,8 @@ describe('Workspace connections', () => {
         .mockRejectedValueOnce('Connect the account service first')
         .mockRejectedValueOnce(`${summary}\n\nDetails: ${technicalDetails}`)
       render(<WorkspaceConnections />)
-      await userEvent
-        .setup()
-        .click(await screen.findByRole('button', { name: 'Connect account service' }))
-      const alert = await screen.findByRole('alert')
-      const actionableSummary = within(alert).getByText(summary)
+      const actionableSummary = await screen.findByText(summary)
+      const alert = actionableSummary.closest('[role="alert"]') as HTMLElement
       expect(actionableSummary).toBeVisible()
       const details = within(alert).getByText('Show details').closest('details')!
       expect(details).not.toHaveAttribute('open')
