@@ -29,6 +29,28 @@ export default function GbotLanBot({
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
   const disabled = busy || saving
+  const renameButton = useRef<HTMLButtonElement>(null)
+  const restoreRenameFocus = useRef(false)
+  useEffect(() => {
+    if (renaming) {
+      restoreRenameFocus.current = true
+      return
+    }
+    if (!restoreRenameFocus.current) return
+    const opener = renameButton.current
+    if (document.activeElement !== document.body && document.activeElement !== opener) {
+      restoreRenameFocus.current = false
+      return
+    }
+    if (!disabled) {
+      restoreRenameFocus.current = false
+      opener?.focus()
+      return
+    }
+    const cancelRestore = () => { restoreRenameFocus.current = false }
+    document.addEventListener('focusin', cancelRestore)
+    return () => document.removeEventListener('focusin', cancelRestore)
+  }, [disabled, renaming])
   const [draft, setDraft] = useState(name)
   const [error, setError] = useState('')
   const [removalError, setRemovalError] = useState('')
@@ -96,6 +118,7 @@ export default function GbotLanBot({
       ) : (
         <div className="flex flex-wrap gap-2">
           <Button
+            ref={renameButton}
             variant="outline"
             disabled={disabled}
             onClick={() => {

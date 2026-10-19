@@ -324,6 +324,11 @@ regression follows duplicate submits, delayed failure/refresh and retry/success;
 existing removal behavior is unchanged. Source/rendered scope only, with no
 service or native contract change.
 
+Closing the rename form returns keyboard focus to **Rename bot**. Successful
+saves wait until the following refresh enables that control; focusing another
+setting while waiting cancels this return so the refresh does not interrupt it.
+Initial rendering does not move focus, and cancellation sends no request.
+
 Validation: original production failed the new regression because it submitted
 twice; fixed focus passed 117 cases. Lint had zero errors and five existing
 warnings. ONE `make verify`, 18 October 19:38:11–19:44:25 UTC, passed 3,780 app
