@@ -4294,4 +4294,6 @@ hold their own and the hold ends the moment a task stops or waits for a person).
 on a dedicated thread; other systems, or a Linux machine without systemd, quietly do nothing. It does not stop a person
 pressing sleep or closing the lid, and it cannot wake a sleeping or switched-off computer, so "always on" still means the
 service computer must be on; the Scheduled tasks card now says so in plain words. A task waiting for an answer from the
-person does not hold the computer awake.
+person does not hold the computer awake. Live check (Debian 13 guest, model-driven Mousepad task): `systemd-inhibit --list` showed
+`GChat ... idle ... A Gbot task is running ... block` while a task ran (the first try with `idle:sleep` was refused in the seatless guest,
+which is why the fallback exists) and showed none once every task was stopped.
