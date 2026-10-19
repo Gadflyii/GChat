@@ -21,6 +21,14 @@ entries as a struct with Vision and witnessed-arena fields, so an Automatic KV c
 checked against the arena its smoke saw. Windows mirrors are Gchat3's. Deployment to release inputs
 or the private DEV catalog is a separate coordinated step and is not part of this change.
 
+Verification (S1 CPUs 32-39, container `gchat-s1-verify:20261015`): the focused `launch_profiles`
+tests passed with all 53 GInfer catalogs supplied (16 passed), and ONE `make verify` with the 35 Linux
+catalogs supplied passed: frontend 3998 passed/6 skipped, extensions 128, six coverage floors, Rust
+1377 passed/0 failed/30 ignored across 23 summaries. Two environment-only setup details: the
+extensions install runs with `YARN_ENABLE_IMMUTABLE_INSTALLS=false` as in
+`scripts/build-linux-release.sh` (the rebuilt core tarball hash differs from the lockfile), and
+`WHISPER_DONT_GENERATE_BINDINGS=1` because that image has no libclang (see `docs/gbot/README.md`).
+
 ## Recovered GUI batch validation — Claude, October 19
 
 Integration `fix/claude-recover-gui-batch-20261019` merges the Codex 7 rows
