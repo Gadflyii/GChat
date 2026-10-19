@@ -998,6 +998,20 @@ async fn route(
             (None, _) => executor_unavailable(),
             _ => invalid_request(),
         },
+        (&Method::POST, "/v1/schedules/run_now") => match (
+            tasks,
+            parse_body::<crate::schedules::RunNow>(request).await,
+        ) {
+            (Some(tasks), Some(input)) => match tasks.schedules.run_now(input).await {
+                Ok(schedule) => {
+                    tasks.notify();
+                    json_response(StatusCode::OK, &schedule)
+                }
+                Err(error) => schedule_error(error),
+            },
+            (None, _) => executor_unavailable(),
+            _ => invalid_request(),
+        },
         (&Method::POST, "/v1/schedules/enabled") => match (
             tasks,
             parse_body::<crate::schedules::SetEnabled>(request).await,
@@ -2216,6 +2230,22 @@ mod tests {
             .unwrap();
         assert_eq!(disabled["enabled"], false);
         assert!(disabled["occurrences"].as_array().unwrap().is_empty());
+        // Run now starts one run and refuses a second while the first is outstanding.
+        let started = client
+            .call("/v1/schedules/run_now", serde_json::json!({"id": schedule["id"]}))
+            .await
+            .unwrap();
+        assert_eq!(started["occurrences"].as_array().unwrap().len(), 1);
+        assert_eq!(started["occurrences"][0]["manual"], true);
+        assert!(client
+            .call("/v1/schedules/run_now", serde_json::json!({"id": schedule["id"]}))
+            .await
+            .unwrap_err()
+            .contains("already going"));
+        assert!(client
+            .call("/v1/schedules/run_now", serde_json::json!({"id": uuid::Uuid::new_v4()}))
+            .await
+            .is_err());
         api.tasks
             .as_ref()
             .unwrap()

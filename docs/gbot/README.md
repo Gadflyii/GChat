@@ -4297,3 +4297,9 @@ service computer must be on; the Scheduled tasks card now says so in plain words
 person does not hold the computer awake. Live check (Debian 13 guest, model-driven Mousepad task): `systemd-inhibit --list` showed
 `GChat ... idle ... A Gbot task is running ... block` while a task ran (the first try with `idle:sleep` was refused in the seatless guest,
 which is why the fallback exists) and showed none once every task was stopped.
+## Run now for a schedule
+
+`GBOT-RUN-NOW`: each schedule in the Scheduled tasks card has a **Run now** button that starts one run immediately,
+whatever the timing and even while the schedule is turned off (`POST /v1/schedules/run_now`). The run is a normal
+occurrence marked `manual`: it uses the same one-at-a-time rule, so a second press while a run is going or waiting for
+review is refused in plain words, the scheduled time is unchanged, and turning the schedule off before it starts skips it.
