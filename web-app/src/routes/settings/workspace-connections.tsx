@@ -25,6 +25,7 @@ import {
   connectorAuthStatus,
   disconnectConnectorAccount,
   importGoogleDesktopRegistration,
+  savedConnectorAccounts,
   selectConnectorAccount,
   type BeginConnectorAuthRequest,
   type ConfigureConnectorRequest,
@@ -1088,6 +1089,7 @@ export function WorkspaceConnections() {
   const [revoke, setRevoke] = useState(false)
   const snapshotSequence = useRef(0)
   const flowSequence = useRef(0)
+  const [saved, setSaved] = useState<ConnectorAccount[]>([])
 
   const receiveSnapshot = useCallback((next: ConnectorAccountsView) => {
     setView(next)
@@ -1119,6 +1121,20 @@ export function WorkspaceConnections() {
       if (sequence === snapshotSequence.current) setLoading(false)
     }
   }, [receiveSnapshot])
+
+  // Saved sign-ins are plain metadata, so a reopened window can list them before the
+  // account service (and secure storage) is connected. Failure just leaves the list out.
+  useEffect(() => {
+    let disposed = false
+    void Promise.resolve(savedConnectorAccounts())
+      .then((cold) => {
+        if (!disposed && Array.isArray(cold?.accounts)) setSaved(cold.accounts)
+      })
+      .catch(() => undefined)
+    return () => {
+      disposed = true
+    }
+  }, [])
 
   useEffect(() => {
     const snapshotRef = snapshotSequence
@@ -1275,6 +1291,38 @@ export function WorkspaceConnections() {
               >
                 Connect account service
               </Button>
+              {saved.length > 0 && (
+                <section aria-label="Saved accounts" className="space-y-2">
+                  <h2 className="font-medium text-foreground">
+                    Saved accounts on this computer
+                  </h2>
+                  <ul className="space-y-1 text-sm">
+                    {saved.map((account) => (
+                      <li key={account.id} className="break-all">
+                        <span className="font-medium text-foreground">
+                          {account.display_name ||
+                            account.email ||
+                            account.subject}
+                        </span>
+                        {account.email && account.display_name
+                          ? ` · ${account.email}`
+                          : ''}
+                        {` · ${
+                          account.provider === 'google' ? 'Google' : 'Microsoft'
+                        } · ${
+                          account.needs_reconnect
+                            ? 'Reconnect required'
+                            : 'Saved'
+                        }`}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-sm text-muted-foreground">
+                    Choose Connect account service to use these accounts or to
+                    sign in again.
+                  </p>
+                </section>
+              )}
             </div>
           )}
           {view &&

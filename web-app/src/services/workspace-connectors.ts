@@ -63,6 +63,11 @@ export const connectorAccounts = (connect = false) =>
     ? invoke<ConnectorAccountsView>('connector_accounts', { connect: true })
     : invoke<ConnectorAccountsView>('connector_accounts')
 
+// Non-secret saved-account metadata for a cold session. It never starts the account
+// service or opens secure storage, so it is safe to call when the page opens.
+export const savedConnectorAccounts = () =>
+  invoke<ConnectorAccountsView>('connector_saved_accounts')
+
 export const configureConnector = (request: ConfigureConnectorRequest) =>
   invoke<ConnectorAccountsView>('connector_configure', { request })
 

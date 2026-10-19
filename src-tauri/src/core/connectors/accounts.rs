@@ -159,6 +159,21 @@ trait Vault: Send + Sync {
     fn set(&self, key: &str, value: &str) -> Result<(), String>;
     fn delete(&self, key: &str) -> Result<(), String>;
 }
+struct NoCredentialAccess;
+impl NoCredentialAccess {
+    const REFUSED: &'static str = "Connect the account service to use connected accounts.";
+}
+impl Vault for NoCredentialAccess {
+    fn get(&self, _key: &str) -> Result<Option<String>, String> {
+        Err(Self::REFUSED.into())
+    }
+    fn set(&self, _key: &str, _value: &str) -> Result<(), String> {
+        Err(Self::REFUSED.into())
+    }
+    fn delete(&self, _key: &str) -> Result<(), String> {
+        Err(Self::REFUSED.into())
+    }
+}
 struct NativeVault;
 impl Vault for NativeVault {
     fn get(&self, key: &str) -> Result<Option<String>, String> {
@@ -253,6 +268,18 @@ impl AccountsState {
             option_env!("GCHAT_MICROSOFT_CLIENT_ID"),
             option_env!("GCHAT_MICROSOFT_TENANT"),
         )
+    }
+
+    /// The saved-account list for a cold session. It reads only the non-secret
+    /// metadata file, in a state whose credential store refuses every access, so
+    /// showing saved accounts can never open secure storage.
+    pub fn saved_view(data: PathBuf) -> Result<AccountsView, String> {
+        let state = Self {
+            vault: Arc::new(NoCredentialAccess),
+            ..Self::default()
+        };
+        state.initialize(data)?;
+        state.view()
     }
 
     fn initialize_with_release_registration(
@@ -2626,6 +2653,44 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+    }
+
+    // GCHAT-WORKSPACE-SIGNIN-RESULT: after a sign-in is saved and GChat is reopened,
+    // the saved account is listed from metadata alone, before the account service
+    // (and so secure storage) is connected, and without any secret.
+    #[tokio::test]
+    async fn cold_session_lists_the_saved_account_without_credentials() {
+        let (directory, state, _vault) = fixture();
+        state
+            .persist_account(
+                account("saved", Access::ReadOnly),
+                "durable-refresh".into(),
+                token(),
+            )
+            .await
+            .unwrap();
+        drop(state);
+
+        let cold = AccountsState::saved_view(directory.path().into()).unwrap();
+        assert_eq!(cold.accounts.len(), 1);
+        assert_eq!(cold.accounts[0].id, "saved");
+        assert_eq!(cold.selected_accounts[&Provider::Google], "saved");
+        let serialized = serde_json::to_string(&cold).unwrap();
+        for secret in ["durable-refresh", "fixture-access"] {
+            assert!(!serialized.contains(secret));
+        }
+        // No saved sign-in yet: an empty list, not an error.
+        assert!(
+            AccountsState::saved_view(tempfile::tempdir().unwrap().path().into())
+                .unwrap()
+                .accounts
+                .is_empty()
+        );
+        // The cold state refuses every credential operation.
+        let refusing = NoCredentialAccess;
+        assert!(refusing.get("account:saved").is_err());
+        assert!(refusing.set("account:saved", "x").is_err());
+        assert!(refusing.delete("account:saved").is_err());
     }
 
     #[tokio::test]

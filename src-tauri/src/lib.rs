@@ -119,6 +119,7 @@ pub fn run() {
         core::benchmark_submission::submit_benchmark,
         core::benchmark_submission::delete_benchmark,
         core::connectors::connector_accounts,
+        core::connectors::connector_saved_accounts,
         core::connectors::connector_configure,
         core::connectors::connector_begin_auth,
         core::connectors::connector_auth_status,

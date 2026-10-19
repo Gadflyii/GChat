@@ -16,6 +16,7 @@ import { WorkspaceConnections } from '../workspace-connections'
 
 const api = vi.hoisted(() => ({
   connectorAccounts: vi.fn(),
+  savedConnectorAccounts: vi.fn(),
   configureConnector: vi.fn(),
   nativeInvoke: vi.fn(),
   beginConnectorAuth: vi.fn(),
@@ -136,6 +137,58 @@ describe('Workspace connections', () => {
     await screen.findByRole('button', { name: 'Connect Google Workspace' })
     expect(api.connectorAccounts).toHaveBeenNthCalledWith(2, true)
     expect(api.connectorAccounts).toHaveBeenCalledTimes(2)
+  })
+
+  it('lists saved accounts from a cold session without connecting the account service', async () => {
+    api.connectorAccounts.mockRejectedValue(
+      new Error('Connect the account service to use connected accounts.')
+    )
+    api.savedConnectorAccounts.mockResolvedValue({
+      ...initialView(),
+      accounts: [
+        {
+          id: 'ms-1',
+          provider: 'microsoft',
+          subject: 'subject-1',
+          display_name: 'Ada Lovelace',
+          email: 'ada@example.com',
+          services: ['excel'],
+          access: 'read_only',
+          granted_scopes: [],
+          needs_reconnect: false,
+        },
+        {
+          id: 'g-1',
+          provider: 'google',
+          subject: 'subject-2',
+          display_name: 'Grace Hopper',
+          email: null,
+          services: ['gmail'],
+          access: 'read_only',
+          granted_scopes: [],
+          needs_reconnect: true,
+        },
+      ],
+    })
+    render(<WorkspaceConnections />)
+    const saved = await screen.findByRole('region', { name: 'Saved accounts' })
+    expect(within(saved).getByText('Ada Lovelace')).toBeVisible()
+    expect(saved).toHaveTextContent('ada@example.com · Microsoft · Saved')
+    expect(saved).toHaveTextContent('Grace Hopper · Google · Reconnect required')
+    expect(
+      screen.getByRole('button', { name: 'Connect account service' })
+    ).toBeVisible()
+    // Listing saved accounts never connects the service or authorizes credentials.
+    expect(api.savedConnectorAccounts).toHaveBeenCalledExactlyOnceWith()
+    expect(api.connectorAccounts).toHaveBeenCalledExactlyOnceWith()
+  })
+
+  it('shows no saved-account list when nothing is saved or the list is unavailable', async () => {
+    api.connectorAccounts.mockRejectedValue(new Error('Connect the account service first'))
+    api.savedConnectorAccounts.mockRejectedValue(new Error('unreadable'))
+    render(<WorkspaceConnections />)
+    await screen.findByRole('button', { name: 'Connect account service' })
+    expect(screen.queryByRole('region', { name: 'Saved accounts' })).toBeNull()
   })
 
   it.each([

@@ -610,6 +610,19 @@ pub async fn connector_accounts<R: Runtime>(
     native(&app, "accounts", Value::Null).await
 }
 
+/// Saved accounts for a cold session: non-secret metadata only, so it works before
+/// the account service is connected and never opens secure storage.
+#[tauri::command]
+pub async fn connector_saved_accounts<R: Runtime>(app: AppHandle<R>) -> Result<Value, String> {
+    let root = crate::core::app::commands::get_jan_data_folder_path(app);
+    tokio::task::spawn_blocking(move || {
+        serde_json::to_value(AccountsState::saved_view(root)?)
+            .map_err(|_| "Saved account list unavailable".to_string())
+    })
+    .await
+    .map_err(|_| "Saved account list unavailable".to_string())?
+}
+
 #[tauri::command]
 pub async fn connector_configure<R: Runtime>(
     app: AppHandle<R>,
