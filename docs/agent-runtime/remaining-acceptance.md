@@ -4,6 +4,43 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
+## GCHAT-KEYRING-PROMPT-AT-LAUNCH: OAuth tokens, Gbot recovery and Windows — core, October 19
+
+The audit of every secret consumer against the October 16 decision found no
+remaining path that opens secure storage at launch or idle; three leaves that were
+listed as unqualified now have proof at the level that does not need a live account:
+
+- **OAuth tokens and refresh (source).** `AccountsState` reads and writes the
+  credential store only inside `configure`, `begin_auth`/`finish_auth`,
+  `persist_account`, `token` (refresh) and `disconnect`. `initialize`, `view`,
+  `select`, `resolve_account_id`, `has_account` and `prepare` never reach it.
+  `reopened_saved_accounts_display_and_resolve_without_credential_access` reopens a
+  state over a saved account with a counting vault and asserts **zero** vault calls
+  for display, selection, resolution and tool preparation; the existing
+  `google_restart_refresh_uses_vault_and_retains_unrotated_refresh_token` shows the
+  refresh token is read only when a token is requested. A live provider refresh
+  still needs Ron's sign-in and stays under the release gate.
+- **Gbot task recovery (source).** Binding the service API reads or creates the
+  service's own token: that is the explicit **Start Gbot service** action already
+  qualified natively. After it, restoring persisted SSH workspaces and listing state,
+  tasks, approvals and schedules reads no workspace credential
+  (`service_restart_restores_state_without_touching_the_vault`). Workspace keys are
+  read only when a connection is exercised.
+- **Windows native credential store.** On the 4090 Windows box (Windows 11 build
+  26200, MSVC toolchain installed under `C:\Users\Ron\gchat-core-20261019`, no PATH or
+  setting change) the `jan-utils` credential-store suite ran natively: 14 passed,
+  including `windows_native_oversized_synthetic_credentials_round_trip_and_delete`
+  against the real Credential Manager (values above the 2560-byte limit, replacement,
+  deletion, restart through a new handle):
+  [log](../../out/core-keyring-20261019/windows-credential-store-test.log). Windows
+  Credential Manager has no unlock prompt, so launch cannot raise one; a Windows
+  installed-app launch trace is not claimed.
+
+The Linux launch/idle and explicit-use behavior is unchanged since the accepted
+installed receipts below (no startup code changed), so no new GUI launch was run.
+Live OAuth refresh in the running app and an end-to-end Gbot task recovered after a
+crash remain unqualified; the row stays OPEN for those.
+
 ## OI-068 Linux Hermes reply, file tool and continuation — October 18, Codex 3
 
 The Linux Hermes leaf **passes** on normal Release candidate

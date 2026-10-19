@@ -2436,6 +2436,64 @@ mod tests {
         }
     }
 
+    struct CountingVault(MemoryVault, std::sync::atomic::AtomicUsize);
+    impl Vault for CountingVault {
+        fn get(&self, reference: Uuid) -> VaultFuture<'_, Option<Secret>> {
+            self.1.fetch_add(1, Ordering::SeqCst);
+            self.0.get(reference)
+        }
+        fn put(&self, reference: Uuid, secret: Secret) -> VaultFuture<'_, ()> {
+            self.1.fetch_add(1, Ordering::SeqCst);
+            self.0.put(reference, secret)
+        }
+        fn delete(&self, reference: Uuid) -> VaultFuture<'_, ()> {
+            self.1.fetch_add(1, Ordering::SeqCst);
+            self.0.delete(reference)
+        }
+    }
+
+    // GCHAT-KEYRING-PROMPT-AT-LAUNCH: after an explicit service start (which reads
+    // the service's own token), restoring persisted SSH workspaces, tasks and
+    // schedules reads no workspace credential. The vault is used only when a
+    // workspace connection is exercised.
+    #[tokio::test]
+    async fn service_restart_restores_state_without_touching_the_vault() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.json");
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        let seed = Arc::new(MemoryVault::default());
+        let api = Api::bind(service.clone(), seed.clone(), 0).await.unwrap();
+        let input = ssh_workspace_request();
+        api.client()
+            .call("/v1/workspaces/ssh", input.clone())
+            .await
+            .unwrap();
+        drop(api);
+        drop(service);
+
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        assert_eq!(service.snapshot().await.workspaces.len(), 1);
+        let vault = Arc::new(CountingVault(MemoryVault::default(), Default::default()));
+        let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+        let client = api.client();
+        // Binding reads the service's own token: that is the explicit Start action.
+        let at_start = vault.1.load(Ordering::SeqCst);
+        client
+            .call("/v1/state", serde_json::Value::Null)
+            .await
+            .unwrap();
+        // Task routes may be unavailable without a task runtime; they still must
+        // not reach the vault.
+        for route in ["/v1/tasks", "/v1/tasks/approvals", "/v1/schedules"] {
+            let _ = client.call(route, serde_json::Value::Null).await;
+        }
+        assert_eq!(
+            vault.1.load(Ordering::SeqCst),
+            at_start,
+            "restoring workspaces, tasks and schedules must not read workspace credentials"
+        );
+    }
+
     #[tokio::test]
     async fn ssh_workspace_does_not_adopt_a_non_ssh_retained_slot() {
         let directory = tempfile::tempdir().unwrap();
