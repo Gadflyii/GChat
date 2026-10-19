@@ -684,6 +684,8 @@ impl TaskRunner {
         let processes = self.processes.clone();
         let approvals = self.approvals.clone();
         let join = tokio::spawn(async move {
+            // Keep the computer awake while this task is working; it ends when the task stops or waits for a person.
+            let _awake = crate::keep_awake::hold();
             let result = {
                 let execution = task.run(
                     &runtime,

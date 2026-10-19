@@ -12,6 +12,7 @@ pub mod inference;
 pub mod kvm;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub mod kvm_setup;
+pub mod keep_awake;
 pub mod lan_setup;
 pub mod m365;
 pub mod media;
