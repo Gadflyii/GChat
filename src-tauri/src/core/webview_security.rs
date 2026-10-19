@@ -363,13 +363,16 @@ mod windows_native_admission {
         core::{Interface, BOOL, HSTRING, PCWSTR, PWSTR},
         Win32::System::{
             StationsAndDesktops::{
-                CloseDesktop, CreateDesktopW, GetThreadDesktop, SetThreadDesktop,
-                DESKTOP_CONTROL_FLAGS, DESKTOP_CREATEMENU, DESKTOP_CREATEWINDOW, DESKTOP_ENUMERATE,
-                DESKTOP_READOBJECTS, DESKTOP_WRITEOBJECTS, HDESK,
+                CloseDesktop, CreateDesktopW, GetThreadDesktop, DESKTOP_CONTROL_FLAGS,
+                DESKTOP_CREATEMENU, DESKTOP_CREATEWINDOW, DESKTOP_ENUMERATE, DESKTOP_READOBJECTS,
+                DESKTOP_WRITEOBJECTS, HDESK,
             },
             Threading::GetCurrentThreadId,
         },
     };
+
+    const FIXTURE_TEST: &str = "core::webview_security::windows_native_admission::windows_private_desktop_enforces_frame_and_command_admission";
+    const CHILD_RECEIPT: &str = "GCHAT_WINDOWS_NATIVE_ADMISSION_CHILD_RECEIPT";
 
     struct PrivateDesktop {
         owned: Option<HDESK>,
@@ -822,12 +825,7 @@ if (location.pathname === '/logs') {
         let uuid = uuid::Uuid::new_v4().simple().to_string();
         let identifier = format!("app.gchat.windows-native-admission.{uuid}");
         let private = PrivateData::new(&identifier)?;
-        let root = std::env::var_os("GCHAT_WINDOWS_NATIVE_ADMISSION_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir);
-        if !root.is_absolute() || !root.is_dir() {
-            return Err("Fixture root must be an existing absolute owned directory".into());
-        }
+        let root = fixture_root()?;
         let temp = tempfile::Builder::new()
             .prefix("gchat-native-admission-")
             .tempdir_in(&root)
@@ -927,39 +925,134 @@ if (location.pathname === '/logs') {
         })
     }
 
+    fn fixture_root() -> Result<PathBuf, String> {
+        let root = std::env::var_os("GCHAT_WINDOWS_NATIVE_ADMISSION_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        if !root.is_absolute() || !root.is_dir() {
+            return Err("Fixture root must be an existing absolute owned directory".into());
+        }
+        Ok(root)
+    }
+
+    /// Run this test binary again with the private desktop as its process
+    /// desktop. WebView2 browser processes inherit the process desktop, not a
+    /// thread desktop, and cannot host into a window on another desktop.
+    fn run_on_private_desktop(desktop: &str, receipt: &std::path::Path) -> Result<u32, String> {
+        use std::os::windows::io::AsRawHandle;
+        use windows::Win32::{
+            Foundation::{
+                CloseHandle, SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT, WAIT_OBJECT_0,
+            },
+            System::Threading::{
+                CreateProcessW, GetExitCodeProcess, TerminateProcess, WaitForSingleObject,
+                PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOW,
+            },
+        };
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let mut command: Vec<u16> = format!(
+            "\"{}\" --ignored --exact {FIXTURE_TEST} --nocapture --test-threads=1",
+            exe.display()
+        )
+        .encode_utf16()
+        .chain(Some(0))
+        .collect();
+        let mut desktop: Vec<u16> = desktop.encode_utf16().chain(Some(0)).collect();
+        let stdout = HANDLE(std::io::stdout().as_raw_handle());
+        let stderr = HANDLE(std::io::stderr().as_raw_handle());
+        for handle in [stdout, stderr] {
+            unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
+                .map_err(|e| format!("Could not share fixture output: {e}"))?;
+        }
+        let startup = STARTUPINFOW {
+            cb: std::mem::size_of::<STARTUPINFOW>() as u32,
+            lpDesktop: PWSTR(desktop.as_mut_ptr()),
+            dwFlags: STARTF_USESTDHANDLES,
+            hStdOutput: stdout,
+            hStdError: stderr,
+            ..Default::default()
+        };
+        let mut process = PROCESS_INFORMATION::default();
+        std::env::set_var(CHILD_RECEIPT, receipt);
+        let created = unsafe {
+            CreateProcessW(
+                PCWSTR::null(),
+                Some(PWSTR(command.as_mut_ptr())),
+                None,
+                None,
+                true,
+                PROCESS_CREATION_FLAGS(0),
+                None,
+                PCWSTR::null(),
+                &startup,
+                &mut process,
+            )
+        };
+        std::env::remove_var(CHILD_RECEIPT);
+        created.map_err(|e| format!("Could not start fixture on private desktop: {e}"))?;
+        unsafe {
+            let _ = CloseHandle(process.hThread);
+            let waited = WaitForSingleObject(process.hProcess, 90_000);
+            if waited != WAIT_OBJECT_0 {
+                let _ = TerminateProcess(process.hProcess, 124);
+                let _ = WaitForSingleObject(process.hProcess, 15_000);
+            }
+            let mut exit = 0;
+            let code = GetExitCodeProcess(process.hProcess, &mut exit)
+                .map(|()| exit)
+                .map_err(|e| e.to_string());
+            let _ = CloseHandle(process.hProcess);
+            if waited != WAIT_OBJECT_0 {
+                return Err("Private-desktop fixture process timed out".into());
+            }
+            code
+        }
+    }
+
     #[test]
     #[ignore = "Requires an explicitly booked Windows host; creates a private Win32 desktop and removes UUID browser data"]
     fn windows_private_desktop_enforces_frame_and_command_admission() {
-        let mut desktop = PrivateDesktop::create(&format!(
-            "gchat-native-admission-{}",
-            uuid::Uuid::new_v4().simple()
-        ))
-        .expect("Could not create private fixture desktop");
-        // Keep the handle owned here until join. Windows releases the GUI
-        // thread's Tao/COM windows when that thread exits; closing the desktop
-        // on the still-running GUI thread otherwise fails with ERROR_BUSY.
-        let desktop_handle = desktop.owned.unwrap().0 as usize;
-        let joined = std::thread::spawn(move || {
-            unsafe { SetThreadDesktop(HDESK(desktop_handle as *mut _)) }
-                .map_err(|e| format!("Could not attach private fixture desktop: {e}"))?;
-            run_fixture()
-        })
-        .join();
+        let missing = || json!({"privateData":"fixture exited before cleanup receipt","inputs":"fixture exited before cleanup receipt","paths":[]});
+        if let Some(receipt) = std::env::var_os(CHILD_RECEIPT) {
+            // Child: this process, and the WebView2 processes it starts, run
+            // on the private desktop the parent created.
+            let (result, cleanup) = match run_fixture() {
+                Ok(outcome) => (outcome.result, outcome.cleanup),
+                Err(error) => (Err(error), missing()),
+            };
+            std::fs::write(receipt, cleanup.to_string())
+                .expect("Could not write private-desktop cleanup receipt");
+            assert!(result.is_ok(), "{}", result.unwrap_err());
+            return;
+        }
+        let root = fixture_root().expect("Invalid fixture root");
+        let uuid = uuid::Uuid::new_v4().simple().to_string();
+        let receipt = root.join(format!("gchat-native-admission-receipt-{uuid}.json"));
+        assert!(!receipt.exists(), "Refusing existing fixture receipt");
+        let name = format!("gchat-native-admission-{uuid}");
+        let mut desktop =
+            PrivateDesktop::create(&name).expect("Could not create private fixture desktop");
+        let child = run_on_private_desktop(&name, &receipt);
         let desktop_cleanup = desktop.close();
-        let (result, mut cleanup) = match joined {
-            Ok(Ok(outcome)) => (outcome.result, outcome.cleanup),
-            Ok(Err(error)) => (
-                Err(error),
-                json!({"privateData":"fixture exited before cleanup receipt","inputs":"fixture exited before cleanup receipt","paths":[]}),
-            ),
-            Err(_) => (
-                Err("Private GUI fixture thread panicked".into()),
-                json!({"privateData":"fixture thread panicked","inputs":"fixture thread panicked","paths":[]}),
-            ),
+        let mut cleanup = std::fs::read_to_string(&receipt)
+            .ok()
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            .unwrap_or_else(missing);
+        let receipt_cleanup = match std::fs::remove_file(&receipt) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error.to_string()),
+            _ => Ok(()),
         };
         cleanup["desktop"] = json!(desktop_cleanup.as_ref().err());
         println!("GCHAT_WINDOWS_NATIVE_ADMISSION_CLEANUP {cleanup}");
-        let result = result.and(desktop_cleanup);
+        let result = child
+            .and_then(|exit| match exit {
+                0 => Ok(()),
+                exit => Err(format!(
+                    "Private-desktop fixture process failed with exit {exit}"
+                )),
+            })
+            .and(desktop_cleanup)
+            .and(receipt_cleanup);
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
 }
