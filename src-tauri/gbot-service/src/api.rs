@@ -1422,7 +1422,7 @@ fn schedule_error(error: WorkspaceError) -> Response<Body> {
         WorkspaceError::State(ServiceError::InvalidState) => error_response(
             StatusCode::BAD_REQUEST,
             "invalid_schedule",
-            "Enter a nonempty prompt, a UTC start time and a positive interval",
+            "Enter a nonempty prompt and a valid schedule: a UTC start time and a positive interval, a day and time of day, or a full folder path",
         ),
         _ => workspace_error(error),
     }
@@ -2089,6 +2089,46 @@ mod tests {
         assert_eq!(schedule["assignment"]["model"], "scheduled-model");
         assert_eq!(schedule["workspace_id"], id);
         assert_eq!(schedule["enabled"], true);
+        // Calendar rules and event triggers share the same route and validation.
+        let calendar = client
+            .call(
+                "/v1/schedules/create",
+                serde_json::json!({"workspace_id": id, "prompt": "Weekday summary", "timing": {"kind":"calendar","rule":{"kind":"days","days":[0,1,2,3,4],"hour":9,"minute":0}}, "missed_run_policy":"skip_missed"}),
+            )
+            .await
+            .unwrap();
+        assert!(calendar["next_at"].as_u64().unwrap() > 0);
+        let first_monday = client
+            .call(
+                "/v1/schedules/create",
+                serde_json::json!({"workspace_id": id, "prompt": "Month start", "timing": {"kind":"calendar","rule":{"kind":"monthly_weekday","nth":1,"weekday":0,"hour":9,"minute":30}}, "missed_run_policy":"run_latest"}),
+            )
+            .await
+            .unwrap();
+        assert!(first_monday["next_at"].as_u64().unwrap() > 0);
+        let watcher = client
+            .call(
+                "/v1/schedules/create",
+                serde_json::json!({"workspace_id": id, "prompt": "File it", "timing": {"kind":"event","source":{"kind":"folder_arrival","path":"/home/gbot/Inbox"}}, "missed_run_policy":"run_latest"}),
+            )
+            .await
+            .unwrap();
+        assert!(watcher["next_at"].is_null());
+        assert_eq!(watcher["watch"]["primed"], false);
+        for bad in [
+            serde_json::json!({"kind":"event","source":{"kind":"folder_arrival","path":"Inbox"}}),
+            serde_json::json!({"kind":"calendar","rule":{"kind":"days","days":[],"hour":9,"minute":0}}),
+            serde_json::json!({"kind":"calendar","rule":{"kind":"monthly_weekday","nth":9,"weekday":0,"hour":9,"minute":0}}),
+            serde_json::json!({"kind":"event","source":{"kind":"mail_folder","path":"relative/mail"}}),
+        ] {
+            assert!(client
+                .call(
+                    "/v1/schedules/create",
+                    serde_json::json!({"workspace_id": id, "prompt": "Bad", "timing": bad, "missed_run_policy":"run_latest"}),
+                )
+                .await
+                .is_err());
+        }
         assert_eq!(
             client
                 .call("/v1/schedules", serde_json::json!({}))

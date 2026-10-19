@@ -22,5 +22,6 @@ pub mod store;
 pub mod sub_agents;
 pub mod task_files;
 pub mod tasks;
+pub mod triggers;
 pub mod vault;
 pub mod workspace;

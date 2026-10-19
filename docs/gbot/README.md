@@ -4119,6 +4119,33 @@ emoji/Markdown viewer crash has no reproducer and no Fedora guest here and was n
 **physical audio has no hardware here and stays unqualified**; there is no independent SSH
 readback into the bot VM (the key stays in secure storage). The rows stay OPEN for those.
 
+## Calendar schedules and event triggers
+
+`GBOT-TRIGGERS` adds three ways to start a Gbot task beside Once and At an interval,
+all in the existing Scheduled tasks card with plain wording:
+
+- **On chosen days at a set time** (for example weekdays at 09:00) and **once a month on
+  a chosen weekday** (first, second, third, fourth or last Monday to Sunday, at a time).
+  Times follow the time zone of the computer running the Gbot service, including daylight
+  saving changes. A computer that slept through several runs starts one, not a backlog,
+  under the schedule's missed-run policy.
+- **When a file arrives on the bot's computer**: the service looks at the chosen full
+  folder path through the bot's own session every 30 seconds and starts one task per new
+  file, once the file has stopped growing. The task is told the file name, size and path.
+- **When new mail arrives in a mail folder**: the same, for a Maildir (`new/`) or a folder
+  of `.eml` files on the service computer; the task is told who the message is from, its
+  subject and the start of the text. Mail from connected Google or Microsoft accounts is
+  deferred, so this is the local-fixture form only.
+
+Files or messages already present when a trigger is created or re-enabled are ignored.
+At most five triggered tasks wait at a time; an unreadable folder shows a plain message on
+the schedule and is looked at again. The bot's computer being off is not an error.
+`chrono` is the only dependency added to `gbot-service` (already in the lockfile).
+Seven Rust and four web cases cover calendar rules, DST, the mailbox fixture, limits and
+the UI; the folder trigger was also run on the bot's computer in a Debian 13 guest (error
+shown for a missing folder, baseline after it was created, one task started with the file
+details when the bot wrote a file into it).
+
 ## Files a bot hands back — core, October 19
 
 A bot can now hand back finished files. The model gets one more tool, `hand_back_file`
