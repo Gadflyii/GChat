@@ -30,23 +30,173 @@ pub fn now() -> u64 {
 pub enum Timing {
     Once { at: u64 },
     Interval { first_at: u64, every_seconds: u64 },
+    /// A calendar rule in the service computer's local time zone.
+    Calendar { rule: CalendarRule },
+    /// Starts a task when something happens instead of at a time.
+    Event { source: EventSource },
 }
-impl Timing {
-    fn first(&self) -> u64 {
+
+/// Calendar-style repetition, in the service computer's local time (daylight saving
+/// included): the chosen days of the week, or the nth weekday of each month.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CalendarRule {
+    /// Days of the week, 0 = Monday to 6 = Sunday, at a local time.
+    Days { days: Vec<u8>, hour: u8, minute: u8 },
+    /// The nth (1 to 4) or last (5) given weekday of each month at a local time.
+    MonthlyWeekday {
+        nth: u8,
+        weekday: u8,
+        hour: u8,
+        minute: u8,
+    },
+}
+
+/// What starts an event schedule.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum EventSource {
+    /// A new file appears in a folder on the bot's computer.
+    FolderArrival { path: String },
+    /// A new message file appears in a mail folder (Maildir or plain .eml files) on
+    /// the service computer. Connected Google and Microsoft mailboxes are not
+    /// watched yet.
+    MailFolder { path: String },
+}
+
+impl CalendarRule {
+    fn valid(&self) -> bool {
+        let time = |hour: u8, minute: u8| hour < 24 && minute < 60;
         match self {
-            Self::Once { at } => *at,
-            Self::Interval { first_at, .. } => *first_at,
+            Self::Days { days, hour, minute } => {
+                !days.is_empty()
+                    && days.len() <= 7
+                    && days.iter().all(|day| *day < 7)
+                    && time(*hour, *minute)
+            }
+            Self::MonthlyWeekday {
+                nth,
+                weekday,
+                hour,
+                minute,
+            } => (1..=5).contains(nth) && *weekday < 7 && time(*hour, *minute),
+        }
+    }
+
+    /// The first run strictly after `after` (Unix seconds) in the given zone.
+    pub fn next_after_in<Tz: chrono::TimeZone>(&self, zone: &Tz, after: u64) -> Option<u64> {
+        use chrono::{Datelike, Duration, NaiveDate, NaiveTime, Weekday};
+        if !self.valid() {
+            return None;
+        }
+        let local_after = zone.timestamp_opt(i64::try_from(after).ok()?, 0).single()?;
+        let start = local_after.date_naive();
+        let (hour, minute) = match self {
+            Self::Days { hour, minute, .. } | Self::MonthlyWeekday { hour, minute, .. } => {
+                (u32::from(*hour), u32::from(*minute))
+            }
+        };
+        let at_time = |date: NaiveDate| -> Option<u64> {
+            // A time that does not exist (a daylight saving gap) moves to the next hour.
+            for shift in 0..=2u32 {
+                let naive = date.and_time(NaiveTime::from_hms_opt(hour + shift, minute, 0)?);
+                let found = match zone.from_local_datetime(&naive) {
+                    chrono::LocalResult::Single(value) => Some(value),
+                    chrono::LocalResult::Ambiguous(first, _) => Some(first),
+                    chrono::LocalResult::None => None,
+                };
+                if let Some(value) = found {
+                    return u64::try_from(value.timestamp()).ok();
+                }
+            }
+            None
+        };
+        let weekday = |index: u8| match index {
+            0 => Weekday::Mon,
+            1 => Weekday::Tue,
+            2 => Weekday::Wed,
+            3 => Weekday::Thu,
+            4 => Weekday::Fri,
+            5 => Weekday::Sat,
+            _ => Weekday::Sun,
+        };
+        match self {
+            Self::Days { days, .. } => (0..=8)
+                .map(|offset| start + Duration::days(offset))
+                .filter(|date| days.iter().any(|day| weekday(*day) == date.weekday()))
+                .filter_map(at_time)
+                .find(|candidate| *candidate > after),
+            Self::MonthlyWeekday { nth, weekday: day, .. } => {
+                let wanted = weekday(*day);
+                let (mut year, mut month) = (start.year(), start.month());
+                for _ in 0..16 {
+                    let first = NaiveDate::from_ymd_opt(year, month, 1)?;
+                    let lead = (7 + wanted.num_days_from_monday() as i64
+                        - first.weekday().num_days_from_monday() as i64)
+                        % 7;
+                    let mut date = first + Duration::days(lead);
+                    if *nth == 5 {
+                        while (date + Duration::days(7)).month() == month {
+                            date += Duration::days(7);
+                        }
+                    } else {
+                        date += Duration::days(7 * i64::from(*nth - 1));
+                    }
+                    if date.month() == month {
+                        if let Some(candidate) = at_time(date).filter(|c| *c > after) {
+                            return Some(candidate);
+                        }
+                    }
+                    if month == 12 {
+                        year += 1;
+                        month = 1;
+                    } else {
+                        month += 1;
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    pub fn next_after(&self, after: u64) -> Option<u64> {
+        self.next_after_in(&chrono::Local, after)
+    }
+}
+
+impl EventSource {
+    fn valid(&self) -> bool {
+        let path = match self {
+            Self::FolderArrival { path } | Self::MailFolder { path } => path,
+        };
+        let full = match self {
+            Self::FolderArrival { .. } => path.starts_with('/'),
+            Self::MailFolder { .. } => std::path::Path::new(path).is_absolute(),
+        };
+        full && !path.contains('\0') && path.len() <= 1024
+    }
+}
+
+impl Timing {
+    /// The first time to run, or None for an event schedule.
+    fn initial(&self, now: u64) -> Option<u64> {
+        match self {
+            Self::Once { at } => Some(*at),
+            Self::Interval { first_at, .. } => Some(*first_at),
+            Self::Calendar { rule } => rule.next_after(now),
+            Self::Event { .. } => None,
         }
     }
     fn valid(&self) -> bool {
-        self.first() > 0
-            && !matches!(
-                self,
-                Self::Interval {
-                    every_seconds: 0,
-                    ..
-                }
-            )
+        match self {
+            Self::Once { at } => *at > 0,
+            Self::Interval {
+                first_at,
+                every_seconds,
+            } => *first_at > 0 && *every_seconds > 0,
+            Self::Calendar { rule } => rule.valid(),
+            Self::Event { source } => source.valid(),
+        }
     }
 }
 
@@ -91,6 +241,9 @@ pub struct Occurrence {
     pub state: OccurrenceState,
     pub note: Option<String>,
     pub retry_at: Option<u64>,
+    /// What happened, for an event schedule; added to the task's prompt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -106,6 +259,18 @@ pub struct Schedule {
     pub enabled_since: u64,
     pub next_at: Option<u64>,
     pub occurrences: Vec<Occurrence>,
+    /// What an event schedule has already seen, so each arrival starts one task.
+    #[serde(default)]
+    pub watch: WatchState,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WatchState {
+    /// Names present when watching began, and every arrival since.
+    pub seen: Vec<String>,
+    pub primed: bool,
+    /// Why the last look failed, shown to the person.
+    pub last_error: Option<String>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -122,9 +287,16 @@ pub struct ScheduleListing {
     pub schedules: Vec<Schedule>,
     pub stopped: Option<String>,
 }
+#[derive(Default)]
+struct Look {
+    at: u64,
+    sizes: std::collections::BTreeMap<String, u64>,
+}
+
 pub struct Schedules {
     store: Arc<Store>,
     state: Mutex<State>,
+    looks: std::sync::Mutex<std::collections::BTreeMap<Uuid, Look>>,
     recovered_before: u64,
     revision: std::sync::atomic::AtomicU64,
 }
@@ -187,6 +359,7 @@ impl Schedules {
             }),
             recovered_before: at,
             revision: std::sync::atomic::AtomicU64::new(0),
+            looks: Default::default(),
         })
     }
 
@@ -253,13 +426,14 @@ impl Schedules {
             id: Uuid::new_v4(),
             workspace_id: input.workspace_id,
             prompt: input.prompt,
-            next_at: Some(input.timing.first()),
+            next_at: input.timing.initial(at),
             timing: input.timing,
             missed_run_policy: input.missed_run_policy,
             assignment,
             enabled: true,
             enabled_since: at,
             occurrences: vec![],
+            watch: WatchState::default(),
         };
         let mut state = self.state.lock().await;
         let mut next = state.journal.clone();
@@ -282,6 +456,8 @@ impl Schedules {
             .ok_or(WorkspaceError::NotFound)?;
         if input.enabled && !schedule.enabled {
             schedule.enabled_since = at;
+            // Files that arrived while it was off are not new: start from what is there.
+            schedule.watch.primed = false;
         }
         schedule.enabled = input.enabled;
         if !input.enabled {
@@ -319,12 +495,29 @@ impl Schedules {
             {
                 continue;
             }
-            let (latest, following, multiple) = match schedule.timing {
-                Timing::Once { .. } => (due, None, false),
+            let (latest, following, multiple) = match &schedule.timing {
+                Timing::Once { .. } | Timing::Event { .. } => (due, None, false),
                 Timing::Interval { every_seconds, .. } => {
                     let count = (at - due) / every_seconds;
                     let latest = due + count * every_seconds;
-                    (latest, latest.checked_add(every_seconds), count > 0)
+                    (latest, latest.checked_add(*every_seconds), count > 0)
+                }
+                Timing::Calendar { rule } => {
+                    // Walk to the latest slot that is already due; more than one is a
+                    // backlog (for example after sleep) and is never replayed.
+                    let (mut latest, mut multiple) = (due, false);
+                    let mut following = rule.next_after(latest);
+                    for _ in 0..4096 {
+                        match following {
+                            Some(next) if next <= at => {
+                                latest = next;
+                                multiple = true;
+                                following = rule.next_after(next);
+                            }
+                            _ => break,
+                        }
+                    }
+                    (latest, following, multiple)
                 }
             };
             // Disabled time and restart are missed runs. A multi-slot backlog (for
@@ -345,6 +538,7 @@ impl Schedules {
                     None
                 },
                 retry_at: None,
+                context: None,
             });
             schedule.next_at = following;
             changed = true;
@@ -426,6 +620,223 @@ impl Schedules {
         Err(WorkspaceError::NotFound)
     }
 
+    /// Looks at the folders event schedules watch and queues one task per new, finished
+    /// arrival. The first look after a schedule is enabled only records what is already
+    /// there. A folder that cannot be read right now (the bot's computer is off) is
+    /// skipped quietly and looked at again later.
+    async fn poll_events(
+        &self,
+        at: u64,
+        service: &Service,
+        runtime: &WorkspaceRuntime,
+    ) -> Result<(), WorkspaceError> {
+        use crate::triggers as t;
+        for schedule in self.list().await {
+            let Timing::Event { source } = &schedule.timing else {
+                continue;
+            };
+            if !schedule.enabled {
+                continue;
+            }
+            let due = self
+                .looks
+                .lock()
+                .map_err(|_| ServiceError::InvalidState)?
+                .get(&schedule.id)
+                .is_none_or(|look| at >= look.at + t::POLL_SECONDS);
+            if !due {
+                continue;
+            }
+            let listing: Result<Option<Vec<t::Entry>>, String> = match source {
+                EventSource::FolderArrival { path } => {
+                    let Some(identity) = service
+                        .live_sessions()
+                        .await
+                        .into_iter()
+                        .find(|identity| identity.workspace_id == schedule.workspace_id)
+                    else {
+                        continue;
+                    };
+                    let request = crate::contract::GuestRequest {
+                        identity,
+                        operation_id: crate::contract::OperationId::new(),
+                        operation: crate::contract::GuestOperationKind::Exec {
+                            program: "/usr/bin/find".into(),
+                            args: vec![
+                                path.clone(),
+                                "-maxdepth".into(),
+                                "1".into(),
+                                "-type".into(),
+                                "f".into(),
+                                "-printf".into(),
+                                "%f\\t%s\\0".into(),
+                            ],
+                            cwd: crate::contract::GuestPath("/".into()),
+                            env: Default::default(),
+                        },
+                    };
+                    match runtime.request(request).await {
+                        Ok(reply) => match reply.outcome {
+                            crate::contract::GuestOutcome::Success {
+                                result:
+                                    crate::contract::GuestResult::ExecFinished {
+                                        exit_code: 0,
+                                        stdout,
+                                        ..
+                                    },
+                            } => Ok(Some(t::parse_find(&stdout))),
+                            _ => Err(format!(
+                                "The folder {path} could not be read on the bot's computer. Check that it exists."
+                            )),
+                        },
+                        // The bot's computer is not reachable right now; look again later.
+                        Err(_) => continue,
+                    }
+                }
+                EventSource::MailFolder { path } => {
+                    let directory = std::path::PathBuf::from(path);
+                    tokio::task::spawn_blocking(move || {
+                        let inbox = directory.join("new");
+                        let directory = if inbox.is_dir() { inbox } else { directory };
+                        let mut entries = Vec::new();
+                        for item in std::fs::read_dir(&directory).map_err(|_| {
+                            "The mail folder could not be read. Check that it exists.".to_owned()
+                        })? {
+                            let Ok(item) = item else { continue };
+                            let Ok(meta) = item.metadata() else { continue };
+                            let name = item.file_name().to_string_lossy().into_owned();
+                            if meta.is_file() && !name.starts_with('.') {
+                                entries.push(t::Entry {
+                                    name,
+                                    bytes: meta.len(),
+                                });
+                            }
+                        }
+                        Ok(Some(entries))
+                    })
+                    .await
+                    .unwrap_or_else(|_| Err("The mail folder could not be read.".into()))
+                }
+            };
+            let (entries, error) = match listing {
+                Ok(Some(entries)) => (entries, None),
+                Ok(None) => continue,
+                Err(message) => (Vec::new(), Some(message)),
+            };
+            let before = {
+                let mut looks = self.looks.lock().map_err(|_| ServiceError::InvalidState)?;
+                let look = looks.entry(schedule.id).or_default();
+                look.at = at;
+                if error.is_some() {
+                    look.sizes.clone()
+                } else {
+                    std::mem::replace(
+                        &mut look.sizes,
+                        entries.iter().map(|e| (e.name.clone(), e.bytes)).collect(),
+                    )
+                }
+            };
+            let mut seen = schedule.watch.seen.clone();
+            let mut contexts: Vec<String> = Vec::new();
+            let primed = schedule.watch.primed || error.is_none();
+            if error.is_none() {
+                if !schedule.watch.primed {
+                    t::remember(&mut seen, entries.iter().map(|e| e.name.clone()));
+                } else {
+                    let outstanding = schedule
+                        .occurrences
+                        .iter()
+                        .filter(|o| {
+                            !matches!(o.state, OccurrenceState::Completed | OccurrenceState::Skipped)
+                        })
+                        .count();
+                    let room = t::MAX_OUTSTANDING.saturating_sub(outstanding);
+                    for entry in t::arrivals(&entries, &seen, &before, room) {
+                        let context = match source {
+                            EventSource::FolderArrival { path } => t::file_context(path, &entry),
+                            EventSource::MailFolder { path } => {
+                                let location = std::path::Path::new(path);
+                                let file = if location.join("new").is_dir() {
+                                    location.join("new").join(&entry.name)
+                                } else {
+                                    location.join(&entry.name)
+                                };
+                                let raw = tokio::task::spawn_blocking(move || {
+                                    use std::io::Read;
+                                    let mut buffer = Vec::new();
+                                    std::fs::File::open(file)
+                                        .and_then(|f| f.take(64 * 1024).read_to_end(&mut buffer))
+                                        .map(|_| buffer)
+                                })
+                                .await
+                                .ok()
+                                .and_then(Result::ok);
+                                match raw {
+                                    Some(raw) => t::mail_context(&raw),
+                                    // Not readable yet: leave it unseen and look again.
+                                    None => continue,
+                                }
+                            }
+                        };
+                        t::remember(&mut seen, [entry.name.clone()]);
+                        contexts.push(context);
+                    }
+                }
+            }
+            self.apply_watch(schedule.id, seen, primed, error, contexts, at)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn apply_watch(
+        &self,
+        id: Uuid,
+        seen: Vec<String>,
+        primed: bool,
+        error: Option<String>,
+        contexts: Vec<String>,
+        at: u64,
+    ) -> Result<(), WorkspaceError> {
+        let mut state = self.state.lock().await;
+        let mut next = state.journal.clone();
+        let Some(schedule) = next.schedules.iter_mut().find(|s| s.id == id) else {
+            return Ok(());
+        };
+        if !schedule.enabled {
+            return Ok(());
+        }
+        let watch = WatchState {
+            seen,
+            primed,
+            last_error: error,
+        };
+        if watch == schedule.watch && contexts.is_empty() {
+            return Ok(());
+        }
+        schedule.watch = watch;
+        for context in contexts {
+            schedule.occurrences.push(Occurrence {
+                task_id: Uuid::new_v4(),
+                due_at: at,
+                state: OccurrenceState::Queued,
+                note: None,
+                retry_at: None,
+                context: Some(context),
+            });
+        }
+        // Keep the history of a busy schedule bounded: forget the oldest finished runs.
+        while schedule.occurrences.len() > 200 {
+            let Some(position) = schedule.occurrences.iter().position(|o| {
+                matches!(o.state, OccurrenceState::Completed | OccurrenceState::Skipped)
+            }) else {
+                break;
+            };
+            schedule.occurrences.remove(position);
+        }
+        self.publish(&mut state, next).await
+    }
+
     pub async fn tick(
         &self,
         at: u64,
@@ -485,6 +896,7 @@ impl Schedules {
                 }
             }
         }
+        self.poll_events(at, service, runtime).await?;
         self.plan_due(at).await?;
         for schedule in self.list().await {
             for occurrence in &schedule.occurrences {
@@ -571,13 +983,12 @@ impl Schedules {
                 if !self.begin_dispatch(occurrence.task_id).await? {
                     continue;
                 }
+                let prompt = match &occurrence.context {
+                    Some(context) => format!("{}\n\n{context}", schedule.prompt),
+                    None => schedule.prompt.clone(),
+                };
                 match tasks
-                    .start_with_id(
-                        occurrence.task_id,
-                        identity,
-                        schedule.prompt.clone(),
-                        Some(assignment),
-                    )
+                    .start_with_id(occurrence.task_id, identity, prompt, Some(assignment))
                     .await
                 {
                     Ok(_) => {
@@ -668,6 +1079,7 @@ async fn workspace_removal_requires_disabled_schedules_and_resolved_runs() {
             state,
             note: None,
             retry_at: None,
+            context: None,
         }];
         assert_eq!(
             schedules
@@ -1148,5 +1560,156 @@ mod tests {
             recovered.list().await[0].occurrences[0].state,
             OccurrenceState::Dispatching
         );
+    }
+    fn utc(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> u64 {
+        use chrono::TimeZone;
+        chrono::Utc
+            .with_ymd_and_hms(year, month, day, hour, minute, 0)
+            .unwrap()
+            .timestamp() as u64
+    }
+
+    #[test]
+    fn weekdays_at_nine_skip_the_weekend_and_follow_the_time_zone() {
+        let rule = CalendarRule::Days { days: vec![0, 1, 2, 3, 4], hour: 9, minute: 0 };
+        // Friday 2026-10-16 10:00 UTC: the next run is Monday the 19th at 09:00.
+        assert_eq!(rule.next_after_in(&chrono::Utc, utc(2026, 10, 16, 10, 0)), Some(utc(2026, 10, 19, 9, 0)));
+        // Before nine the same day, and exactly at nine the next day (strictly after).
+        assert_eq!(rule.next_after_in(&chrono::Utc, utc(2026, 10, 19, 8, 59)), Some(utc(2026, 10, 19, 9, 0)));
+        assert_eq!(rule.next_after_in(&chrono::Utc, utc(2026, 10, 19, 9, 0)), Some(utc(2026, 10, 20, 9, 0)));
+        // Nine o'clock in UTC-5 is 14:00 UTC.
+        let zone = chrono::FixedOffset::west_opt(5 * 3600).unwrap();
+        assert_eq!(rule.next_after_in(&zone, utc(2026, 10, 19, 0, 0)), Some(utc(2026, 10, 19, 14, 0)));
+    }
+
+    #[test]
+    fn the_first_monday_and_the_last_friday_of_each_month() {
+        let first_monday = CalendarRule::MonthlyWeekday { nth: 1, weekday: 0, hour: 9, minute: 30 };
+        // October 2026: the first Monday is the 5th; after it the next is November 2nd.
+        assert_eq!(first_monday.next_after_in(&chrono::Utc, utc(2026, 10, 1, 0, 0)), Some(utc(2026, 10, 5, 9, 30)));
+        assert_eq!(first_monday.next_after_in(&chrono::Utc, utc(2026, 10, 5, 9, 30)), Some(utc(2026, 11, 2, 9, 30)));
+        // A year boundary: after December 7th 2026 the next first Monday is January 4th 2027.
+        assert_eq!(first_monday.next_after_in(&chrono::Utc, utc(2026, 12, 8, 0, 0)), Some(utc(2027, 1, 4, 9, 30)));
+        let last_friday = CalendarRule::MonthlyWeekday { nth: 5, weekday: 4, hour: 17, minute: 0 };
+        assert_eq!(last_friday.next_after_in(&chrono::Utc, utc(2026, 10, 1, 0, 0)), Some(utc(2026, 10, 30, 17, 0)));
+        assert_eq!(last_friday.next_after_in(&chrono::Utc, utc(2026, 10, 30, 17, 0)), Some(utc(2026, 11, 27, 17, 0)));
+        // A fourth Monday exists every month; a rule with an impossible nth is invalid.
+        assert!(!CalendarRule::MonthlyWeekday { nth: 6, weekday: 0, hour: 9, minute: 0 }.valid());
+        assert!(!CalendarRule::Days { days: vec![], hour: 9, minute: 0 }.valid());
+        assert!(!CalendarRule::Days { days: vec![7], hour: 9, minute: 0 }.valid());
+        assert!(!CalendarRule::Days { days: vec![0], hour: 24, minute: 0 }.valid());
+    }
+
+    #[tokio::test]
+    async fn a_calendar_schedule_runs_at_its_time_and_plans_the_following_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let assignment = assignment();
+        let schedules = Schedules::open_at(dir.path().join("schedules.json"), 0).await.unwrap();
+        let rule = CalendarRule::Days { days: vec![0, 1, 2, 3, 4, 5, 6], hour: 9, minute: 0 };
+        let created = schedules
+            .create_at(
+                input(&assignment, Timing::Calendar { rule: rule.clone() }, MissedRunPolicy::RunLatest),
+                assignment.clone(),
+                1_000_000,
+            )
+            .await
+            .unwrap();
+        let first = created.next_at.unwrap();
+        assert!(first > 1_000_000);
+        assert_eq!(Some(first), rule.next_after(1_000_000));
+        // When due, an occurrence is planned and the next day is scheduled; a backlog of
+        // several days (the computer slept) becomes one occurrence, not many.
+        schedules.plan_due(first + 3 * 86_400 + 5).await.unwrap();
+        let planned = &schedules.list().await[0];
+        assert_eq!(planned.occurrences.len(), 1);
+        assert!(planned.next_at.unwrap() > first + 3 * 86_400 + 5);
+        assert_eq!(planned.occurrences[0].state, OccurrenceState::Queued);
+    }
+
+    #[tokio::test]
+    async fn a_new_mail_in_a_mail_folder_starts_one_task_with_its_details() {
+        let dir = tempfile::tempdir().unwrap();
+        let mailbox = dir.path().join("mail");
+        std::fs::create_dir_all(mailbox.join("new")).unwrap();
+        std::fs::write(mailbox.join("new/old.eml"), "From: a@example.com\nSubject: Before\n\nalready here\n").unwrap();
+        let assignment = assignment();
+        let service = Arc::new(Service::open(dir.path().join("service.json")).await.unwrap());
+        let runtime = WorkspaceRuntime::new(service.clone(), Arc::new(NativeVault));
+        let schedules = Schedules::open_at(dir.path().join("schedules.json"), 0).await.unwrap();
+        let source = EventSource::MailFolder { path: mailbox.display().to_string() };
+        let created = schedules
+            .create_at(
+                input(&assignment, Timing::Event { source }, MissedRunPolicy::RunLatest),
+                assignment.clone(),
+                100,
+            )
+            .await
+            .unwrap();
+        assert_eq!(created.next_at, None);
+        // The first look only records what is already there.
+        schedules.poll_events(100, &service, &runtime).await.unwrap();
+        let first = &schedules.list().await[0];
+        assert!(first.watch.primed && first.occurrences.is_empty());
+        // A new message is seen once it stops growing; one look later it starts one task.
+        std::fs::write(mailbox.join("new/hello.eml"), "From: Ada <ada@example.com>\nSubject: Invoice 42\n\nPlease pay.\n").unwrap();
+        schedules.poll_events(110, &service, &runtime).await.unwrap(); // too soon to look again
+        schedules.poll_events(140, &service, &runtime).await.unwrap();
+        assert!(schedules.list().await[0].occurrences.is_empty(), "too early to be sure it finished arriving");
+        schedules.poll_events(170, &service, &runtime).await.unwrap();
+        let listed = &schedules.list().await[0];
+        assert_eq!(listed.occurrences.len(), 1);
+        let context = listed.occurrences[0].context.clone().unwrap();
+        assert!(context.contains("Ada <ada@example.com>") && context.contains("Invoice 42") && context.contains("Please pay."));
+        // It is not started again, and the old message never was.
+        schedules.poll_events(200, &service, &runtime).await.unwrap();
+        schedules.poll_events(230, &service, &runtime).await.unwrap();
+        assert_eq!(schedules.list().await[0].occurrences.len(), 1);
+        // Disabling and re-enabling starts from what is there: nothing arrives twice.
+        schedules.set_enabled_at(SetEnabled { id: created.id, enabled: false }, 240).await.unwrap();
+        std::fs::write(mailbox.join("new/while-off.eml"), "Subject: Off\n\nx\n").unwrap();
+        schedules.set_enabled_at(SetEnabled { id: created.id, enabled: true }, 250).await.unwrap();
+        for at in [270, 300, 330, 360] {
+            schedules.poll_events(at, &service, &runtime).await.unwrap();
+        }
+        assert_eq!(schedules.list().await[0].occurrences.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn an_unreadable_mail_folder_is_reported_and_a_busy_one_is_limited() {
+        let dir = tempfile::tempdir().unwrap();
+        let assignment = assignment();
+        let service = Arc::new(Service::open(dir.path().join("service.json")).await.unwrap());
+        let runtime = WorkspaceRuntime::new(service.clone(), Arc::new(NativeVault));
+        let schedules = Schedules::open_at(dir.path().join("schedules.json"), 0).await.unwrap();
+        let missing = dir.path().join("missing");
+        schedules
+            .create_at(
+                input(&assignment, Timing::Event { source: EventSource::MailFolder { path: missing.display().to_string() } }, MissedRunPolicy::RunLatest),
+                assignment.clone(),
+                100,
+            )
+            .await
+            .unwrap();
+        schedules.poll_events(100, &service, &runtime).await.unwrap();
+        assert!(schedules.list().await[0].watch.last_error.as_deref().unwrap().contains("mail folder"));
+        // Once the folder exists and is primed, a flood starts at most five tasks at a time.
+        std::fs::create_dir_all(&missing).unwrap();
+        schedules.poll_events(130, &service, &runtime).await.unwrap();
+        for n in 0..9 {
+            std::fs::write(missing.join(format!("m{n}.eml")), format!("Subject: {n}\n\nbody\n")).unwrap();
+        }
+        schedules.poll_events(160, &service, &runtime).await.unwrap();
+        schedules.poll_events(190, &service, &runtime).await.unwrap();
+        let listed = &schedules.list().await[0];
+        assert_eq!(listed.occurrences.len(), crate::triggers::MAX_OUTSTANDING);
+        assert!(listed.watch.last_error.is_none());
+    }
+
+    #[test]
+    fn event_sources_need_full_paths() {
+        assert!(EventSource::FolderArrival { path: "/home/gbot/Inbox".into() }.valid());
+        assert!(!EventSource::FolderArrival { path: "Inbox".into() }.valid());
+        assert!(!EventSource::MailFolder { path: "relative/mail".into() }.valid());
+        assert!(Timing::Event { source: EventSource::MailFolder { path: "/var/mail/me".into() } }.valid());
     }
 }
