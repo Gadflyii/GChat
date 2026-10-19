@@ -422,6 +422,22 @@ impl LaunchOptions {
         }
         Ok(())
     }
+    /// Explicit DFlash/MTP needs a startup width: the Engine rejects `--spec dflash`
+    /// or `--spec mtp` without `--draft-tokens`. Packages carry no width, so an
+    /// unset width takes the Engine's documented target default (GInfer
+    /// docs/cli.md target rules): Qwen 27B and Muse DFlash K4, adaptive DFlash
+    /// K15, Flash MTP 3. Serving and hardware profiling then use the same width.
+    pub fn resolve_draft_tokens(&mut self, identity: &crate::engine_inventory::ArtifactIdentity) {
+        if self.draft_tokens != 0 {
+            return;
+        }
+        self.draft_tokens = match (self.spec.as_str(), identity.model_id.as_str()) {
+            ("dflash", "qwen3.8-27b" | "muse-glimmer-30b") if self.draft_policy == "adaptive" => 15,
+            ("dflash", "qwen3.8-27b" | "muse-glimmer-30b") => 4,
+            ("mtp", "qwen3.8-flash-next") => 3,
+            _ => return,
+        };
+    }
     /// Host admission cannot replace Engine payload and device validation.
     pub fn validate_target(
         &self,
@@ -2334,5 +2350,48 @@ mod launch_options_tests {
         options.draft_tokens = 0;
         options.draft_policy = "adaptive".into();
         assert!(options.validate(1).is_err());
+    }
+
+    #[test]
+    fn explicit_speculation_without_width_takes_the_documented_target_default() {
+        let identity = |model_id: &str, weights_id: &str| crate::engine_inventory::ArtifactIdentity {
+            model_id: model_id.into(),
+            weights_id: weights_id.into(),
+        };
+        let qwen = identity("qwen3.8-27b", "smol-q2g64-mix-dflash2-q4");
+        let muse = identity("muse-glimmer-30b", "groupwise-int-dflash-q4");
+        let flash = identity("qwen3.8-flash-next", "smol-q2g64");
+        for (identity, spec, policy, expected, draft_tp) in [
+            (&qwen, "dflash", "auto", 4, 1),
+            (&qwen, "dflash", "fixed", 4, 1),
+            (&muse, "dflash", "auto", 4, 1),
+            (&muse, "dflash", "adaptive", 15, 1),
+            (&flash, "mtp", "auto", 3, 0),
+        ] {
+            let mut options = LaunchOptions {
+                spec: spec.into(),
+                draft_policy: policy.into(),
+                ..Default::default()
+            };
+            options.resolve_draft_tokens(identity);
+            assert_eq!(options.draft_tokens, expected, "{spec}/{policy}");
+            options.validate_target(identity, 1, draft_tp).unwrap();
+            assert!(options.args().windows(2).any(|pair| pair[0] == "--draft-tokens"
+                && pair[1] == expected.to_string()));
+        }
+        // An explicit width is the caller's; auto/none stay Engine-resolved.
+        let mut explicit = LaunchOptions { spec: "dflash".into(), draft_tokens: 7, ..Default::default() };
+        explicit.resolve_draft_tokens(&qwen);
+        assert_eq!(explicit.draft_tokens, 7);
+        for spec in ["auto", "none"] {
+            let mut options = LaunchOptions { spec: spec.into(), ..Default::default() };
+            options.resolve_draft_tokens(&qwen);
+            assert_eq!(options.draft_tokens, 0);
+        }
+        // Unsupported pairings keep their target rejection instead of a width.
+        let mut dflash_flash = LaunchOptions { spec: "dflash".into(), ..Default::default() };
+        dflash_flash.resolve_draft_tokens(&flash);
+        assert_eq!(dflash_flash.draft_tokens, 0);
+        assert!(dflash_flash.validate_target(&flash, 1, 0).is_err());
     }
 }
