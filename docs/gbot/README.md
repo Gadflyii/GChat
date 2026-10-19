@@ -752,6 +752,11 @@ Hosts do not save settings or start a model. Rendered regressions cover both
 connection types and initial or refreshed discovery failures. This is
 source/rendered UI scope.
 
+Closing an explicitly opened brain editor with Cancel edits or a successful Save
+returns keyboard focus to **Edit brain** once that control is enabled. Focusing
+another setting during a pending parent refresh cancels the return. Initial
+setup does not move focus, and failed saves keep the form and draft available.
+
 All four new cases failed on unchanged production. The fixed brain setup and
 wizard suites passed all 53 cases; lint passed with zero errors and five existing
 warnings. ONE `make verify`, 18 October 16:17:34–16:23:22 UTC, passed 3,698 app
