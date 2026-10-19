@@ -61,13 +61,13 @@ describe('model server labels', () => {
     ],
   }
 
-  it('distinguishes the model server, request limit, conversation length and graphics card', () => {
-    expect(hostInstanceLabel(instance, snapshot)).toBe('Model server 2 · Qwen for writing · 4 requests at once · 131,072 conversation tokens · Graphics cards 2')
+  it('distinguishes the model server, request limit, context length and graphics card', () => {
+    expect(hostInstanceLabel(instance, snapshot)).toBe('Model server 2 · Qwen for writing · 4 requests at once · 131,072 context tokens · Graphics cards 2')
   })
 
   it('keeps automatic choices distinct from a graphics card that is no longer available', () => {
     const automatic = { ...instance, configuration: { gpu_uuids: [], concurrency: 0, max_context: 0 } }
-    expect(hostInstanceLabel(automatic, snapshot)).toBe('Model server 2 · Qwen for writing · Requests at once: automatic · Conversation length: automatic · Graphics cards chosen automatically')
+    expect(hostInstanceLabel(automatic, snapshot)).toBe('Model server 2 · Qwen for writing · Concurrency: automatic · Context length: automatic · Graphics cards chosen automatically')
     expect(hostInstanceLabel({ ...automatic, configuration: { ...automatic.configuration, gpu_uuids: ['missing-card'] } }, snapshot)).toContain('Graphics cards unavailable')
   })
 })

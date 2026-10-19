@@ -522,6 +522,7 @@ pub fn run() {
                 .level_for("hyper_util", log::LevelFilter::Warn)
                 .level_for("rustls", log::LevelFilter::Warn)
                 .level_for("h2", log::LevelFilter::Warn)
+                .level_for("mdns_sd", log::LevelFilter::Warn)
                 .max_file_size(LOG_MAX_FILE_SIZE)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(
                     LOG_GENERATIONS,
