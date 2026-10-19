@@ -78,10 +78,11 @@ impl ArtifactProfileIntent {
             || !matches!(self.spec.as_str(), "auto" | "none" | "dflash" | "mtp")
             || match self.spec.as_str() {
                 "auto" | "none" => self.draft_tokens.unwrap_or(0) != 0,
-                "dflash" => self
+                // The Engine rejects explicit DFlash/MTP without a width.
+                "dflash" => !self
                     .draft_tokens
-                    .is_some_and(|tokens| !(1..=15).contains(&tokens)),
-                "mtp" => self.draft_tokens == Some(0),
+                    .is_some_and(|tokens| (1..=15).contains(&tokens)),
+                "mtp" => !self.draft_tokens.is_some_and(|tokens| tokens > 0),
                 _ => true,
             }
         {
@@ -192,8 +193,8 @@ pub(crate) fn prepared_hardware_profile_args(args: &[&std::ffi::OsStr]) -> bool 
     };
     match spec.to_str() {
         Some("auto" | "none") => tokens.unwrap_or(0) == 0,
-        Some("dflash") => tokens.is_none_or(|tokens| (1..=15).contains(&tokens)),
-        Some("mtp") => tokens != Some(0),
+        Some("dflash") => tokens.is_some_and(|tokens| (1..=15).contains(&tokens)),
+        Some("mtp") => tokens.is_some_and(|tokens| tokens > 0),
         _ => false,
     }
 }
@@ -1761,7 +1762,8 @@ mod tests {
                 ("none", vec!["--draft-tokens", "0"]),
                 ("dflash", vec!["--draft-tp", "2", "--draft-tokens", "15"]),
                 ("mtp", vec!["--draft-tokens", "3"]),
-                ("mtp", vec!["--draft-tp", "4"]),
+                ("mtp", vec!["--draft-tp", "4", "--draft-tokens", "3"]),
+                ("dflash", vec!["--draft-tokens", "4"]),
             ] {
                 let mut artifact = base.clone();
                 artifact.extend(
@@ -1807,6 +1809,11 @@ mod tests {
             vec!["--complete-remaining-formats", "--json", "--unknown"],
             vec![],
             artifact[..6].to_vec(),
+            // Explicit MTP/DFlash startup without a width fails in the Engine.
+            artifact.to_vec(),
+            [artifact.as_slice(), &["--draft-tp", "1"]].concat(),
+            [&artifact[..5], &["dflash", "--json"]].concat(),
+            [&artifact[..5], &["dflash", "--json", "--draft-tokens", "16"]].concat(),
             [artifact.as_slice(), &["--unknown"]].concat(),
             [
                 artifact.as_slice(),
@@ -1826,7 +1833,13 @@ mod tests {
             let args: Vec<_> = base.iter().copied().chain(tail).map(OsStr::new).collect();
             assert!(!prepared_hardware_profile_args(&args), "{args:?}");
         }
-        let valid: Vec<_> = base.into_iter().chain(artifact).map(OsStr::new).collect();
+        let valid: Vec<_> = base
+            .into_iter()
+            .chain(artifact)
+            .chain(["--draft-tokens", "3"])
+            .map(OsStr::new)
+            .collect();
+        assert!(prepared_hardware_profile_args(&valid), "{valid:?}");
         for (index, value) in [
             (0, "not-profile-hardware"),
             (1, "--not-hardware-profile"),
@@ -2003,7 +2016,8 @@ mod tests {
         assert!(validate_native_result(&scope, &output, &captured(&valid)).is_ok());
         let mut default_intent = intent.clone();
         default_intent.draft_tokens = None;
-        assert!(default_intent.validate(&["GPU-selected".into()]).is_ok());
+        // Explicit MTP/DFlash never omits its width: the Engine rejects that startup.
+        assert!(default_intent.validate(&["GPU-selected".into()]).is_err());
         assert!(validate_native_result(
             &ProfileScope::Artifact(default_intent.clone()),
             &output,
@@ -2014,6 +2028,8 @@ mod tests {
         let mut default_result = valid.clone();
         default_result["artifact"]["spec"] = serde_json::json!("dflash");
         default_result["artifact"]["draft_tokens"] = serde_json::json!(4);
+        assert!(default_intent.validate(&["GPU-selected".into()]).is_err());
+        default_intent.draft_tokens = Some(4);
         assert!(default_intent.validate(&["GPU-selected".into()]).is_ok());
         assert!(validate_native_result(
             &ProfileScope::Artifact(default_intent),

@@ -778,6 +778,11 @@ impl Host {
         }).await.map_err(|e| e.to_string())?
             .map_err(crate::launch_profiles::profile_verification_error)?;
         check_load()?;
+        self.record_payload_verification(payload, verification).await
+    }
+    async fn record_payload_verification(
+        &self, payload: PathBuf, verification: crate::payload_verification::PayloadVerification,
+    ) -> Result<(), String> {
         let mut data = self.data.lock().await;
         check_load()?;
         if data.payload_verifications.get(&payload) == Some(&verification) {
@@ -1401,7 +1406,9 @@ impl Host {
             self.verify_qualified_payload(payload, profile.artifact_sha256, profile.artifact_bytes)
                 .await?;
         }
-        let limit = request.options.validate_target(
+        let mut options = request.options.clone();
+        options.resolve_draft_tokens(&metadata.identity);
+        let limit = options.validate_target(
             &metadata.identity,
             metadata.tp_size,
             metadata.draft_tp,
@@ -1412,7 +1419,6 @@ impl Host {
         if request.max_context > limit {
             return Err(format!("context exceeds model maximum of {limit}"));
         }
-        let options = request.options.clone();
         let socket = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
         let port = socket.local_addr().map_err(|e| e.to_string())?.port();
         drop(socket);
@@ -1461,32 +1467,26 @@ impl Host {
                 Ok(artifact)
             }
         }).await.map_err(|error| error.to_string())??;
-        self.profile_intent_for_payload(path, tp, &launch.options,
-            (launch.options.draft_tokens != 0).then_some(launch.options.draft_tokens))
+        self.profile_intent_for_payload(path, tp, &launch.options)
             .await.map(|(_, intent)| intent)
     }
 
+    /// Every caller's profiling intent: the inspected payload, its package
+    /// identity when one is held, and the same resolved width serving uses.
     async fn profile_intent_for_payload(
         &self,
         path: PathBuf,
         tp: u32,
         options: &LaunchOptions,
-        draft_tokens: Option<u32>,
     ) -> Result<(ArtifactMetadata, crate::hardware_profile::ArtifactProfileIntent), String> {
         let (path, metadata, directory_sha256) = tokio::task::spawn_blocking(move || {
             let path = path.canonicalize().map_err(|error| error.to_string())?;
             let (metadata, directory_sha256) = crate::engine_inventory::inspect_artifact_directory(&path)?;
             Ok::<_, String>((path, metadata, directory_sha256))
         }).await.map_err(|error| error.to_string())??;
-        let mut package_sha256 = None;
-        for download in self.downloads.list().await {
-            if download.status != "installed" { continue; }
-            let Some(installed) = download.path else { continue; };
-            if tokio::fs::canonicalize(installed).await.ok().as_ref() == Some(&path) {
-                package_sha256 = Some(download.release.sha256);
-                break;
-            }
-        }
+        let package_sha256 = self.recorded_package_sha256(&path).await;
+        let mut options = options.clone();
+        options.resolve_draft_tokens(&metadata.identity);
         Ok((metadata, crate::hardware_profile::ArtifactProfileIntent {
             path,
             directory_sha256,
@@ -1494,8 +1494,47 @@ impl Host {
             tp,
             draft_tp: options.draft_tp,
             spec: options.spec.clone(),
-            draft_tokens,
+            draft_tokens: (options.draft_tokens != 0).then_some(options.draft_tokens),
         }))
+    }
+
+    /// A package's SHA256 identity: its installed release, or a whole-payload
+    /// receipt that still describes the file now at this canonical path.
+    async fn recorded_package_sha256(&self, path: &Path) -> Option<String> {
+        for download in self.downloads.list().await {
+            if download.status != "installed" { continue; }
+            let Some(installed) = download.path else { continue; };
+            if tokio::fs::canonicalize(installed).await.ok().as_deref() == Some(path) {
+                return Some(download.release.sha256);
+            }
+        }
+        let receipt = self.data.lock().await.payload_verifications.get(path).cloned()?;
+        let path = path.to_path_buf();
+        tokio::task::spawn_blocking(move || receipt.current_sha256(&path)).await.ok().flatten()
+    }
+
+    /// Imported and external packages (local, UNC or network paths) have no
+    /// release record: hash one once, with load progress, and keep its receipt.
+    /// A file without a stable fingerprint cannot hold an identity, so it is
+    /// not hashed here; qualified launches still verify it against their profile.
+    async fn identify_package(&self, path: &Path) -> Result<Option<String>, String> {
+        if let Some(sha256) = self.recorded_package_sha256(path).await {
+            return Ok(Some(sha256));
+        }
+        let operation = current_load();
+        check_load()?;
+        let payload = path.to_path_buf();
+        let verification = tokio::task::spawn_blocking(move || {
+            crate::payload_verification::identify_controlled(&payload,
+                || operation.as_ref().is_some_and(|operation| operation.cancelled.load(Ordering::SeqCst)),
+                |completed, total| if let Some(operation) = &operation {
+                    operation.update("verification", "Checking the model package identity", Some((completed, total)));
+                })
+        }).await.map_err(|error| error.to_string())??;
+        let Some(verification) = verification else { return Ok(None); };
+        let sha256 = verification.sha256().to_owned();
+        self.record_payload_verification(path.to_path_buf(), verification).await?;
+        Ok(Some(sha256))
     }
 
     async fn requested_profile_intent(
@@ -1518,7 +1557,9 @@ impl Host {
             ..LaunchOptions::default()
         };
         let (metadata, intent) = self.profile_intent_for_payload(
-            request.path.clone(), request.tp, &options, request.draft_tokens).await?;
+            request.path.clone(), request.tp, &options).await?;
+        let mut options = options;
+        options.resolve_draft_tokens(&metadata.identity);
         if metadata.tp_size != request.tp || request.tp as usize != gpus.len() {
             return Err("Selected artifact TP must match the requested TP and GPU count".into());
         }
@@ -1560,7 +1601,10 @@ impl Host {
             (processes.hardware_profile.clone(), processes.profiling_cli(&launch.gpu_uuids), processes.has_children())
         };
         let Some(job) = job else { return Ok(()); };
-        let intent = self.selected_profile_intent_for_launch(launch).await?;
+        let mut intent = self.selected_profile_intent_for_launch(launch).await?;
+        if intent.package_sha256.is_none() {
+            intent.package_sha256 = self.identify_package(&intent.path).await?;
+        }
         let busy = job.busy();
         let status = job.status(cli.clone());
         let same_group = job.group().into_iter().collect::<std::collections::BTreeSet<_>>()
@@ -3857,10 +3901,11 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             request.options.draft_policy = "adaptive".into();
             assert!(host.prepare_launch(&request).await.is_err());
             request.options.draft_policy = "auto".into();
-            for width in [0, u32::MAX] {
-                request.options.draft_tokens = width;
-                assert!(host.prepare_launch(&request).await.is_err());
-            }
+            request.options.draft_tokens = u32::MAX;
+            assert!(host.prepare_launch(&request).await.is_err());
+            // An unset MTP width takes Flash's documented default of three drafts.
+            request.options.draft_tokens = 0;
+            assert_eq!(host.prepare_launch(&request).await.unwrap().options.draft_tokens, 3);
             request.options.spec = "dflash".into();
             request.options.draft_tokens = 4;
             assert!(host.prepare_launch(&request).await.is_err());
@@ -3932,9 +3977,14 @@ contents = model.read_bytes()
 directory_size = int.from_bytes(contents[8:16], 'little')
 directory_sha = hashlib.sha256(contents[16:16+directory_size]).hexdigest()
 spec = arg('--spec', 'auto')
+if spec in ('dflash', 'mtp') and '--draft-tokens' not in args:
+    # Same rejection as the native Engine's speculative option validation.
+    print(json.dumps(dict(complete=False, error='--spec %s requires --draft-tokens' % spec,
+        schema_version=2, state='error')))
+    sys.exit(2)
 artifact = dict(path=str(model), directory_sha256=directory_sha, tp=int(arg('--tp')),
     draft_tp=int(arg('--draft-tp', '0')), spec=spec,
-    draft_tokens=int(arg('--draft-tokens', '0' if spec in ('auto', 'none') else '3')))
+    draft_tokens=int(arg('--draft-tokens', '0')))
 print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact', state='loaded',
     hardware_profile=str(output), complete=True, base_complete=True,
     all_formats_complete=False, missing_rows=[], artifact=artifact)))
@@ -4131,6 +4181,127 @@ time.sleep(60)
     }
 
     #[tokio::test]
+    async fn selected_hardware_profile_http_never_omits_an_explicit_dflash_width() {
+        let (dir, host, request) = fixture().await;
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let path = dir.path().join("models/model.ginfer");
+        write_profile_payload(&path, "qwen3.8-27b", "smol-q2g64-mix-dflash2-q4", 1, 1);
+        // Ron's Windows request: DFlash chosen, draft width left blank.
+        let body = serde_json::json!({"action":"ensure","gpu_uuids":request.gpu_uuids,
+            "artifact":{"path":path,"tp":1,"spec":"dflash"}});
+        let (status, reply) = post_hardware_profile(&host, &token, body).await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+        wait_for_profile_completion(&job).await;
+        let args: Vec<String> = serde_json::from_slice(&std::fs::read(dir.path().join("profile-argv.json")).unwrap()).unwrap();
+        assert_eq!(args[7..], ["--spec", "dflash", "--json", "--draft-tokens", "4"]);
+        assert_eq!(job.status(None).selected_artifact.unwrap().draft_tokens, Some(4));
+    }
+
+    #[tokio::test]
+    async fn imported_external_package_gets_its_identity_and_signed_profile() {
+        use crate::launch_profiles::{LaunchProfile, Qualification, QualificationTier};
+        let (dir, host, _) = fixture().await;
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        // Imported in place from outside every model root, as from a NAS/UNC share.
+        let share = dir.path().join("UNAS share/GInfer/artifacts/release-waves/v1");
+        std::fs::create_dir_all(&share).unwrap();
+        let path = share.join("qwen38_27b_smol_df2.ginfer");
+        write_profile_payload(&path, "qwen3.8-27b", "smol-q2g64-mix-dflash2-q4", 1, 1);
+        let path = path.canonicalize().unwrap();
+        let sha256 = hex::encode(<Sha256 as sha2::Digest>::digest(std::fs::read(&path).unwrap()));
+        let response = host.clone().route(Request::post("/host/v1/local-artifacts")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(serde_json::json!({"path":path}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let model = host.inventory.read().await.iter().find(|model| model.path == path).cloned().unwrap();
+        assert!(host.downloads.list().await.is_empty());
+        let profile = LaunchProfile {
+            id: "fixture5090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-screened".into(),
+            name: "Qwen 27B 2-bit mix fixture".into(),
+            platform: std::env::consts::OS.into(),
+            identity: model.metadata.identity.clone(),
+            artifact_sha256: sha256.clone(),
+            artifact_bytes: 4096,
+            tp: 1,
+            draft_tp: 1,
+            gpu_name: "Fixture GPU".into(),
+            compute_capability: "12.0".into(),
+            vram_tier_gib: 32,
+            min_memory_mib_per_gpu: 32606,
+            max_context: 131072,
+            concurrency: 8,
+            options: LaunchOptions {
+                vision: false, structured_outputs: false, spec: "dflash".into(),
+                draft_policy: "fixed".into(), draft_tokens: 7, draft_tp: 1, kv_dtype: "int8".into(),
+                kv_arena_headroom_bytes: crate::launch_profiles::MIN_PROFILE_HEADROOM_BYTES,
+                ..LaunchOptions::default()
+            },
+            qualification: Qualification {
+                tier: QualificationTier::ScreenedStartup,
+                evidence: "fixture".into(),
+                engine_revision: "6b85ecf77da129fe332818b8bcaec9467b56bdaa".into(),
+                free_bytes_per_gpu: Some(373293056),
+                full_context_requests: 0,
+                calculation: None,
+                smoke_requests: Some(8),
+            },
+        };
+        profile.validate().unwrap();
+        std::fs::write(host.directory.join("launch-profiles.json"), serde_json::to_vec(&serde_json::json!({
+            "schema":"ginfer-launch-profiles-v1","profiles":[profile]})).unwrap()).unwrap();
+        host.scan().await.unwrap();
+        let snapshot = host.snapshot().await;
+        let entry = snapshot["launch_profiles"].as_array().unwrap().iter()
+            .find(|entry| entry["model_id"] == model.id.to_string()).unwrap();
+        assert_eq!(entry["profile"]["id"], profile.id.as_str());
+        assert_eq!(entry["gpu_groups"][0], serde_json::json!(["GPU-fixture-0"]));
+
+        // Manual DFlash with a blank width: the package is hashed once for its
+        // identity and both serving and profiling use the documented K4 width.
+        let gpu_uuids = vec!["GPU-fixture-0".to_string()];
+        let manual = LaunchRequest {
+            benchmark_profile: None, instance_id: None, qualified_profile_id: None,
+            model_id: model.id, gpu_uuids: gpu_uuids.clone(), max_context: 8192, concurrency: 1,
+            options: LaunchOptions { spec: "dflash".into(), vision: false, ..LaunchOptions::default() },
+        };
+        let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+        let launch = host.prepare_launch(&manual).await.unwrap();
+        assert_eq!(launch.options.draft_tokens, 4);
+        assert!(launch.options.args().windows(2).any(|pair| pair == ["--draft-tokens", "4"]));
+        assert_eq!(host.selected_profile_intent_for_launch(&launch).await.unwrap().package_sha256, None);
+        {
+            let _lifecycle = host.lifecycle.lock().await;
+            host.ensure_selected_profile(&launch).await.unwrap();
+        }
+        let args: Vec<String> = serde_json::from_slice(&std::fs::read(dir.path().join("profile-argv.json")).unwrap()).unwrap();
+        assert_eq!(args[7..], ["--spec", "dflash", "--json", "--draft-tokens", "4"]);
+        let selected = job.status(None).selected_artifact.unwrap();
+        assert_eq!((selected.package_sha256.as_deref(), selected.draft_tokens), (Some(sha256.as_str()), Some(4)));
+        let receipt = host.data.lock().await.payload_verifications[&path].clone();
+        assert_eq!(receipt.sha256(), sha256);
+        assert_eq!(host.selected_profile_intent_for_launch(&launch).await.unwrap(), selected);
+
+        // Automatic selects the signed profile; its verification reuses that
+        // identity, and profiling carries the profile's exact width.
+        let automatic = LaunchRequest {
+            qualified_profile_id: Some(profile.id.clone()), max_context: profile.max_context,
+            concurrency: profile.concurrency, options: profile.options.clone(), ..manual
+        };
+        let launch = host.prepare_launch(&automatic).await.unwrap();
+        assert_eq!(host.data.lock().await.payload_verifications[&path], receipt);
+        {
+            let _lifecycle = host.lifecycle.lock().await;
+            host.ensure_selected_profile(&launch).await.unwrap();
+        }
+        let args: Vec<String> = serde_json::from_slice(&std::fs::read(dir.path().join("profile-argv.json")).unwrap()).unwrap();
+        assert_eq!(args[7..], ["--spec", "dflash", "--json", "--draft-tp", "1", "--draft-tokens", "7"]);
+        let selected = job.status(None).selected_artifact.unwrap();
+        assert_eq!((selected.package_sha256.as_deref(), selected.draft_tokens), (Some(sha256.as_str()), Some(7)));
+        assert!(!dir.path().join("serve-started").exists());
+    }
+
+    #[tokio::test]
     async fn selected_hardware_profile_http_rejects_untrusted_credentials_fields_and_actions() {
         let (dir, host, request) = fixture().await;
         let token = host.data.lock().await.pairing_admin_token.clone();
@@ -4214,7 +4385,8 @@ time.sleep(60)
             assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
         }
         write_profile_payload(&path, "qwen3.8-27b", "nvfp4-dflash2-nvfp4", 1, 1);
-        for width in [0, 8, 16] {
+        // Width 0 is unset and takes the documented default; see the never-omits test.
+        for width in [8, 16] {
             let mut invalid = body.clone(); invalid["artifact"]["spec"] = "dflash".into();
             invalid["artifact"]["draft_tokens"] = width.into();
             let (status, rejected) = post_hardware_profile(&host, &token, invalid).await;
