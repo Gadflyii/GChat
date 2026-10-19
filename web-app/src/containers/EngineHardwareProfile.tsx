@@ -3,6 +3,26 @@ import { Button } from '@/components/ui/button'
 import { hardwareProfileBusy, type EngineHardwareProfile as HardwareProfileStatus, type EngineHardwareProfileAction, type EngineDraftWidthCalibration } from '@/services/engines'
 import type { ModelGpu } from '@/lib/model-release'
 
+/** The Engine owns admission; this view explains its measured RAM shortfall. */
+export function HardwareProfileError({ profile, label = 'Setup error details', retry = 'try again' }: {
+  profile: Pick<HardwareProfileStatus, 'error' | 'host_memory_admission_failure'>
+  label?: string
+  retry?: string
+}) {
+  const failure = profile.host_memory_admission_failure
+  if (!profile.error && !failure) return null
+  const readableGb = (bytes: number) => `${(Math.ceil(bytes / 10_000_000) / 100).toFixed(2)} GB`
+  return <div role="alert" className="space-y-2 text-sm text-destructive">
+    {failure ? <>
+      <p>Graphics-card setup needs more free system memory.</p>
+      <p>Close apps to free at least {readableGb(failure.bytes_to_free)}, then retry. Select Continue setup to check available memory again.</p>
+      <p>System-memory reserve: {readableGb(failure.reserve_bytes)}. Measurement buffers: {readableGb(failure.retained_buffer_bytes)}. Available: {readableGb(failure.available_bytes)}; required: {readableGb(failure.required_available_bytes)}.</p>
+      <ul className="space-y-1">{failure.nodes.map(node => <li key={node.numa_node}>Memory node {node.numa_node}: {readableGb(node.available_bytes)} available; {readableGb(node.retained_buffer_bytes)} needed for measurement buffers. {node.bytes_to_free > 0 ? `Free at least ${readableGb(node.bytes_to_free)} on this node.` : 'Enough memory is available on this node.'}</li>)}</ul>
+    </> : <p>Graphics-card setup could not finish. Check the connection, graphics driver and available memory, then {retry}.</p>}
+    {profile.error && <details><summary className="cursor-pointer">{label}</summary><p className="whitespace-pre-wrap break-all">{profile.error}</p></details>}
+  </div>
+}
+
 export function EngineHardwareProfile({ profile, gpus, offline, disabled, action, calibrations = [] }: {
   profile: HardwareProfileStatus; offline: boolean; disabled: boolean;
   gpus: ModelGpu[];
@@ -67,7 +87,7 @@ export function EngineHardwareProfile({ profile, gpus, offline, disabled, action
         <details><summary className="cursor-pointer">Speed tuning technical details</summary><p className="break-all">Model identifier: {job.model_id}</p>{job.error && <p className="text-destructive whitespace-pre-wrap break-all">{job.error}</p>}{job.diagnostic_tail && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs">{job.diagnostic_tail}</pre>}</details>
       </div>)}
     </section>}
-    {profile.error && <div role="alert" className="text-sm text-destructive"><p>Graphics-card setup could not finish. Check the connection, graphics driver and available memory, then try again.</p><details className="mt-2"><summary className="cursor-pointer">Setup error details</summary><p className="whitespace-pre-wrap break-all">{profile.error}</p></details></div>}
+    <HardwareProfileError profile={profile} />
     {profile.diagnostic_tail && <details><summary className="cursor-pointer text-sm">Setup technical log</summary><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs">{profile.diagnostic_tail}</pre></details>}
     {!running && <fieldset disabled={blocked} className="space-y-2 text-sm">
       <legend className="font-medium">Choose graphics cards</legend>

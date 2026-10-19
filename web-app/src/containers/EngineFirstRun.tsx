@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { HardwareProfileError } from './EngineHardwareProfile'
 import { engineCommand, type EngineHardwareProfile } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { useBundledResources } from '@/hooks/useBundledResources'
@@ -288,7 +289,7 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
       <p className="text-sm text-muted-foreground">{remaining != null ? `About ${minutes(remaining)} remaining, based on earlier measurements for these graphics cards. The time may change if processor resources differ.` : overdue ? 'This is taking longer than the earlier measurement. GInfer cannot yet estimate the time left.' : 'GInfer cannot yet estimate the time left for these graphics cards.'} {choosing ? 'You can keep choosing your model folder and models below. Closing this window leaves GInfer working in the background.' : 'Closing this window leaves GInfer working in the background.'}</p>
       <p className="text-sm text-muted-foreground">{choosing ? 'Save your choices below when ready. Folder checks and downloads will continue after this measurement finishes.' : 'Your downloaded models and saved choices are kept. GInfer is measuring the hardware needed by these models.'}</p>
       {(hardware?.status === 'running' || hardware?.status === 'cancelling') && <div className="space-y-3"><progress aria-label="Graphics-card setup in progress" className="block h-2 w-full accent-primary" /><Button variant="outline" disabled={busy || !!(localId && errors[localId]) || hardware.status === 'cancelling'} onClick={() => void profileAction('cancel')}>{hardware.status === 'cancelling' ? 'Stopping setup…' : hardware.pending_gpu_groups?.length ? 'Stop setup for all groups' : 'Stop setup'}</Button></div>}
-      {hardware?.error && <FirstRunError message="Graphics-card setup could not finish. Check the connection, graphics driver and available memory, then select Continue setup." details={hardware.error} label="Graphics-card setup error details" />}
+      {hardware && <HardwareProfileError profile={hardware} label="Graphics-card setup error details" retry="select Continue setup" />}
       {['failed', 'interrupted', 'cancelled'].includes(hardware?.status ?? '') && <><p className="text-sm text-muted-foreground">Your model downloads and choices are kept. GInfer checks saved measurements before reusing them.</p><Button disabled={busy || !!(localId && errors[localId])} onClick={() => void (selectedScope ? act({ action: 'resume' }) : profileAction('resume'))}>Continue setup</Button></>}
       <details className="text-sm"><summary className="cursor-pointer">Graphics-card setup technical details</summary><p>Measurements for: {selectedScope ? 'Selected models' : 'All model types'} · Status: {hardware?.status}</p>{hardware?.phase_detail && <p className="text-muted-foreground">{hardware.phase_detail}</p>}{flow?.hardware_profile.diagnostic_tail && <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs">{flow.hardware_profile.diagnostic_tail}</pre>}</details>
     </div>}

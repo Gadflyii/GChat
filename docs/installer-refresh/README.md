@@ -1,6 +1,72 @@
 # GChat installer refresh
 
 Native laptop Qwen returned22:11Z with a **pre-Engine Host-admission rejection** at canonical8181/C8 Automatic KV: quoted free15782117376B, non-KV17005660672B, headroom314572800B and minimum KV276891648B. Artifact import and native artifact-scoped SM86 preparation completed, but no Engine or inference request started. Normal idle Host Stop and its guard exited0 with an empty Job; booking425 is canceled. Small rejection and guard receipts are in `out/windows-consumer-launch-profiles-20261018/laptop-qwen-command-preparation/{02-instances-rejection-body.txt,prepared-bindings.json,model-guard-result.json}`. No signed laptop Windows settings exist.
+## Windows first-run RAM message correction — Codex 4
+
+**Implemented and CPU verification passed.** Arch's **22:47:42Z October 18**
+`WINDOWS-RC-ADA-PROFILE-RAM-FLOOR` decision requires an actionable profiling RAM
+admission error without changing the RAM reserve or admission policy. The Host
+preserves the Engine's typed global/per-NUMA-node retained-buffer, available-memory
+and shortfall facts on incomplete JSON/exit 1. Welcome and manual graphics-card
+setup explain the reserve, buffers and available memory, with the ordinary
+Continue setup action. The visible recommendation is **“Close apps to free at
+least X GB, then retry”**, using decimal GB rounded upward to two places; raw
+native byte details remain collapsed, satisfying Arch's **23:11Z** UI condition.
+A failed run retains the accepted profile. AllFormats now requests the existing
+`--json` CLI result so the typed failure reaches first-run setup; the Windows
+command guard and HTTP regression assert that complete supported command.
+
+Owned candidate: `/ai/gchat-worktrees/c4-profile-ram-message-20261018`, branch
+`fix/c4-profile-ram-message-20261018`, base `8b72b4916`. Tested source
+**42aa65eecfecf79cda60db9503b1cef215dbec68** is committed and pushed. Focused
+regressions protect failed native jobs in both all-format and artifact scopes,
+persist/reopen/resume, and both visible screens. The two affected GB UI tests,
+Host `cargo check` and all-target `cargo clippy` passed before final verification.
+The corrected **ONE fresh `make verify` passed 23:39:13Z–23:45:12Z**: frontend
+**3869 passed / 6 skipped**, extension **130 passed**, all **six critical coverage
+floors**, and platform-supported Rust **1324 passed / 28 ignored / 0 failed**.
+Both scoped HTTP/catalog correction tests passed before that run. No earlier
+passing focused suite, check or clippy was repeated for the test-only correction.
+
+The first full verification's **23:30:12Z failure is preserved** in
+`out/profile-ram-message-20261018/verify.log` and `verify.exit`. Its two causes
+were a three-argument HTTP assertion predating intentional AllFormats `--json`,
+and stale five-entry private laptop Muse catalog data while current source expects
+the four signed bounds. Correct the exact assertion and freeze the eleven
+source-matching retained catalogs from GInfer **56174c35b**. Production catalogs
+and qualification values are unchanged. The input authority, byte counts and
+hashes are in `final-catalog-inputs.json`; `final-command.json` binds them to the
+source and effective invocation. This prevents donor-cache drift from being
+mistaken for a product failure.
+
+Two earlier shell-only Host fixtures inherited `CUDA_VISIBLE_DEVICES=''` and
+therefore filtered their synthetic inventory before the intended checks. A partial
+`HostProcesses` replacement then lost architecture/runtime and shared activity
+links. That replacement was removed: preserve complete `Host::open` setup and
+unset GPU visibility masks inside Docker, which has no GPU flags or device
+mounts. The fingerprint and cancel/resume cases both passed on **50452bd8a**;
+production visibility and cancellation semantics are unchanged.
+
+Verification used private retained dependencies/build cache on S1
+`AIS-2-8592-L01`, CPUs **72–79**, under the shared socket-1 compile guard. Final
+booking **3643** is canceled: **returned 23:49Z**. The container exited 0 without
+OOM and source was clean at terminal. The owned SSD root is
+`/media/ron/SSD_RAID/ai/tmp-c4-profile-ram-message-20261018` (**29,451,212,700 B**):
+private source **4,097,043,024 B**, native target **23,265,005,986 B**, Cargo home
+**2,087,970,158 B**, and small catalog/evidence inputs. Retain it pending
+coordinator review/merge; retire disposable owned cache/build outputs when this
+item closes. The donor
+`/media/ron/SSD_RAID/ai/tmp-gchat3-windows-consumer-host-20261018` stayed read-only.
+Local evidence contains only small JSON/log/text files. The concise result,
+effective command, final log and original failure are in
+[`out/profile-ram-message-20261018/final-result.json`](../../out/profile-ram-message-20261018/final-result.json).
+
+Next action is coordinator integration and the separately owned native walk.
+**Ada retry remains pending Ron via Bubbs**, per the 23:01Z instruction; Arch
+withdrew cache reclaim at 23:02Z. This correction performed no target action,
+cache/system change or native Windows qualification.
+
+Current priority (21:47Z): the driver-bound Host and ordinary actual-Start receipt marker are complete. The driver-key delta passed four focused regressions, check, clippy and standalone Host build at21:33:09Z; the marker continuation passed the same delta checks at21:44:19Z. Parent review confirms the raw Flash/Qwen/Muse sequence: unknown/0 before a matching Ready receipt, then receipt/1200 on the second actual Start. Retain the completed ONE make verify (frontend3751, extension127, six coverage floors, Rust1318) and request-log focused2/check/clippy/Host317/build. C1's ac53611e0 implements Arch21:36's total physical startup overhead minus weight/state ledger, with at most2MiB total rounding and separate cuda_graph_observed_bytes diagnostics. The first/second laptop53248 Automatic app gates remain held for its corrected Engine donor, six secondReady controls and residual clearance. GINFER_HOST_REQUEST_LOG_JSONL remains an absolute owned spawn-only control; no catalog graph field. Unknown or changed NVIDIA drivers prevent receipt reuse, and unknown drivers prevent saving; first solo Automatic remains available.
 
 Arch22:11:29 identifies the known QUOTE-ADMISSION-EXACT-VRAM defect and holds **both laptop Windows Qwen/Muse** for corrected Engine1209de849 (ac536 plus max(CUDA,NVML)) and Host e001e9ea3. No bypass or explicit-arena workaround is authorized. The first corrected native launch runs solo with Engine-delegated admission; the second uses its matching Ready receipt, also supplying the Windows acceptance for that row. C5's Linux Engine/Host staging returned22:16:58Z. C1's1209 local Qwen/Muse controls then passed with zero process gaps, completing all six Engine cells; Arch22:22 cleared C5's first-unknown/second-receipt Automatic53248 app gates. Native laptop qualification follows C5's normal return and still requires corrected native Windows Engine/Host binaries; the Linux donors do not supply them. C4 granted read-copy of the inactive Windows Engine/dependency and Cargo release caches. The corrected native SM86 Engine and e001 Host build launched22:52:35Z in the independent E:\gchat3-windows-consumer-corrected-20261018 root under a fresh local5090 GPU0/CPUs0–31 quiet booking22:52–23:22Z, with actual compiler affinity20–31; C4's installer relay returned22:51Z and Gchat1 native compile1506 returned22:44Z. Native preflight confirms90,455,228,416B available RAM above17,131,606,528B emergency floor and the expected RTX5090 UUID. Use a fresh CMake directory because copied CMake/Ninja metadata binds donor absolute paths; prepared vcpkg and Cargo caches may be reused. The old three-image6b85 package remains immutable. C5 returned22:28Z and canceled426 after its first corrected Automatic action rejected before Engine launch because the restarted Host omitted the native profiling CLI mapping. No Ready receipt or second start was produced; C5 is recovering that binding with the immutable donor preserved and no target hold. Native laptop qualification still requires the corrected Windows build and subsequent app acceptance. C4 returned Ada791 at22:41Z after the installed RC Automatic INT profiler rejected retained-buffer RAM/node floors before Engine startup; app/Host exited normally. Ada792 returned22:49Z and is canceled: the one packaged-Host SM89 Muse canonical Start failed during artifact hardware profiling before any Engine or inference request. Runtime-map validation and import passed; the4.068s profile job rejected retained GPU buffers inside actual RAM/node floors, leaving no accepted profile or instance. The idle identity-bound Host Stop completed normally; guard exit0/empty Job, minimum GPU free24872222720B and last native RAM11642417152B. Small raw failure, rejection and guard receipts are retained under `out/windows-consumer-launch-profiles-20261018/ada4090-muse-command-preparation/terminal-failure` and `terminal-failure-summary.json`. Arch22:50 authorizes exactly one unchanged-floor Ada Muse retry after C4's RC retry in Bubbs's23:00–23:30Z WSL-idle window, with native AvailableBytes at or above profiler reserve plus retained buffers before launch; no bypass or RAM reclamation. Gchat1 no-model fixture793 runs through22:59Z; C1 staged877 cannot fit before23:00Z and follows the RC/Muse window. C4's laptop installer relay returned22:51Z before the corrected local build. Gchat1 local1506 returned22:44Z. Laptop Muse receipts remain offline and held for corrected source rebinding. Arch separately cleared C4's ordinary pinned6b85 manualC1 laptop RC chat without bypass; that is not consumer-profile qualification.
 

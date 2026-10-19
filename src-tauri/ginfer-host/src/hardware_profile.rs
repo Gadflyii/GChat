@@ -136,7 +136,7 @@ pub(crate) fn prepared_hardware_profile_args(args: &[&std::ffi::OsStr]) -> bool 
     let tail = tail
         .strip_prefix(&[OsStr::new("--reprofile")])
         .unwrap_or(tail);
-    if tail.is_empty()
+    if tail == [OsStr::new("--json")]
         || tail
             == [
                 OsStr::new("--complete-remaining-formats"),
@@ -199,6 +199,30 @@ pub(crate) fn prepared_hardware_profile_args(args: &[&std::ffi::OsStr]) -> bool 
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostMemoryAdmissionResource {
+    HostRam,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostMemoryAdmissionNode {
+    pub numa_node: i32,
+    pub retained_buffer_bytes: u64,
+    pub available_bytes: u64,
+    pub bytes_to_free: u64,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostMemoryAdmissionFailure {
+    pub resource: HostMemoryAdmissionResource,
+    pub phase: String,
+    pub total_bytes: u64,
+    pub reserve_bytes: u64,
+    pub available_bytes: u64,
+    pub required_available_bytes: u64,
+    pub retained_buffer_bytes: u64,
+    pub bytes_to_free: u64,
+    pub nodes: Vec<HostMemoryAdmissionNode>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HardwareProfileStatus {
     pub status: String,
     pub job_id: Option<Uuid>,
@@ -232,6 +256,8 @@ pub struct HardwareProfileStatus {
     pub checkpoint_available: bool,
     pub diagnostic_tail: String,
     pub error: Option<String>,
+    #[serde(default)]
+    pub host_memory_admission_failure: Option<HostMemoryAdmissionFailure>,
     pub available: bool,
     pub gpu_uuids: Vec<String>,
     pub engine_path: Option<PathBuf>,
@@ -324,6 +350,26 @@ struct NativeJson {
     bytes: Vec<u8>,
     complete: bool,
     error: Option<String>,
+}
+fn native_host_memory_admission_failure(
+    captured: &NativeJson,
+) -> Option<(HostMemoryAdmissionFailure, Option<String>)> {
+    if !captured.complete || captured.error.is_some() {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_slice(&captured.bytes).ok()?;
+    if value["schema_version"].as_u64() != Some(2)
+        || value["state"].as_str() != Some("incomplete")
+        || value["complete"].as_bool() != Some(false)
+    {
+        return None;
+    }
+    let failure = serde_json::from_value(value["host_memory_admission_failure"].clone()).ok()?;
+    let warning = value["warning"]
+        .as_str()
+        .filter(|warning| !warning.is_empty())
+        .map(str::to_owned);
+    Some((failure, warning))
 }
 fn validate_native_result(
     scope: &ProfileScope,
@@ -594,6 +640,7 @@ impl HardwareProfiles {
                     checkpoint_available: false,
                     diagnostic_tail: String::new(),
                     error: None,
+                    host_memory_admission_failure: None,
                     available: false,
                     gpu_uuids: vec![],
                     engine_path: None,
@@ -1168,6 +1215,7 @@ impl HardwareProfiles {
                 checkpoint_available: checkpoint(&output_path).is_file(),
                 diagnostic_tail: String::new(),
                 error: None,
+                host_memory_admission_failure: None,
                 available: true,
                 gpu_uuids: configuration.gpu_uuids.clone(),
                 engine_path: Some(configuration.engine.clone()),
@@ -1223,7 +1271,9 @@ impl HardwareProfiles {
             ProfileScope::CompleteRemainingFormats => {
                 command.arg("--complete-remaining-formats").arg("--json");
             }
-            ProfileScope::AllFormats => {}
+            ProfileScope::AllFormats => {
+                command.arg("--json");
+            }
         }
         if let Some(directory) = configuration.engine.parent() {
             let variable = if cfg!(windows) {
@@ -1383,8 +1433,14 @@ impl HardwareProfiles {
                 }
                 Ok(exit) => {
                     state.record.view.status = "failed".into();
-                    state.record.view.error =
-                        Some(format!("Native hardware profiling exited {exit}"));
+                    let failure = native_host_memory_admission_failure(&captured.lock().unwrap());
+                    let warning = failure.as_ref().and_then(|(_, warning)| warning.clone());
+                    state.record.view.host_memory_admission_failure =
+                        failure.map(|(failure, _)| failure);
+                    state.record.view.error = Some(
+                        warning
+                            .unwrap_or_else(|| format!("Native hardware profiling exited {exit}")),
+                    );
                 }
                 Err(error) => {
                     state.record.view.status = "failed".into();
@@ -1691,7 +1747,9 @@ mod tests {
             if reprofile {
                 base.push(OsStr::new("--reprofile"));
             }
-            assert!(prepared_hardware_profile_args(&base));
+            let mut all_formats = base.clone();
+            all_formats.push(OsStr::new("--json"));
+            assert!(prepared_hardware_profile_args(&all_formats));
             let mut completion = base.clone();
             completion.extend([
                 OsStr::new("--complete-remaining-formats"),
@@ -1747,7 +1805,7 @@ mod tests {
             vec!["--reprofile", "--reprofile"],
             vec!["--complete-remaining-formats"],
             vec!["--complete-remaining-formats", "--json", "--unknown"],
-            vec!["--json"],
+            vec![],
             artifact[..6].to_vec(),
             [artifact.as_slice(), &["--unknown"]].concat(),
             [
@@ -2020,6 +2078,113 @@ mod tests {
             "bounded capture failed"
         );
     }
+    #[tokio::test]
+    async fn hardware_profile_retains_typed_ram_failure_and_clears_it_after_resume() {
+        for scoped in [false, true] {
+            let (directory, host, arguments) = fixture().await;
+            let job = host
+                .processes
+                .lock()
+                .await
+                .hardware_profile
+                .clone()
+                .unwrap();
+            let cli = directory.path().join("ginfer");
+            let intent = selected_intent(directory.path());
+            let gpus = vec!["GPU-fixture".into()];
+            scoped_cli(directory.path(), &arguments, &selected_result(&intent));
+            if scoped {
+                job.start_scoped(
+                    HardwareProfileAction::Ensure,
+                    Some(cli.clone()),
+                    gpus.clone(),
+                    intent.clone(),
+                )
+            } else {
+                job.start(
+                    HardwareProfileAction::Ensure,
+                    Some(cli.clone()),
+                    gpus.clone(),
+                )
+            }
+            .unwrap();
+            let completed = observed(&job, |view| view.status == "completed").await;
+            let retained_profile = std::fs::read(&completed.profile_path).unwrap();
+            let failure = HostMemoryAdmissionFailure {
+                resource: HostMemoryAdmissionResource::HostRam,
+                phase: "GPU staging".into(),
+                total_bytes: 64 << 30,
+                reserve_bytes: 16 << 30,
+                available_bytes: (22 << 30) - 1,
+                required_available_bytes: 24 << 30,
+                retained_buffer_bytes: 8 << 30,
+                bytes_to_free: (2 << 30) + 1,
+                nodes: vec![HostMemoryAdmissionNode {
+                    numa_node: 0,
+                    retained_buffer_bytes: 8 << 30,
+                    available_bytes: 7 << 30,
+                    bytes_to_free: 1 << 30,
+                }],
+            };
+            let warning = "Hardware profiling incomplete: RAM admission failed; free memory and retry; existing profile retained";
+            let result = serde_json::json!({
+                "schema_version": 2, "state": "incomplete", "complete": false,
+                "host_memory_admission_failure": failure, "warning": warning
+            });
+            std::fs::write(
+                &cli,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nprintf '%s\\n' '{}'\nexit 1\n",
+                    arguments.display(),
+                    result
+                ),
+            )
+            .unwrap();
+            if scoped {
+                job.start_scoped(
+                    HardwareProfileAction::Refresh,
+                    Some(cli.clone()),
+                    gpus.clone(),
+                    intent.clone(),
+                )
+            } else {
+                job.start(
+                    HardwareProfileAction::Refresh,
+                    Some(cli.clone()),
+                    gpus.clone(),
+                )
+            }
+            .unwrap();
+            let failed = observed(&job, |view| view.status == "failed").await;
+            assert!(std::fs::read_to_string(&arguments)
+                .unwrap()
+                .lines()
+                .any(|arg| arg == "--json"));
+            assert_eq!(
+                failed.host_memory_admission_failure.as_ref(),
+                Some(&failure)
+            );
+            assert_eq!(failed.error.as_deref(), Some(warning));
+            assert_eq!(
+                std::fs::read(&completed.profile_path).unwrap(),
+                retained_profile
+            );
+            let reopened =
+                HardwareProfiles::open(directory.path().join("host"), Arc::new(AtomicU64::new(0)))
+                    .unwrap();
+            assert_eq!(
+                reopened.status(None).host_memory_admission_failure,
+                Some(failure)
+            );
+            scoped_cli(directory.path(), &arguments, &selected_result(&intent));
+            job.start(HardwareProfileAction::Resume, Some(cli), gpus)
+                .unwrap();
+            let resumed = observed(&job, |view| view.status == "completed").await;
+            assert!(resumed.host_memory_admission_failure.is_none());
+            assert!(resumed.error.is_none());
+        }
+    }
+
     #[tokio::test]
     async fn hardware_profile_selected_ensure_accepts_exact_scope_without_all_format_eta() {
         let (directory, host, arguments) = fixture().await;
@@ -3014,12 +3179,11 @@ mod tests {
         );
         assert!(resumed["reprofile"].as_bool().unwrap());
         assert_ne!(resumed["job_id"], first["job_id"]);
-        assert!(host
-            .processes
+        host.processes
             .lock()
             .await
             .validate_launch(&launch, false)
-            .is_ok());
+            .unwrap();
     }
     #[tokio::test]
     async fn hardware_profile_exit_zero_requires_v2_before_publishing_accepted_file() {

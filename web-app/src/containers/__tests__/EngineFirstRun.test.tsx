@@ -982,7 +982,6 @@ it('honors setup already completed in Manager without starting new work', async 
   expect(screen.queryByRole('region', { name: 'Set up local GInfer' })).not.toBeInTheDocument()
 })
 
-
 it('keeps existing model guidance available when there is no download catalog', async () => {
   mocks.command.mockResolvedValue(flow('models', { catalog_loaded: true }))
   render(<EngineFirstRun />)
@@ -1235,7 +1234,6 @@ it('scrolls the setup card into view after a step is saved', async () => {
   await waitFor(() => expect(scroll.mock.calls.length).toBeGreaterThan(0))
 })
 
-
 it('explains a saved setup error while keeping diagnostics closed and model choices available', async () => {
   mocks.command.mockResolvedValue(flow('models', {
     catalog_loaded: true, error: 'Catalog HTTP 503: upstream unavailable',
@@ -1285,4 +1283,28 @@ it('shows background disk-full failures and clears the alert after a successful 
   fireEvent.click(screen.getByRole('button', { name: 'Retry setup' }))
   await waitFor(() => expect(screen.queryByText(/Setup could not continue/)).not.toBeInTheDocument())
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'resume' })
+})
+
+it('shows actionable first-run RAM admission facts and keeps the normal Continue setup action', async () => {
+  const failed = { ...hardwareStatus('failed'), error: 'Native profiler RAM shortfall',
+    host_memory_admission_failure: {
+      resource: 'host_ram' as const, phase: 'GPU staging', total_bytes: 32 * 1024 ** 3,
+      reserve_bytes: 8 * 1024 ** 3, retained_buffer_bytes: 4 * 1024 ** 3,
+      available_bytes: 11 * 1024 ** 3, required_available_bytes: 12 * 1024 ** 3,
+      bytes_to_free: 1024 ** 3,
+      nodes: [{ numa_node: 0, retained_buffer_bytes: 4 * 1024 ** 3,
+        available_bytes: 3 * 1024 ** 3, bytes_to_free: 1024 ** 3 }],
+    } }
+  mocks.command.mockImplementation(operation => Promise.resolve(operation === 'hardware_profile'
+    ? hardwareStatus('running') : flow('profiling', { hardware_profile: failed })))
+  render(<EngineFirstRun />)
+  await waitFor(() => expect(screen.getByText('Graphics-card setup needs more free system memory.')).toBeVisible())
+  expect(screen.getByText(/Close apps to free at least 1.08 GB, then retry/)).toBeVisible()
+  expect(screen.getByText(/Memory node 0: 3.23 GB available; 4.30 GB needed/)).toBeVisible()
+  expect(screen.getByText('Your model downloads and choices are kept. GInfer checks saved measurements before reusing them.')).toBeVisible()
+  expect(screen.getByText('Native profiler RAM shortfall')).not.toBeVisible()
+  expect(mocks.command.mock.calls.filter(([operation]) => operation === 'hardware_profile')).toHaveLength(0)
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Continue setup' })) })
+  expect(mocks.command).toHaveBeenCalledWith('hardware_profile', { host_id: 'local', body: { action: 'resume' } })
+  expect(screen.queryByText('Graphics-card setup needs more free system memory.')).not.toBeInTheDocument()
 })

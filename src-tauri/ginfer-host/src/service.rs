@@ -4284,8 +4284,9 @@ time.sleep(60)
         let job = host.processes.lock().await.hardware_profile.clone().unwrap();
         wait_for_profile_completion(&job).await;
         let args: Vec<String> = serde_json::from_slice(&std::fs::read(dir.path().join("profile-argv.json")).unwrap()).unwrap();
-        assert_eq!(args.len(), 3);
-        assert_eq!(&args[..2], ["profile-hardware", "--hardware-profile"]);
+        assert_eq!(args.len(), 4);
+        let output = args[2].clone();
+        assert_eq!(args, vec!["profile-hardware", "--hardware-profile", output.as_str(), "--json"]);
         assert!(!dir.path().join("quote-started").exists());
         assert!(!dir.path().join("serve-started").exists());
     }
