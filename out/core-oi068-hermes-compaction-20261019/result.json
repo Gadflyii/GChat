@@ -1,0 +1,46 @@
+{
+ "row": "OI-068",
+ "leaf": "Linux Hermes actual compaction, ordinary exit, GChat Restart and explicit saved-session reopen",
+ "status": "PASS for the leaf (compaction needed a focus argument; see finding)",
+ "source": "919b569dd release desktop (Codex 3 build; later main changes do not touch the Hermes path), Engine b26ec5b8f, Hermes 0.22.2",
+ "model": "Qwen 3.8 27B INT (groupwise-int-dflash2-q4) on S1 RTX PRO 6000 GPU1, context 262144 saved, Hermes budget 65536",
+ "input": "native xdotool input in a private X display; no state injected",
+ "ready_host_route": "Hermes saved with the Ready Host instance (ginfer/<host>/<instance>); the other 'Ginfer / qwen38_27b_int_df2' local-provider choice points at the GChat local API on :1337, which is not running, and Hermes only loops 'waiting for the provider to recover'",
+ "compaction": {
+  "unfocused_/compress": "4 attempts, none removed messages: 2 refused (summary would grow: only ~3k tokens were replaceable) and 2 aborted (summary truncated, finish_reason=length, 106 s of generation to the output cap)",
+  "focused": "/compress project code and inspection counts: 30 -> 12 messages, ~38,544 -> ~17,297 tokens in 72 s; summary message 35 (12,226 chars) contains copper-finch-4827, 37 and 58; the seeded read_file result and 20 other turns are compacted/inactive in state.db"
+ },
+ "post_compression_answers": [
+  "combined total 95 without rereading (also visible in retained tail)",
+  "after ordinary /exit, GChat Restart (new session fb686cd9) and /resume 20261019_031014_05f8db: second minus first = 21, context 17k/65.5k"
+ ],
+ "not_claimed": [
+  "automatic resume",
+  "abrupt process loss/crash recovery",
+  "Windows",
+  "full-context input",
+  "summary-only retention (the recent tail also carried the counts)"
+ ],
+ "findings": [
+  "unfocused /compress on this model hits the summary output cap or refuses as growing; reproduced twice each. Cause not isolated: a hand-written summary request to the same endpoint finishes in 4 s, so the Hermes summarizer prompt drives the long generation",
+  "Host profile is bound to the CPU grant: changing the container CPU set made 'Check model settings' fail until the card was measured again (8.4 min)"
+ ],
+ "cleanup": "container, Host, desktop and private keyring/D-Bus/Xvfb stopped; booking cancelled; Codex 3 fixture directory (52 GB) retained for bubbs to retire",
+ "images": [
+  "01-check-cpu-grant-error.png",
+  "02-check-passed.png",
+  "03-model-loaded.png",
+  "04-hermes-ready-host-saved.png",
+  "05-file-read-facts.png",
+  "06-compress-refused-grow.png",
+  "07-compress-aborted-truncated.png",
+  "08-compress-focused-30-to-12.png",
+  "09-post-compress-fact.png",
+  "10-ordinary-exit-resume-banner.png",
+  "11-gchat-restart-new-session.png",
+  "12-explicit-resume.png",
+  "13-post-compress-resume-continuation.png",
+  "hermes-agent-compression.log",
+  "session-messages.json"
+ ]
+}
