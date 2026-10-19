@@ -510,6 +510,12 @@ impl TaskRunner {
                 .get(&id)
                 .map_or_else(|| record.clone(), |actor| actor.record.borrow().clone()));
         }
+        let mut messages = messages;
+        if let Ok(facts) = self.runtime.memory_facts(identity.workspace_id).await {
+            if let Some(note) = crate::memory::context_message(&facts) {
+                messages.insert(0, note);
+            }
+        }
         let mut tools: Vec<_> = self
             .runtime
             .desktop_tools(identity)
@@ -529,6 +535,7 @@ impl TaskRunner {
             tools.push(crate::sub_agents::tool());
         }
         tools.push(crate::task_files::tool());
+        tools.push(crate::memory::tool());
         let mut task =
             CuaTask::create_with_id(self.path(id), id, identity, messages, tools).await?;
         if let Some(link) = sub_agent {

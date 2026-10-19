@@ -17,6 +17,8 @@ import { useGbotCompanion } from '@/stores/gbot-companion-store'
 import GbotLanBot from '@/components/GbotLanBot'
 import GbotConnectors from '@/components/GbotConnectors'
 import GbotSchedules from '@/components/GbotSchedules'
+import GbotSites from '@/components/GbotSites'
+import GbotMemory from '@/components/GbotMemory'
 import GbotSetup, {
   type BotConnection,
   type SetupResume,
@@ -1418,6 +1420,8 @@ function GbotPage() {
                     </div>
                   )}
                   <GbotConnectors key={bot.id} workspaceId={bot.id} />
+                  <GbotSites key={bot.id} workspaceId={bot.id} />
+                  <GbotMemory key={bot.id} workspaceId={bot.id} />
                   <GbotSchedules
                     key={`schedules-${bot.id}`}
                     workspaceId={bot.id}

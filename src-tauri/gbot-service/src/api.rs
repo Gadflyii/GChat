@@ -169,6 +169,28 @@ pub struct SaveAssignment {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct MemoryText {
+    pub workspace_id: WorkspaceId,
+    pub text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryEdit {
+    pub workspace_id: WorkspaceId,
+    pub id: Uuid,
+    pub text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryDelete {
+    pub workspace_id: WorkspaceId,
+    pub id: Uuid,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GetAssignment {
     pub workspace_id: WorkspaceId,
 }
@@ -1014,6 +1036,50 @@ async fn route(
             match parse_body::<BotConnectorAccounts>(request).await {
                 Some(input) => match runtime.save_bot_connectors(input).await {
                     Ok(settings) => json_response(StatusCode::OK, &settings),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
+        (&Method::POST, "/v1/memory/get") => match parse_body::<GetAssignment>(request).await {
+            Some(input) => match runtime.memory_facts(input.workspace_id).await {
+                Ok(facts) => json_response(StatusCode::OK, &serde_json::json!({"facts": facts})),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/memory/add") => match parse_body::<MemoryText>(request).await {
+            Some(input) => match runtime.add_fact(input.workspace_id, &input.text, crate::memory::Author::Person).await {
+                Ok(facts) => json_response(StatusCode::OK, &serde_json::json!({"facts": facts})),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/memory/edit") => match parse_body::<MemoryEdit>(request).await {
+            Some(input) => match runtime.edit_fact(input.workspace_id, input.id, &input.text).await {
+                Ok(facts) => json_response(StatusCode::OK, &serde_json::json!({"facts": facts})),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/memory/delete") => match parse_body::<MemoryDelete>(request).await {
+            Some(input) => match runtime.delete_fact(input.workspace_id, input.id).await {
+                Ok(facts) => json_response(StatusCode::OK, &serde_json::json!({"facts": facts})),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/sites/get") => match parse_body::<GetAssignment>(request).await {
+            Some(input) => match runtime.site_rules(input.workspace_id).await {
+                Ok(rules) => json_response(StatusCode::OK, &rules),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/sites/save") => {
+            match parse_body::<crate::sites::BotSiteRules>(request).await {
+                Some(input) => match runtime.save_site_rules(input).await {
+                    Ok(rules) => json_response(StatusCode::OK, &rules),
                     Err(error) => workspace_error(error),
                 },
                 None => invalid_request(),
