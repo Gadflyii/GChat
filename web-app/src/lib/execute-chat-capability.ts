@@ -4,7 +4,11 @@ import { chatWorkerRunKey, useAgentRun } from '@/hooks/useAgentRun'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { useThreads } from '@/hooks/useThreads'
 import type { CapabilitiesService } from '@/services/capabilities/types'
-import type { AgentAttachment, AgentRunRecord } from '@/types/agent'
+import type {
+  AgentAttachment,
+  AgentRunRecord,
+  SubAgentAttribution,
+} from '@/types/agent'
 import { useChatSessions } from '@/stores/chat-session-store'
 import {
   buildAgentRecordSummary,
@@ -12,18 +16,35 @@ import {
 } from './agent-run-message'
 import { useAppState } from '@/hooks/useAppState'
 import { capabilitySchema, capabilitySearchResults } from './custom-chat-transport-helpers'
+import {
+  parseSubAgentBriefs,
+  STOPPED_BY_USER_NOTE,
+  SUBAGENT_DISPATCH_TOOL,
+  subAgentOutcome,
+  type SubAgentBrief,
+  type SubAgentResult,
+} from './sub-agents'
 
-export async function executeChatCapability({
-  service, threadId, modelId, toolName, arguments: input, signal,
-}: {
+type ChatCapabilityOptions = {
   service: CapabilitiesService
   threadId: string
   modelId?: string
   toolName: string
   arguments: object
   signal: AbortSignal
-}) {
+  /** The model's tool call; names the sub-agent cards of a dispatch. */
+  toolCallId?: string
+  /** Set only by sub-agent dispatch for the worker it spawns. */
+  subAgent?: SubAgentAttribution
+}
+
+export async function executeChatCapability({
+  service, threadId, modelId, toolName, arguments: input, signal, toolCallId, subAgent,
+}: ChatCapabilityOptions): Promise<{ content: unknown; error?: string }> {
   if (signal.aborted) throw new DOMException('Cancelled', 'AbortError')
+  if (toolName === SUBAGENT_DISPATCH_TOOL) {
+    return dispatchSubAgents({ service, threadId, modelId, toolName, arguments: input, signal, toolCallId })
+  }
   const disabledTools = useToolAvailable.getState().getDisabledToolsForThread(threadId)
   if (toolName === 'gchat_capability_search') {
     const query = (input as { query?: unknown }).query
@@ -73,7 +94,9 @@ export async function executeChatCapability({
   }
   useAgentRun.getState().startRun(
     stateKey, runId,
-    spawning ? { originSessionId: threadId, parentRunId } : undefined
+    spawning
+      ? { originSessionId: threadId, parentRunId, ...(subAgent ? { subAgent } : {}) }
+      : undefined
   )
   const ownsRun = () => useAgentRun.getState().getRun(stateKey).runId === runId
   const cancel = () => { void service.cancel(runId).catch(console.error) }
@@ -159,6 +182,105 @@ export async function executeChatCapability({
         step_count: run.trace.stepCount ?? 0,
       })
     }
+  }
+}
+
+/**
+ * Start one General Agent worker per brief with the existing spawn capability,
+ * wait for all of them, and return every result in brief order. Workers run
+ * concurrently; the shared native allocator admits them within the Host's
+ * concurrency and queues the rest. A worker that fails or is stopped reports
+ * that outcome without stopping its siblings. Stop on the parent cancels all.
+ */
+async function dispatchSubAgents(
+  options: ChatCapabilityOptions
+): Promise<{ content: { agents: SubAgentResult[] } }> {
+  const briefs = parseSubAgentBriefs(options.arguments)
+  const dispatchId = options.toolCallId || `dispatch-${generateId()}`
+  const agents = await Promise.all(
+    briefs.map((brief, index) => runSubAgent(options, brief, { dispatchId, index, ...brief }))
+  )
+  if (options.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
+  return { content: { agents } }
+}
+
+async function runSubAgent(
+  { service, threadId, modelId, signal }: ChatCapabilityOptions,
+  brief: SubAgentBrief,
+  subAgent: SubAgentAttribution
+): Promise<SubAgentResult> {
+  let runId: string | undefined
+  try {
+    const spawned = await executeChatCapability({
+      service, threadId, modelId, signal, subAgent,
+      toolName: 'agent_spawn',
+      arguments: { task: brief.task },
+    })
+    runId = (spawned.content as { runId?: unknown } | undefined)?.runId as string | undefined
+    if (spawned.error || typeof runId !== 'string' || !runId) {
+      return { title: brief.title, status: 'failed', error: spawned.error ?? 'The sub-agent did not start' }
+    }
+    const waited = await waitForSubAgent(service, threadId, runId, signal)
+    const live = useAgentRun.getState().getRun(chatWorkerRunKey(threadId, runId))
+    const collected = waited.content as { record?: AgentRunRecord; error?: unknown } | undefined
+    const record = collected?.record
+    const status = subAgentOutcome(record?.status ?? live.status)
+    const result = record?.finalReply || live.trace.assistantText
+    const error =
+      waited.error ??
+      (typeof collected?.error === 'string' ? collected.error : undefined) ??
+      (status === 'failed' ? live.trace.error?.message : undefined)
+    return {
+      title: brief.title, runId, status,
+      ...(result ? { result } : {}),
+      ...(error ? { error } : {}),
+      // Only the user's per-card Stop ends one sub-agent while its parent runs.
+      ...(status === 'stopped' ? { note: STOPPED_BY_USER_NOTE } : {}),
+    }
+  } catch (error) {
+    if (signal.aborted || (error as Error).name === 'AbortError') throw error
+    return {
+      title: brief.title,
+      ...(runId ? { runId } : {}),
+      status: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
+async function waitForSubAgent(
+  service: CapabilitiesService,
+  threadId: string,
+  runId: string,
+  signal: AbortSignal
+) {
+  if (signal.aborted) throw new DOMException('Cancelled', 'AbortError')
+  // The wait has its own cancellation identity; cancelling it never stops
+  // the worker. Stop on the parent cancels the worker through its spawn.
+  const waitId = `${runId}-wait`
+  let onAbort: () => void = () => undefined
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => {
+      void service.cancel(waitId).catch(() => undefined)
+      reject(new DOMException('Cancelled', 'AbortError'))
+    }
+  })
+  signal.addEventListener('abort', onAbort)
+  const collected = service.execute({
+    run_id: waitId,
+    session_id: threadId,
+    tool_name: 'agent_wait',
+    arguments: { runId },
+    external_roots: [],
+    auto_approve: false,
+    disabled_tools: useToolAvailable.getState().getDisabledToolsForThread(threadId),
+  }, () => undefined)
+  // Stop answers at once; a wait that settles later must not surface unhandled.
+  collected.catch(() => undefined)
+  try {
+    return await Promise.race([collected, aborted])
+  } finally {
+    signal.removeEventListener('abort', onAbort)
   }
 }
 

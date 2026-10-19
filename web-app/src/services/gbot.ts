@@ -3,7 +3,9 @@ import type { ConnectorAccount } from './workspace-connectors'
 
 export type BotConnectors = {
   account_ids: string[]
-  accounts: Omit<ConnectorAccount, 'subject'>[]
+  accounts: (Omit<ConnectorAccount, 'subject' | 'provider'> & {
+    provider: ConnectorAccount['provider'] | 'mcp'
+  })[]
 }
 
 export type Identity = { workspace_id: string; session_id: string }
@@ -172,6 +174,11 @@ export type SavedAssignment = Omit<Assignment, 'api_key'> & {
   workspace_id: string
   credential_ref: string | null
 }
+export type TaskOutput = {
+  id: string
+  name: string
+  bytes: number
+}
 export type Task = {
   id: string
   identity: Identity
@@ -179,8 +186,12 @@ export type Task = {
   history?: { state: string; reason: string; at: number }[]
   messages: { role: string; content: unknown }[]
   help_requests: HelpRequest[]
+  outputs?: TaskOutput[]
   calls?: { call_id: string; name: string; reply: unknown | null; not_executed?: boolean }[]
   connector_calls?: { call_id: string; name: string; reply: unknown | null }[]
+  /** Set on a sub-agent task started by another task's dispatch. */
+  sub_agent?: { parent: string; call_id: string; index: number; title: string } | null
+  dispatches?: { call_id: string; reply: unknown | null }[]
 }
 export type HelpRequest = {
   id: string
@@ -193,6 +204,15 @@ export type Approval = {
   task_id: string
   request: { operation: unknown }
 }
+
+// Saves (a Save dialog) or opens (the system's default app) one file a bot handed back.
+// Resolves to the path used, or null when the person cancels the Save dialog.
+export const gbotTaskFile = (
+  taskId: string,
+  fileId: string,
+  open: boolean
+): Promise<string | null> =>
+  invoke<string | null>('gbot_task_file', { taskId, fileId, open })
 
 export function gbot<T>(path: string, body?: unknown): Promise<T> {
   return invoke<T>('gbot_command', { path: `/v1/${path}`, body })

@@ -1,5 +1,119 @@
 # GInfer host UI
 
+## Recovered GUI batch validation — Claude, October 19
+
+Integration `fix/claude-recover-gui-batch-20261019` merges the Codex 7 rows
+`GUI-HARDWARE-REFRESH-KEYBOARD`, `GUI-PROGRESS-NUMERIC-A11Y`,
+`GUI-DOWNLOADS-A11Y`, `GUI-MODELS-LOAD-LIVE-RESULT` and
+`GUI-MODELS-DELETE-DIALOG-KEYBOARD` with `GUI-SETTINGS-LOGS-ERRORS`, onto
+current main (one ModelManagement.tsx conflict kept both sides). Stop recovery
+`28a48e902` was confirmed already in main. Validation on S1 (booking CPU 32-39,
+no GPU): lint, typecheck, guards, 3,941 app tests (six skipped), 130 extension
+tests, all six coverage floors, and the full Rust suites with current Linux
+catalogs. Source/rendered scope only; no native or Windows claim.
+
+## Models delete dialog keyboard access — C7, October 18
+
+Active finding `GUI-MODELS-DELETE-DIALOG-KEYBOARD`, source-only candidate
+`fix/c7-models-a11y-20261018`, based on Hardware candidate `37345d00c`.
+A pending delete used to disable every dismissal and suppress Escape. The
+confirmation now keeps Close and Escape available while its accepted request
+continues; reopening cannot submit another request. Cancel remains the initial
+focus before acceptance. Radix owns the trigger, and focus returns to that
+trigger or an explicit stable page control when deletion removes its row.
+Models returns to Refresh installed models; the catalog action returns to its
+replacement Download button. Pending status is announced without marking its
+live region busy.
+
+Acceptance: rendered keyboard Cancel/Escape and pending dismissal/reopen,
+same-turn duplicate protection, rejection/retry, accepted row removal and focus
+return; affected focused tests, lint, exactly one `make verify`, and private
+Linux native Light/Dark dialog/focus screenshots in this branch. No model load,
+backend change, Windows acceptance, new harness or dependency is in scope.
+The first focused gate stopped at 84 passed / four failed before lint or verify.
+Three legacy assertions still expected a busy dialog, which would suppress its
+live status; those now check the announced pending state. Disabling the focused
+confirmation also lost keyboard focus, so acceptance now moves focus to Close
+before disabling confirmation. The pending keyboard test protects that handoff.
+Root owns this worktree and its source. The corrected focused gate is next. Native preparation
+must reuse the existing private-app workflow and retained valid fixture inputs.
+## Models load result announcements — C7, October 18
+
+Active finding `GUI-MODELS-LOAD-LIVE-RESULT`, source-only candidate
+`fix/c7-models-load-a11y-20261018`, based on Hardware candidate `37345d00c`.
+The previous live region wrapped an elapsed timer, diagnostic details and
+buttons, then disappeared on success. A persistent, atomic polite status now
+announces startup phase and the terminal ready, cancelled or failed result.
+The ticking timer, byte counters, details and controls remain outside it;
+failed cancellation is an alert. Existing load/cancel ownership is unchanged.
+
+Acceptance: existing rendered long-load/poll/cancel behavior, phase changes,
+persistent success/cancel/failure result, no timer/detail chatter; focused tests,
+lint, exactly one `make verify`, and native Light/Dark Models keyboard/focus
+screenshots in the same branch. Native inspection makes no model-load or
+Windows qualification claim; phase/terminal behavior is covered by the rendered
+service fixture. Root owns the source and this record; implementation is ready
+for a focused gate. No resource is reserved and no new harness or dependency is
+needed.
+## Downloads accessibility — C7, October 18
+
+`GUI-DOWNLOADS-A11Y` is the Downloads follow-up on
+`fix/c7-downloads-a11y-20261018`, worktree
+`/ai/gchat-worktrees/c7-downloads-a11y-20261018`, based on `37345d00c`.
+Managed, legacy and app-update progress now have accessible names and numeric
+values; live regions announce state and ten-percent milestones without byte,
+speed or time-estimate chatter. Managed completion remains announced after its
+visible transfer disappears. The Models Downloads tab uses the same milestones.
+Legacy pause/resume/cancel and managed navigation name the affected model.
+
+A keyboard-opened Downloads popover takes focus in logical order, has a named
+Close control, returns focus on dismissal and stays open during interaction.
+Automatic background notification never steals focus; its timer yields to user
+interaction. If a focused transfer disappears, focus moves to the remaining
+Close control. A later automatic reopen cannot reuse an earlier disconnected
+control. Existing rendered regressions cover these transitions and milestones.
+
+Acceptance is focused tests, lint and exactly one `make verify`, followed by
+private Linux native Light/Dark keyboard-focus screenshots in this branch.
+No model download or load, backend change, new test harness or native Windows
+qualification is required. Next: freeze, isolated S1 gate and native screenshots.
+The first Hardware/shared Progress candidate remains a separate merge.
+
+## Models, Downloads and Hardware accessibility — C7, October 18
+
+Bubbs assigned a source-only accessibility pass at 23:12Z. The outcome is named
+controls, logical keyboard order, visible focus in Light and Dark, announced
+download progress and load results, and dialogs that can be dismissed by
+keyboard. Each concrete finding is a GUI row in GInfer open-work. Fixes stay in
+small branches, use existing rendered accessibility/keyboard tests, pass focused
+tests and exactly one `make verify` per merge, and include native screenshots
+in the same branch. No model run or Windows qualification is required.
+
+The first candidate is
+`fix/c7-models-downloads-hardware-a11y-20261018`, worktree
+`/ai/gchat-worktrees/c7-models-downloads-hardware-a11y-20261018`, baseline
+`5cca9a52a`. Root owns Hardware, shared Progress and current documentation;
+parallel workers read Models/Downloads and recover existing native tooling.
+Source freeze is ready for an isolated S1 gate and native Light/Dark keyboard
+screenshots; no target resource is held.
+
+Confirmed first findings: Hardware refresh unmounts its focused control during
+loading and provides no announced terminal result; CPU/RAM usage progressbars
+lack accessible names, and shared Progress drops the value before the Radix
+root, exposing indeterminate progress despite a visible percentage. Acceptance
+is stable keyboard focus through refresh, announced loading/success/failure,
+named numeric CPU/RAM progress, existing logical keyboard navigation, and native
+Light/Dark focus screenshots. Keep shared Progress ownership clear; later
+Models/Downloads fixes add their own names and announcements. No general
+accessibility framework or new test harness is needed.
+
+Implemented the first Hardware/progress correction with six rendered Hardware
+regressions and numeric/indeterminate Progress tests. Next: focused tests, lint,
+the sole `make verify`, then an isolated Linux native build and Light/Dark
+keyboard focus screenshots. Further concrete findings are Downloads names/live
+progress, Models terminal load announcements, and delete dialog dismissal/focus;
+these remain separate small follow-up branches.
+
 ## Models confirmed Stop and status recovery — C7, October 18
 
 `GUI-MODELS-STOP-STATUS-RECOVERY` separates a confirmed Stop from a later
@@ -38,7 +152,7 @@ for three source files, 35 dependencies and eleven read-only catalogs / 48
 profiles to the frozen revision. The component self-check is complete.
 
 S1 `AIS-2-8592-L01` booking3622, CPU88–95 returned **23:09Z** and was canceled.
-The verified candidate is merge-ready. No Ada resource is held; its 23:00–23:30Z quiet window is respected. These checks qualify the source
+Merged on main as **`28a48e902`**. No Ada resource is held; its 23:00–23:30Z quiet window is respected. These checks qualify the source
 correction and Linux gate; they make no installed-app or Windows claim.
 
 The first focused attempt on `d45e01667` stopped at **63 passed / three failed**:
@@ -58,7 +172,8 @@ were retired at **23:11:29Z**, reclaiming **29,370,376,192 allocated bytes**
 after parent terminal review. The inactive RC dependency donor and protected
 catalog inputs remain. Only the result JSON and short summary remain in
 `out/c7-models-stop-status-recovery-20261018/`; no resource is held.
-Next: Bubbs merge, then review C4's pending Windows quote/collision handoff.
+Next: C7's Models, Downloads and Hardware accessibility pass; the Windows
+quote/collision leaves still await C4's installed walkthrough.
 
 ## Models overlapping deletion recovery — C7, October 18
 
@@ -906,7 +1021,7 @@ to Gchat 2; signed-in Workspace and Windows remain open.
 
 An independent private desktop connected to a genuine idle Host with real S1
 NVIDIA inventory. In **Light and Dark, 1280×900**, Tab focuses the checked
-Follow a response format box and Space unchecks it. Both states retain the
+Structured outputs (JSON) box and Space unchecks it. Both states retain the
 2px theme-colored focus ring with 2px offset. The checked fill/tick and
 unchecked border use the app palette: [Light checked](../../out/c3-checkbox-theme-20261018/light-checked.png),
 [Light unchecked](../../out/c3-checkbox-theme-20261018/light-unchecked.png),
@@ -948,7 +1063,7 @@ An independently built native development desktop and Host at `66e766a43`
 used S1 GPU1 and the private dev catalog
 `http://192.168.1.109:18761/catalog.json`. Native **Check model settings** returned:
 
-> Model file checked: Qwen 3.8 27B — INT. 2 model copies. 27.5 GiB of graphics-card conversation memory per model copy. This check did not start a model.
+> Model file checked: Qwen 3.8 27B — INT. 2 model copies. 27.5 GiB of GPU K/V cache per model copy. This check did not start a model.
 
 The [reviewed screenshot](../../out/c3-startup-check-sizes-20261018/native-check-result.png)
 and [actual quote](../../out/c3-startup-check-sizes-20261018/native-quote.json)
@@ -1295,7 +1410,7 @@ select CSS and chevron assertion were removed. The current Hosts, Benchmark
 and Workspace connections fields use the app-rendered control.
 
 The inspected [Light 1024×800 Hosts capture](../../out/c3-host-locator-deleted-runtime-20261018/native-model-settings-light-narrow.png)
-shows Installed model, Reply speedup and Conversation memory format beside
+shows Installed model, Speculative Decoding and K/V cache format beside
 readable input fields. The retained [Light open-menu capture](../../out/c7-dropdown-host-selectors-20261018/after-light-medium-serving.png)
 shows readable choices, wrapping and the app palette. These close the remaining
 light-theme visual check. The existing
@@ -1532,8 +1647,8 @@ retained `native-model-advanced-dark-wide.png`,
 `native-model-advanced-light-narrow.png` and `native-model-settings.json` in
 `out/c3-host-locator-deleted-runtime-20261018/`. At 06:16Z the ordinary
 **Model and memory settings → Choose model settings → Advanced model settings**
-path showed **Draft ahead length (tokens)**, **Drafting graphics cards (TP)**
-and **Input batch size (tokens)**. The inspected dark 1500×1000 and light
+path showed **Draft tokens**, **Draft tensor parallel (TP)**
+and **Prefill chunk (tokens)**. The inspected dark 1500×1000 and light
 1024×800 screenshots show readable labels without raw keys or horizontal
 overflow. Native controls were exercised and defaults restored.
 
@@ -2114,9 +2229,9 @@ All35 dependency manifests matched the retained cache. The tested export is
 `reset-relocated-candidate/bin/gchat` (SHA256
 `70e9aef690f23040ea45b5f3f6cd2f5db40efb993ff683bd6c95f5c2a669c131`),
 with a private pre-install copy and linkage to retained runnable resources.
-Native app/session/display stopped and booking3039 returned05:56Z. The source and native acceptance are merge-ready; the exported binary is retained until merge.
+Native app/session/display stopped and booking3039 returned05:56Z. Handoff `5693c8b8f` is merged in main `eebad02f2`. The tested native export was removed06:00Z after reference checks (254,697,472 allocated bytes); concise acceptance evidence remains in `out/c3-current-main-release-20261018/merged-reset-export-cleanup-0601.json`.
 Shared source/cache is handed serially to the Host-locator gate; the installed
-AppDir/home, reset/autostart/folder/badge candidates, runnable resources and
+AppDir/home, active locator candidate, runnable resources and
 tools remain protected. No GPU/model run is needed.
 
 ## Graphics-card setup command results — Gchat 3, October 18
@@ -4772,6 +4887,24 @@ removed; CPU booking cancelled, returned02:15Z. No model, hardware profile,
 inference, shared app data or Windows action. This qualifies the corrected
 native Linux runnable; it does not qualify a new installer or Windows build.
 The old selected `ed68c7443` RC remains the recorded before-fix reproduction.
+## Logs action failure feedback — C4
+
+`GUI-SETTINGS-LOGS-ERROR-FEEDBACK` fixes General settings' **Open Logs** and
+**Reveal Logs** actions. Both previously caught native errors only in the
+console, leaving the user with no explanation. A failed action now shows an
+error toast with the native detail and a retry or alternative-folder action.
+The existing buttons stay usable after failure; log locations and successful
+native operations are unchanged. English messages use the existing translation
+fallback for languages without the new strings.
+
+Owned source: `/ai/gchat-worktrees/c4-settings-logs-errors-20261017`, branch
+`fix/c4-settings-logs-errors-20261017`, based on main `498b55b47`.
+Acceptance: rendered tests for both native failures and successful retries,
+focused lint/tests and one `make verify`. No model, Engine, installed fixture,
+provider request or user-data operation is required. Evidence is retained in
+`/ai/gchat/out/c4-settings-logs-errors-20261017/`.
+Next: run the focused and full verification using an inactive read-only cache
+copy; retire the owned generated copy after collecting the concise result.
 
 ## Hardware live statistics wording — C7
 
@@ -4888,9 +5021,9 @@ with Gchat2. Next: coordinator merge.
 Owned source: `/ai/gchat-worktrees/c4-settings-attachment-labels-20261017`,
 branch `fix/c4-settings-attachment-labels-20261017`. Evidence belongs to
 `/ai/gchat/out/c4-settings-sweep-20261017/`. No model, Engine, provider request
-or retained user profile operation is required. The owned generated S1 cache
-is being retired after the final native replay;
-concise results and screenshots remain in the evidence directory.
+or retained user profile operation is required. The owned generated S1 cache was removed at 16:43Z, reclaiming
+27,895,226,368 allocated bytes. Results, screenshots and the restored XML
+remain in the evidence directory; `cleanup.json` records the cleanup.
 
 ## Available attachment settings — C4
 
@@ -5032,6 +5165,8 @@ removed through the GUI and the original image permissions restored. Evidence:
 `/ai/gchat/out/gchat-agent-image-preview-recovery-20261018/`.
 
 is being retired after the final native replay; concise evidence is retained.
+was removed at 16:43Z; concise evidence and screenshots are retained in the
+evidence directory, with the cleanup recorded in `cleanup.json`.
 Provider labels remain C6-owned and provider keyboard navigation C7-owned; availability,
 sidebar and attachment labels retain their separate findings in Gchat3's list.
 
@@ -5348,6 +5483,20 @@ or disable it. Focus stays on that switch while GChat saves the change; repeated
 activation waits for the current save. If saving fails, the switch keeps its
 saved state and you can press Space again to retry. Other skills remain usable.
 
+Linux acceptance (`GUI-AGENT-SKILL-TOGGLE-FOCUS-20261018`): a genuine permission
+error left the switch enabled, checked, and focused. Restoring write access and
+pressing Space disabled the skill; another Space restored its initial state,
+with focus retained throughout. The original 17 saved records, 45 skill files,
+two workspace inputs, disabled-state bytes, and directory mode were unchanged
+afterward. The native packet is
+[`out/gchat-skill-toggle-focus-20261018/`](../../out/gchat-skill-toggle-focus-20261018/).
+Focused 27 cases, lint and cumulative verification passed. The original
+`make verify` stopped at an unrelated SSH fixture's released-port assertion;
+its failure is retained. The separate fixture correction's full verification
+supplies the failed and remaining Rust stages, whose source matches this branch.
+No passed stages were repeated for this branch. Deferred tests cover pending
+request races; native acceptance covers ordinary Linux failure and retry.
+
 ## Creating and editing skills
 
 After you choose **Create** or **Save**, the button shows **Creating skill…**
@@ -5534,7 +5683,7 @@ receipt are in `token-fix/result.json` beneath the retained evidence directory.
 | Owner / host | Path | Status / retention |
 | --- | --- | --- |
 | C4 / local | `/ai/gchat-worktrees/c4-settings-attachment-labels-20261017`, branch `fix/c4-settings-attachment-labels-20261017` | Combined source `0c598c378`: focused/full gates and native replay PASS |
-| C4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017` | Owned generated dependency/build cache being retired; donor untouched |
+| C4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017` | Removed 16:43Z; 27,895,226,368 allocated bytes reclaimed; donor untouched |
 | C4 / OLD | `/home/gchat/c4-settings-sweep-20261017` | Private native app/home; returned16:39Z OFF/original XML restored, custody back with Gchat2 |
 | C4 / evidence | `/ai/gchat/out/c4-settings-sweep-20261017/` | Before/after screenshots, native control results and source validation; no real token used |
 
@@ -6859,3 +7008,22 @@ containers were removed (27,822,125,840 logical bytes); the dependency donor
 was preserved. Small evidence: `out/c7-host-name-save-result-20261018/`.
 No Host protocol, model, inference, native GUI rename or Windows qualification
 is changed or claimed. Next: reviewed merge, then continue the owned GUI queue.
+
+## Unchecked checkbox visibility and Windows rendering — core, October 19
+
+`GUI-CHECKBOX-THEME` found a real defect while checking the Workspace controls on
+Windows: the themed unchecked checkbox used the hairline `--input` tint for its
+border, about **1.2:1 in Light and 1.5:1 in Dark** against the page, so an
+unchecked box was nearly invisible (and an unchecked disabled box more so). The
+border now uses `--muted-foreground` (about 6:1 in both themes); checked fill, tick,
+focus ring, disabled opacity and radios are unchanged.
+
+Windows check: Microsoft Edge 155 (the WebView2 Chromium engine) on the 4090 Windows
+box rendered the production-built CSS with the Workspace service checkboxes and the
+Desktop connection method radios, Light and Dark, checked, unchecked and disabled.
+Measured unchecked boundary contrast: checkbox 1.22→6.13 (Light) and 1.52→6.19 (Dark);
+radios were already 3.86 and 4.97. Images and numbers:
+[before/after](../../out/core-checkbox-theme-20261019/result.json). This is the
+shipped stylesheet in the WebView2 engine, not the Tauri window, and no signed-in
+Workspace session; those two limits remain. Focused test
+`native-control-theme.test.ts` pins the border; ONE `make verify` is on the branch.

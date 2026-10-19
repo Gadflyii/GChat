@@ -41,6 +41,27 @@ export function BrainSetup({
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
   const disabled = busy || saving
+  const editButton = useRef<HTMLButtonElement>(null)
+  const restoreEditFocus = useRef(false)
+  useEffect(() => {
+    if (editing || !restoreEditFocus.current) return
+    const opener = editButton.current
+    if (
+      !opener ||
+      (document.activeElement !== document.body && document.activeElement !== opener)
+    ) {
+      restoreEditFocus.current = false
+      return
+    }
+    if (!disabled) {
+      restoreEditFocus.current = false
+      opener.focus()
+      return
+    }
+    const cancelRestore = () => { restoreEditFocus.current = false }
+    document.addEventListener('focusin', cancelRestore)
+    return () => document.removeEventListener('focusin', cancelRestore)
+  }, [disabled, editing])
   const [saveError, setSaveError] = useState<string>()
   const [discoveryError, setDiscoveryError] = useState<string>()
   const [models, setModels] = useState<PairedModel[]>([])
@@ -126,9 +147,13 @@ export function BrainSetup({
             </p>
           </div>
           <Button
+            ref={editButton}
             variant="outline"
             disabled={disabled}
-            onClick={() => setEditing(true)}
+            onClick={() => {
+              restoreEditFocus.current = true
+              setEditing(true)
+            }}
           >
             Edit brain
           </Button>

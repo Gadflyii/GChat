@@ -97,6 +97,12 @@ pub enum ToolBinding {
     CuaGuide,
     AskHuman,
     Connector { name: String },
+    /// Starts child tasks through the service-owned task runner.
+    Dispatch,
+    /// Copies a finished file from the bot's computer into the task's files.
+    HandBack,
+    /// Saves a fact to the bot's memory after the person approves it.
+    Remember,
 }
 
 impl FunctionTool {
@@ -136,9 +142,12 @@ impl FunctionTool {
                     .and_then(Value::as_u64)
                     .ok_or(ExecutorError::InvalidMessage)?,
             },
-            ToolBinding::CuaGuide | ToolBinding::AskHuman | ToolBinding::Connector { .. } => {
-                return Err(ExecutorError::InvalidMessage)
-            }
+            ToolBinding::CuaGuide
+            | ToolBinding::AskHuman
+            | ToolBinding::Connector { .. }
+            | ToolBinding::Dispatch
+            | ToolBinding::HandBack
+            | ToolBinding::Remember => return Err(ExecutorError::InvalidMessage),
             ToolBinding::WriteFile => GuestOperationKind::Write {
                 path: GuestPath(text("path")?),
                 offset: 0,
@@ -229,6 +238,14 @@ pub struct TaskRecord {
     pub history: Vec<TaskEvent>,
     #[serde(default)]
     pub replan_after_takeover: bool,
+    /// Set when this task is a sub-agent of another task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sub_agent: Option<crate::sub_agents::SubAgentLink>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dispatches: Vec<crate::sub_agents::DispatchCall>,
+    /// Files the bot handed back to the person.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<crate::task_files::TaskOutput>,
 }
 
 pub struct CuaTask {
@@ -510,6 +527,9 @@ impl CuaTask {
             context: vec![],
             history: vec![],
             replan_after_takeover: false,
+            sub_agent: None,
+            dispatches: vec![],
+            outputs: vec![],
         };
         record.transition(TaskState::Ready, "created");
         store.save(&record).await?;
@@ -558,6 +578,14 @@ impl CuaTask {
     }
     pub fn snapshot(&self) -> &TaskRecord {
         &self.record
+    }
+    /// Links a new, not yet launched child task to its parent's dispatch.
+    pub(crate) async fn link_sub_agent(
+        &mut self,
+        link: crate::sub_agents::SubAgentLink,
+    ) -> Result<()> {
+        self.record.sub_agent = Some(link);
+        self.save().await
     }
     pub(crate) fn subscribe(&self) -> watch::Receiver<TaskRecord> {
         self.updates.subscribe()
@@ -903,6 +931,15 @@ impl CuaTask {
         if matches!(tool.binding, ToolBinding::AskHuman) {
             return self.ask_human(&call_id, &args).await;
         }
+        if matches!(tool.binding, ToolBinding::Dispatch) {
+            return self.dispatch(runtime, &call_id, &args).await;
+        }
+        if matches!(tool.binding, ToolBinding::HandBack) {
+            return self.hand_back(runtime, approval, &call_id, &args).await;
+        }
+        if matches!(tool.binding, ToolBinding::Remember) {
+            return self.remember(runtime, approval, &call_id, &args).await;
+        }
         if let ToolBinding::Connector {
             name: provider_name,
         } = &tool.binding
@@ -969,6 +1006,306 @@ impl CuaTask {
         if uncertain(&reply) {
             return Err(ExecutorError::NeedsReview);
         }
+        Ok(result)
+    }
+
+    /// Saves one fact to the bot's memory after the person approves it. The person can edit or delete it later.
+    async fn remember(
+        &mut self,
+        runtime: &WorkspaceRuntime,
+        approval: &dyn ToolApproval,
+        call_id: &str,
+        args: &Value,
+    ) -> Result<Value> {
+        let outcome = |status: &str, reason: Option<String>| {
+            let mut value = json!({"status": status, "effect": if status == "remembered" { "saved" } else { "none" }});
+            if let Some(reason) = reason {
+                value["reason"] = reason.into();
+            }
+            value
+        };
+        let text = args.get("text").and_then(Value::as_str).unwrap_or("");
+        let result = match crate::memory::clean(text) {
+            Err(reason) => outcome("not_remembered", Some(reason)),
+            Ok(text) => {
+                let request = ConnectorRequest {
+                    identity: self.record.identity,
+                    operation: crate::connectors::PreparedConnector {
+                        name: crate::memory::TOOL.into(),
+                        account_id: "memory".into(),
+                        arguments: json!({"text": text, "account_id": "memory"}),
+                        write: true,
+                    },
+                };
+                if !approval.approve_connector(self.record.id, &request).await {
+                    return Err(ExecutorError::Denied);
+                }
+                match runtime
+                    .add_fact(self.record.identity.workspace_id, &text, crate::memory::Author::Bot)
+                    .await
+                {
+                    Ok(_) => outcome("remembered", None),
+                    Err(WorkspaceError::State(error)) => return Err(ExecutorError::State(error)),
+                    Err(WorkspaceError::ShuttingDown) => return Err(ExecutorError::Cancelled),
+                    Err(other) => outcome("not_remembered", Some(other.to_string())),
+                }
+            }
+        };
+        self.record_tool_message(call_id, &result);
+        self.save().await?;
+        Ok(result)
+    }
+
+    /// Copies one finished file from the bot's computer into this task's files after the
+    /// person approves it. A file already handed back under this call is not fetched again.
+    async fn hand_back(
+        &mut self,
+        runtime: &WorkspaceRuntime,
+        approval: &dyn ToolApproval,
+        call_id: &str,
+        args: &Value,
+    ) -> Result<Value> {
+        use crate::task_files as files;
+        let refused = |reason: String| json!({"status": "not_handed_back", "effect": "none", "reason": reason});
+        if let Some(output) = self.record.outputs.iter().find(|o| o.call_id == call_id) {
+            let result = json!({"status": "handed_back", "file": output.name, "bytes": output.bytes, "effect": "copied"});
+            self.record_tool_message(call_id, &result);
+            self.save().await?;
+            return Ok(result);
+        }
+        let (path, name) = match files::parse(args) {
+            Ok(parsed) => parsed,
+            Err(reason) => {
+                let result = refused(reason);
+                self.record_tool_message(call_id, &result);
+                self.save().await?;
+                return Ok(result);
+            }
+        };
+        if self.record.outputs.len() >= files::MAX_FILES {
+            let result = refused(format!("At most {} files can be handed back in one task.", files::MAX_FILES));
+            self.record_tool_message(call_id, &result);
+            self.save().await?;
+            return Ok(result);
+        }
+        let first = GuestRequest {
+            identity: self.record.identity,
+            operation_id: OperationId::new(),
+            operation: GuestOperationKind::Read {
+                path: GuestPath(path.clone()),
+                offset: 0,
+                length: files::CHUNK_BYTES,
+            },
+        };
+        first.operation.validate().map_err(|_| ExecutorError::InvalidMessage)?;
+        if !approval.approve(self.record.id, &first).await {
+            return Err(ExecutorError::Denied);
+        }
+        let mut data: Vec<u8> = Vec::new();
+        let mut request = first;
+        loop {
+            let reply = match runtime.request(request.clone()).await {
+                Ok(reply) => reply,
+                Err(WorkspaceError::State(ServiceError::BotPaused)) => {
+                    self.record.replan_after_takeover = true;
+                    return Err(ExecutorError::State(ServiceError::BotPaused));
+                }
+                Err(_) => {
+                    let result = refused("The bot's computer could not be reached to copy the file.".into());
+                    self.record_tool_message(call_id, &result);
+                    self.save().await?;
+                    return Ok(result);
+                }
+            };
+            match reply.outcome {
+                GuestOutcome::Success { result: GuestResult::Read { data: chunk } } => {
+                    let done = (chunk.len() as u64) < files::CHUNK_BYTES;
+                    data.extend_from_slice(&chunk);
+                    if data.len() as u64 > files::MAX_FILE_BYTES {
+                        let result = refused("The file is larger than 16 MB. Hand back a smaller file, or split or compress it.".into());
+                        self.record_tool_message(call_id, &result);
+                        self.save().await?;
+                        return Ok(result);
+                    }
+                    if done {
+                        break;
+                    }
+                }
+                _ => {
+                    let result = refused("The file could not be read. Check the path and that the file is saved.".into());
+                    self.record_tool_message(call_id, &result);
+                    self.save().await?;
+                    return Ok(result);
+                }
+            }
+            request = GuestRequest {
+                identity: self.record.identity,
+                operation_id: OperationId::new(),
+                operation: GuestOperationKind::Read {
+                    path: GuestPath(path.clone()),
+                    offset: data.len() as u64,
+                    length: files::CHUNK_BYTES,
+                },
+            };
+        }
+        if data.is_empty() {
+            let result = refused("The file is empty, so nothing was handed back.".into());
+            self.record_tool_message(call_id, &result);
+            self.save().await?;
+            return Ok(result);
+        }
+        let id = Uuid::new_v4();
+        let stored = files::file_name_on_disk(self.record.outputs.len() + 1, id, &name);
+        let directory = self.store.files_dir();
+        let bytes = data.len() as u64;
+        let target = directory.join(&stored);
+        tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+                let mut builder = std::fs::DirBuilder::new();
+                builder.recursive(true).mode(0o700);
+                builder.create(&directory)?;
+                use std::io::Write;
+                let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&target)?;
+                file.write_all(&data)?;
+                file.sync_all()
+            }
+            #[cfg(not(unix))]
+            {
+                std::fs::create_dir_all(&directory)?;
+                std::fs::write(&target, &data)
+            }
+        })
+        .await
+        .map_err(|_| ExecutorError::InvalidMessage)??;
+        let at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or_default();
+        self.record.outputs.push(files::TaskOutput {
+            id,
+            call_id: call_id.to_owned(),
+            name: name.clone(),
+            guest_path: path,
+            stored,
+            bytes,
+            at,
+        });
+        let result = json!({"status": "handed_back", "file": name, "bytes": bytes, "effect": "copied"});
+        self.record_tool_message(call_id, &result);
+        self.save().await?;
+        Ok(result)
+    }
+
+    /// Runs one child task per brief at once and returns their results in
+    /// brief order. Children are ordinary tasks: they keep their own approvals,
+    /// questions, Stop and history. A restarted parent reattaches to the
+    /// children it already started instead of starting them again.
+    async fn dispatch(
+        &mut self,
+        runtime: &WorkspaceRuntime,
+        call_id: &str,
+        args: &Value,
+    ) -> Result<Value> {
+        use crate::sub_agents::{self, DispatchCall, SubAgentLink};
+        if let Some(reply) = self
+            .record
+            .dispatches
+            .iter()
+            .find(|call| call.call_id == call_id)
+            .and_then(|call| call.reply.clone())
+        {
+            self.record_tool_message(call_id, &reply);
+            self.save().await?;
+            return Ok(reply);
+        }
+        let refused = |error: String| json!({"error": error, "effect": "none"});
+        let briefs = match (runtime.task_runner(), self.record.sub_agent.is_some()) {
+            (None, _) => Err("Sub-agents are unavailable for this task.".to_owned()),
+            (Some(_), true) => Err("A sub-agent cannot dispatch more sub-agents.".to_owned()),
+            (Some(_), false) => sub_agents::parse_briefs(args),
+        };
+        let briefs = match briefs {
+            Ok(briefs) => briefs,
+            Err(error) => {
+                let result = refused(error);
+                self.record_tool_message(call_id, &result);
+                self.save().await?;
+                return Ok(result);
+            }
+        };
+        let runner = runtime.task_runner().ok_or(ExecutorError::InvalidMessage)?;
+        if !self.record.dispatches.iter().any(|call| call.call_id == call_id) {
+            self.record.dispatches.push(DispatchCall {
+                call_id: call_id.into(),
+                reply: None,
+            });
+            self.save().await?;
+        }
+        let mut children = runner.sub_agents_of(self.record.id, call_id).await;
+        for (index, brief) in briefs.iter().enumerate() {
+            if children.iter().any(|(link, _)| link.index == index) {
+                continue;
+            }
+            let link = SubAgentLink {
+                parent: self.record.id,
+                call_id: call_id.into(),
+                index,
+                title: brief.title.clone(),
+            };
+            match runner
+                .start_sub_agent(self.record.identity, link.clone(), &brief.task)
+                .await
+            {
+                Ok(id) => children.push((link, id)),
+                Err(error) => {
+                    // A partial dispatch would hide a missing part: stop what started.
+                    for (_, id) in &children {
+                        let _ = runner.cancel(*id).await;
+                    }
+                    let result = refused(format!(
+                        "Could not start sub-agent {}: {error}",
+                        index + 1
+                    ));
+                    return self.finish_dispatch(call_id, result).await;
+                }
+            }
+        }
+        // A parent resumed after an interruption resumes its unfinished children.
+        runner.resume_sub_agents(&children).await;
+        let mut waits = tokio::task::JoinSet::new();
+        for (link, id) in &children {
+            let runner = runner.clone();
+            let (index, id) = (link.index, *id);
+            waits.spawn(async move { (index, runner.wait_sub_agent(id).await) });
+        }
+        let mut agents = vec![Value::Null; briefs.len()];
+        while let Some(joined) = waits.join_next().await {
+            let (index, record) = joined.map_err(|_| ExecutorError::ChildFailed)?;
+            let Some(brief) = briefs.get(index) else {
+                continue;
+            };
+            agents[index] = match record {
+                Ok(record) => sub_agents::outcome(brief, &record),
+                Err(crate::tasks::TaskRunnerError::Closed) => return Err(ExecutorError::Cancelled),
+                Err(error) => sub_agents::failed(brief, &error.to_string()),
+            };
+        }
+        self.finish_dispatch(call_id, json!({ "agents": agents })).await
+    }
+
+    async fn finish_dispatch(&mut self, call_id: &str, result: Value) -> Result<Value> {
+        if let Some(call) = self
+            .record
+            .dispatches
+            .iter_mut()
+            .find(|call| call.call_id == call_id)
+        {
+            call.reply = Some(result.clone());
+        }
+        self.record_tool_message(call_id, &result);
+        self.save().await?;
         Ok(result)
     }
 
@@ -1093,7 +1430,27 @@ impl CuaTask {
             .filter_map(|call| call["id"].as_str().map(str::to_owned))
             .collect();
         for id in pending {
-            let result = if let Some(call) = self
+            let dispatched = self
+                .record
+                .dispatches
+                .iter()
+                .find(|call| call.call_id == id)
+                .map(|call| call.reply.clone());
+            let result = if let Some(reply) = dispatched {
+                match reply {
+                    Some(reply) => reply,
+                    None => {
+                        // An unanswered dispatch is an obsolete proposal like any other:
+                        // its unfinished sub-agents stop and the parent replans.
+                        if let Some(runner) = runtime.task_runner() {
+                            for (_, child) in runner.sub_agents_of(self.record.id, &id).await {
+                                let _ = runner.cancel(child).await;
+                            }
+                        }
+                        json!({"status":"skipped","effect":"none","reason":"human_takeover_replan"})
+                    }
+                }
+            } else if let Some(call) = self
                 .record
                 .connector_calls
                 .iter()
@@ -1660,6 +2017,85 @@ mod tests {
             Err(ExecutorError::Denied)
         ));
         assert!(task.snapshot().calls.is_empty());
+    }
+
+    struct CountingDeny(std::sync::atomic::AtomicUsize);
+    impl ToolApproval for CountingDeny {
+        fn approve<'a>(&'a self, _: Uuid, _: &'a GuestRequest) -> ApprovalFuture<'a> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async { false })
+        }
+    }
+
+    #[tokio::test]
+    async fn handing_back_a_file_needs_a_full_path_and_the_persons_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut task, runtime) = fixture(dir.path()).await;
+        task.record.tools.push(crate::task_files::tool());
+        let deny = CountingDeny(Default::default());
+        // A relative path is explained to the model without asking the person anything.
+        let call = json!({"call_id":"f-1","name":"hand_back_file","arguments":{"path":"report.docx"}});
+        let reply = task.tool(&runtime, &deny, &call).await.unwrap();
+        assert_eq!(reply["status"], "not_handed_back");
+        assert_eq!(reply["effect"], "none");
+        assert_eq!(deny.0.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert!(task.snapshot().outputs.is_empty());
+        // A real path asks first; a refusal copies nothing and records nothing.
+        let call = json!({"call_id":"f-2","name":"hand_back_file","arguments":{"path":"/home/gbot/report.docx"}});
+        assert!(matches!(
+            task.tool(&runtime, &deny, &call).await,
+            Err(ExecutorError::Denied)
+        ));
+        assert_eq!(deny.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(task.snapshot().outputs.is_empty());
+        assert!(!task.store.files_dir().exists());
+    }
+
+    #[tokio::test]
+    async fn a_file_already_handed_back_is_not_fetched_or_approved_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut task, runtime) = fixture(dir.path()).await;
+        task.record.tools.push(crate::task_files::tool());
+        task.record.outputs.push(crate::task_files::TaskOutput {
+            id: Uuid::new_v4(),
+            call_id: "f-9".into(),
+            name: "report.csv".into(),
+            guest_path: "/home/gbot/report.csv".into(),
+            stored: "01-x-report.csv".into(),
+            bytes: 12,
+            at: 1,
+        });
+        let deny = CountingDeny(Default::default());
+        let call = json!({"call_id":"f-9","name":"hand_back_file","arguments":{"path":"/home/gbot/report.csv"}});
+        let reply = task.tool(&runtime, &deny, &call).await.unwrap();
+        assert_eq!(reply["status"], "handed_back");
+        assert_eq!(reply["file"], "report.csv");
+        assert_eq!(deny.0.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(task.snapshot().outputs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_task_hands_back_at_most_twelve_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut task, runtime) = fixture(dir.path()).await;
+        task.record.tools.push(crate::task_files::tool());
+        for index in 0..crate::task_files::MAX_FILES {
+            task.record.outputs.push(crate::task_files::TaskOutput {
+                id: Uuid::new_v4(),
+                call_id: format!("old-{index}"),
+                name: format!("f{index}.txt"),
+                guest_path: "/x".into(),
+                stored: format!("{index}"),
+                bytes: 1,
+                at: 1,
+            });
+        }
+        let deny = CountingDeny(Default::default());
+        let call = json!({"call_id":"f-13","name":"hand_back_file","arguments":{"path":"/home/gbot/more.txt"}});
+        let reply = task.tool(&runtime, &deny, &call).await.unwrap();
+        assert_eq!(reply["status"], "not_handed_back");
+        assert!(reply["reason"].as_str().unwrap().contains("12"));
+        assert_eq!(deny.0.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

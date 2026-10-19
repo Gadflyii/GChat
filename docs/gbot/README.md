@@ -1,5 +1,84 @@
 # Gbot design
 
+## Recovered Gbot GUI batch validation — Claude, October 19
+
+Gchat 2 branches `GBOT-COMPANION-SERVICE-ERROR-GUIDANCE`,
+`GBOT-COMPANION-CONNECTION-RETRY-PROGRESS`, `GBOT-TOOLS-RESULT-ERROR-GUIDANCE`,
+`GBOT-LAN-RENAME-FOCUS-RETURN`, `GBOT-DESKTOP-VIEW-CLOSE-FOCUS` and
+`GBOT-BRAIN-EDIT-FOCUS-RETURN` are integrated in
+`fix/claude-recover-gui-batch-20261019` with the same gate as the Models batch
+(see `docs/host-ui/README.md`). The service-error and retry-progress changes both
+edit the connection alert; the merged alert keeps the plain guidance, closed
+Details, Open Gbot settings, the checking-connection status and the disabled
+Retry button. Source/rendered scope only.
+
+## Recovering a companion connection failure — Gchat 2
+
+`GBOT-COMPANION-SERVICE-ERROR-GUIDANCE`, based on main `e5d0f3c38`,
+explains a companion service failure beside Retry connection and an Open Gbot
+settings link. Resource preparation failures instead name Restart GChat.
+Diagnostics remain available in initially closed Details. Previously, these
+alerts showed the diagnostic directly without naming recovery for the service.
+
+Rendered journeys cover first load and a saved bot, both Error and native
+string diagnostics, explicit retry, and retained bot name and unsent draft.
+Opening Details sends no request. Existing resource preparation journeys also
+check restart guidance. This is source/rendered mocked-service scope, with no
+native, account, model or VM acceptance.
+
+Validation pending focused checks and ONE `make verify`.
+## Sub-agents — October 19
+
+`GBOT-SUBAGENTS` (Ron, 10-19): a bot can dispatch sub-agents, and the user
+sees them. Design record:
+[ADR 2026-10-19](../decisions/2026-10-19-dispatch-gbot-sub-agents-as-child-tasks.md).
+
+- **Tool.** Bot tasks get Chat's `agent_dispatch` contract: 1–8
+  `{title, task}` briefs; the result lists `{title, taskId, status, result,
+  error, note}` in brief order with status `done`, `stopped`, `failed` or
+  `not_finished`. A stopped entry notes that the user stopped it.
+- **Children.** Each brief becomes an ordinary task on the same computer with
+  the bot's tools except `agent_dispatch`, its own model lease, approvals,
+  questions and Stop. Children run together; the Host admits their model
+  requests within its concurrency. Cancelling the parent cancels unfinished
+  children; a resumed parent reattaches instead of starting them again.
+- **Shared desktop.** Sub-agents share the bot's one desktop and foreground
+  input, so each is told to use only its own apps, windows and files and to
+  observe before acting. Do not split work that needs the same window.
+- **What the user sees.** The Gbot page and the companion list only
+  top-level tasks. Inside the parent task, "N sub-agents" shows one card per
+  child with its title, task, status (Starting, Working, Waiting for your
+  approval, Waiting for your answer, Done, Stopped, Failed, Did not finish),
+  recent steps, result or reason, a **Stop** button and any pending question.
+  Approvals for children appear with the bot's other approval requests.
+
+Native Linux check on S1 (Phase 2 source `c49be20a9`, Release desktop with
+the linked Gbot service, private HOME/XDG/keyring/D-Bus, Xvfb). The ordinary
+setup wizard created **Helper**'s local KVM computer from the pinned Debian
+image and Cua archives; it reached Computer ready in about three minutes. Qwen
+3.8 27B NVFP4 ran on GPU0 at 32768 context with four requests at once and was
+saved as the brain from the paired Host. The task "Dispatch 2 sub-agents.
+Sub-agent 1: use list_windows … report their titles. Sub-agent 2: use
+get_desktop_state … report the screen size. Then tell me both results."
+produced one `agent_dispatch` call. Both child tasks started in the same
+second, showed Working, then Waiting for your approval; after **Allow** on each
+request they finished 74 and 78 seconds after starting, approval wait included. Their cards showed the four
+window titles and 1920 × 1080; the parent completed with both results. The
+companion pane rendered the same two cards (DOM check). Models > **Stop model**, Stop
+computer and Quit Gbot service then returned GPU0 and the VM CPUs.
+
+Gates: `sub_agents` unit test and the loopback test
+`sub_agents_run_together_report_each_outcome_and_stop_with_their_parent`
+(children must both start before either can finish; one child's Stop returns
+`stopped` with the note while its sibling finishes; Stop on the parent stops
+the running child), all 118 service unit and 18 loopback tests, strict
+gbot-service Clippy, 177 focused UI tests, lint, typecheck and test-quality;
+ONE `make verify` (02:58–03:05Z) passes 3911 app tests (six skipped), 130
+extension tests and 1325 Rust tests (28 ignored), with the six critical
+coverage floors. Receipts:
+`/ai/gchat/out/claude-gbot-subagents-20261019/`. Not covered: Windows/Hyper-V,
+LAN and cloud computers, and sub-agents that need the same window at once.
+
 ## Companion keyboard focus with no saved bot — Gchat 2
 
 `GBOT-EMPTY-COMPANION-FOCUS-RETURN` restores keyboard focus to the sidebar
@@ -45,6 +124,35 @@ matched raw bytes and modes before and after verification with fresh tracked
 timestamps. Only this receipt was added afterward. Booking 3630 returned
 23:25Z; the private build cache was removed. Evidence:
 `/ai/gchat/out/gchat2-schedule-retry-guidance-20261018/SUMMARY.md`.
+## Recovering failed tool results — Gchat 2
+
+`GBOT-TOOLS-RESULT-ERROR-GUIDANCE`, based on main `7f626c5dc`, gives
+failed Check tools and Prepare tools results the same plain retry guidance as
+failed requests. Previously, nonzero guest commands exposed shell output as the
+main instruction, and a nonzero command with no output showed no failure.
+Optional diagnostic output now stays in initially closed Details. The service’s
+known instructions for unsupported systems, signed-in desktops, missing tools
+and stopped services stay visible.
+
+Rendered journeys cover tool-check and cloud-preparation results with shell
+output and with no output, optional disclosure and explicit successful retry.
+Preparation still requires installation consent; neither opening Details nor
+receiving a failed result repeats a request. Source/rendered mocked-service
+scope only; no guest installation, native or account acceptance.
+
+## Keyboard focus after closing the desktop — Gchat 2
+
+`GBOT-DESKTOP-VIEW-CLOSE-FOCUS`, based on main `919b569dd`, returns keyboard
+focus to View bot’s desktop after Close view removes its focused control.
+Previously, focus fell to the document body. Initial mount does not move focus.
+Closing still stops the media session and releases its lease; reopening requires
+an explicit action and opens a new view. Human control and task state remain.
+
+Rendered keyboard journeys cover view-only and human-control sessions, lease
+cleanup, preserved control and explicit reopen. This is source/rendered mocked
+transport scope, with no native, guest or desktop-input acceptance.
+
+Validation pending focused checks and ONE `make verify`.
 
 ## Saved local computer action recovery — Gchat 2
 
@@ -292,6 +400,11 @@ A successful retry reopens with the confirmed name after refresh. The rendered
 regression follows duplicate submits, delayed failure/refresh and retry/success;
 existing removal behavior is unchanged. Source/rendered scope only, with no
 service or native contract change.
+
+Closing the rename form returns keyboard focus to **Rename bot**. Successful
+saves wait until the following refresh enables that control; focusing another
+setting while waiting cancels this return so the refresh does not interrupt it.
+Initial rendering does not move focus, and cancellation sends no request.
 
 Validation: original production failed the new regression because it submitted
 twice; fixed focus passed 117 cases. Lint had zero errors and five existing
@@ -701,6 +814,11 @@ model, context size and API key draft stay intact; opening Details and refreshin
 Hosts do not save settings or start a model. Rendered regressions cover both
 connection types and initial or refreshed discovery failures. This is
 source/rendered UI scope.
+
+Closing an explicitly opened brain editor with Cancel edits or a successful Save
+returns keyboard focus to **Edit brain** once that control is enabled. Focusing
+another setting during a pending parent refresh cancels the return. Initial
+setup does not move focus, and failed saves keep the form and draft available.
 
 All four new cases failed on unchanged production. The fixed brain setup and
 wizard suites passed all 53 cases; lint passed with zero errors and five existing
@@ -1983,6 +2101,10 @@ this work continues; hiding the companion does not cancel preparation. An unread
 bot list is a loading state, not evidence that setup or saved identity is missing.
 The companion preserves already loaded bot names during a refresh of the same
 service and offers setup guidance only after a successful empty response.
+Connection retries show **Checking connection…** and disable repeated activation
+until the read finishes. A failed read restores **Retry connection**; retrying
+retains the known bot and draft, while newer service notifications can still
+refresh the connection without replaying task or desktop actions.
 
 The desktop command `bundled_resources_ready` reads the existing retained
 installation result without waiting: `false` means pending, `true` means the
@@ -3959,3 +4081,231 @@ Service selection persists and M365 account metadata comes from that service; re
 Acceptance: focused grant/lease/TLS, saved selection, account metadata and wizard/owner-control cases; affected types/lint and strict Clippy. Host adds only the existing `jan-utils` dependency edge, with no new packages or versions.
 Status: Host 4, TLS 1, M365 3, native 4 and UI 33 cases pass; types/lint and strict Clippy pass. Next action: reviewed main merge; physical paired-LAN qualification remains owed. [Control-grant decision](../decisions/2026-10-13-approve-lan-gbot-control-separately.md).
 Inventory: GChat-owned `/ai/gchat-worktrees/gbot-guided-service-36ce`, branch `feat/gbot-guided-service-36ce`, baseline `cf2dd919c`; borrowed cache `/ai/gchat/src-tauri/target`; retained checks `/ai/gchat/out/gbot-guided-service-20261013/result.json`. All checks ended; no owned job, guest or model.
+
+## Task and approval notifications — core, October 19
+
+Gbot now raises a desktop notification, through the shipped notification path, when a
+task **finishes**, **needs review**, is **waiting for your answer**, or a new **approval**
+is pending, even while another page is open. `useGbotNotifications` (mounted once in the
+root layout) listens to the service's `gbot-task-update` event, reads task and approval
+lists the connected service already provides and compares them with the previous
+snapshot (`lib/gbot-alerts.ts`); the first snapshot after a connection is only recorded,
+so history is never replayed. It is silent when the service is not connected (the fetch
+fails), so it never starts the service or opens secure storage. It is skipped while the
+window is focused on the Gbot page and follows the same master switch as reply
+notifications. Eight focused cases cover the diff rules and the hook; ONE `make verify`
+passes. Not run: an installed notification on a real desktop, and the sleep or
+notification-permission behaviour of each OS. Closes parity row 18 at source level.
+
+## Fresh-user Linux journey and viewer check — core, October 19
+
+`GBOT-LINUX-USER-JOURNEY-20261015` passes a refreshed stage 1 and its reboot leg on the
+accepted RC DEB (`2c579df0`, GChat `3e32ad0c9` / Engine `b26ec5b8f`), installed with ordinary
+`apt` into a fresh Debian 13 guest (nested KVM, XFCE, private keyring) on S1: first run,
+**Enable Gbot**, **Start Gbot service**, the Add bot wizard (name, This PC, separate local VM,
+prerequisites, Create, Computer ready in about two minutes), brain saved, and one
+model-driven task. Qwen 3.8 27B INT (API endpoint route) drove Mousepad to create and save
+`~/journey-hello.txt`: 25 calls, five approvals Allowed, Completed in five minutes, and
+**View bot's desktop** showed the saved file. The viewer streamed for 70 s with the WebKit web
+process alive and nothing in the user journal (the default Debian guest only).
+
+After rebooting the guest the Gbot service started by itself at sign-in and the bot VM
+recovered; reopening GChat and choosing **Start Gbot service** showed the same bot, Connected,
+brain configured and the completed task, and a second task read the file back exactly
+(`Hello from Gbot.`, 16 bytes). [Result and images](../../out/core-gbot-journey-20261019/result.json).
+
+Explicit limits: the brain used the API endpoint route, not a paired Host; the **Fedora 42
+emoji/Markdown viewer crash has no reproducer and no Fedora guest here and was not built for**;
+**physical audio has no hardware here and stays unqualified**; there is no independent SSH
+readback into the bot VM (the key stays in secure storage). The rows stay OPEN for those.
+
+## Calendar schedules and event triggers
+
+`GBOT-TRIGGERS` adds three ways to start a Gbot task beside Once and At an interval,
+all in the existing Scheduled tasks card with plain wording:
+
+- **On chosen days at a set time** (for example weekdays at 09:00) and **once a month on
+  a chosen weekday** (first, second, third, fourth or last Monday to Sunday, at a time).
+  Times follow the time zone of the computer running the Gbot service, including daylight
+  saving changes. A computer that slept through several runs starts one, not a backlog,
+  under the schedule's missed-run policy.
+- **When a file arrives on the bot's computer**: the service looks at the chosen full
+  folder path through the bot's own session every 30 seconds and starts one task per new
+  file, once the file has stopped growing. The task is told the file name, size and path.
+- **When new mail arrives in a mail folder**: the same, for a Maildir (`new/`) or a folder
+  of `.eml` files on the service computer; the task is told who the message is from, its
+  subject and the start of the text. Mail from connected Google or Microsoft accounts is
+  deferred, so this is the local-fixture form only.
+
+Files or messages already present when a trigger is created or re-enabled are ignored.
+At most five triggered tasks wait at a time; an unreadable folder shows a plain message on
+the schedule and is looked at again. The bot's computer being off is not an error.
+`chrono` is the only dependency added to `gbot-service` (already in the lockfile).
+Seven Rust and four web cases cover calendar rules, DST, the mailbox fixture, limits and
+the UI; the folder trigger was also run on the bot's computer in a Debian 13 guest (error
+shown for a missing folder, baseline after it was created, one task started with the file
+details when the bot wrote a file into it).
+
+## Files a bot hands back — core, October 19
+
+A bot can now hand back finished files. The model gets one more tool, `hand_back_file`
+(`gbot-service/src/task_files.rs`): after the usual approval it copies a saved file from the
+bot's computer into that task's own folder on the service computer
+(`<data>/gbot/tasks/<task>.files/`, private, 16 MB and 12 files per task) and records it on the
+task. Any format the bot's computer can produce works; the service stores bytes and never runs
+or interprets them. The task card shows **Files from this task** with **Open** (the system's
+default app for that kind of file) and **Save as…** (a native Save dialog). The files travel
+through the service's `tasks/file` route, so they work when GChat is connected to a Gbot
+service on another computer too.
+
+Checked live in a fresh Debian 13 guest on S1 (the accepted RC DEB with this build's
+binary, Qwen 3.8 27B INT brain): the bot wrote a status report in Mousepad, saved it and
+handed it back (209 bytes); the task listed it, **Save as…** wrote an identical file and **Open**
+opened it in the default app. [Record and images](../../out/core-gbot-files-20261019/task-record.json).
+Five Rust and three page cases cover the rules (full path required, approval first, nothing
+stored on refusal or denial, no second copy on resume, size and count limits). Not done: a
+spreadsheet or deck produced by an office suite (the bot's computer has none; the format is
+whatever its apps can save), and hand-back from a bot on Windows or a cloud computer.
+
+## Tool servers for a bot (MCP link)
+
+`GBOT-MCP-LINK` lets a bot use the MCP servers the user already added in GChat (Settings
+→ MCP Servers: a local command or a web address). They appear in the bot's Linked accounts
+list as "Tool server" entries; linking one offers its tools to the bot's brain at the next
+new or resumed task. There is no per-service integration: the bot sees whatever tools the
+server lists, named `mcp__<server>__<tool>`.
+
+- Every use of a tool server needs the same approval as an account action that changes data
+  (the service cannot know whether an arbitrary tool only reads).
+- The server runs on the computer that runs the Gbot service, not inside the bot's computer.
+  Local commands start on first use and are reused; changing the server in Settings applies
+  on the next task. A server that cannot start is left out and the bot's other tools still work.
+- Secrets in the server's own environment or headers are removed from results before the
+  brain sees them, using the same redaction as GChat's chat tools.
+- Code: `src-tauri/src/core/connectors/mcp_link.rs`, routed from `BotConnectorHost`; it reuses
+  GChat's MCP configuration parser, remote connection and redaction. Two Rust cases run a stdio
+  fixture server; one web case covers the Linked accounts wording and saving a link.
+- No new dependency: `rmcp` and `json5` are already in the app.
+
+Live check (Debian 13 guest, fixture stdio server `office-notes` added in Settings → MCP Servers):
+the server appeared under Linked accounts as a Tool server, was linked and saved, and the
+brain was offered `mcp__office-notes__lookup_vault_code`. The task showed an approval titled
+"Use a tool server on the Gbot service computer"; after Allow the bot answered with the
+fixture's code. No account or sign-in was involved.
+
+## Speak a task and hear the reply (voice)
+
+`GBOT-VOICE` adds a Speak button beside Run in the task box and a Read aloud button under a
+task's last reply.
+
+- **Speak a task**: Speak records the default microphone; Stop listening turns the speech into
+  text on this computer with whisper.cpp (`whisper-rs` 0.16.0, `ggml-base.en.bin`) and puts the text
+  in the task box for the user to check before choosing Run. The first use asks before a one-time
+  download of the speech model (about 148 MB) from a pinned Hugging Face revision; the file is kept
+  only if its size and SHA-256 (`a03779c8…c6d002`) match, otherwise it is discarded. Nothing the user says
+  leaves the computer. English only for now.
+- **Hear the reply**: the operating system's own speech service. Windows uses SAPI through the
+  .NET speech synthesizer; Linux loads speech-dispatcher's `libspeechd` at run time (dlopen, LGPL,
+  never linked or bundled). With no speech service the button says "Install a speech service to hear
+  replies" and the text reply stays. No OS fallback, Piper or cloud voice is used.
+- **Dependencies**: `whisper-rs` and `cpal` (microphone). The Linux deb now depends on
+  `libasound2t64` and recommends `libspeechd2` and `speech-dispatcher`. Licenses are in
+  `THIRD_PARTY_NOTICES.md`.
+- **Build prerequisites**: cmake, a C++ compiler and libclang (bindgen) on every builder. Linux: `cmake`,
+  `libclang-dev`, `libasound2-dev` (added to `scripts/linux-release.Dockerfile`). Without libclang on Linux,
+  `WHISPER_DONT_GENERATE_BINDINGS=1` uses the pre-generated bindings. Windows (proven in `E:\\gchat-voice-probe-20261019`,
+  MSVC Build Tools 2022 with its bundled CMake): `LIBCLANG_PATH` must point to a folder holding
+  `libclang.dll` (the PyPI `libclang` 18.1.1 win_amd64 wheel carries one), and the Windows pre-generated
+  bindings are not usable, so do not set `WHISPER_DONT_GENERATE_BINDINGS` there. `cargo build` of
+  `whisper-rs =0.16.0` + `cpal =0.18.2` finished in 18 s after the C++ build.
+- **Checks**: four web cases (record and review, download consent and progress, error wording,
+  read aloud with and without a speech service) and four Rust cases (checksum and resampling); an opt-in
+  Rust case runs the real model on a spoken sample (`GCHAT_VOICE_MODEL`, `GCHAT_VOICE_WAV`, `--ignored`) and
+  heard the public-domain JFK sample correctly. In a Debian 13 guest the model downloaded and verified, Speak
+  recorded from the guest's capture device and put the transcript in the task box, Read aloud reported the
+  missing speech service before speech-dispatcher was installed and started speaking after.
+- **Not covered**: a physical microphone and speakers (the guest has none; recognition accuracy and audible
+  playback on real hardware, and Windows SAPI playback, are untested), and a Windows run of GChat itself
+  (only the dependency build was proven).
+
+## Website rules and memory for each bot
+
+`GBOT-SITE-RULES` and `GBOT-MEMORY` add two per-bot cards beside Linked accounts. Both are kept in the
+Gbot service's own state (`sites`/`memories` per bot) and are shipped together on one branch.
+
+**Websites.** "Allowed websites" and "Blocked websites", one per line (`example.com`, `https://www.example.com/x` or
+`*.example.com` all mean that site and its sub-sites). Nothing is restricted until a rule exists. Blocked wins;
+if any site is allowed the bot may open only those; `about:blank` is always fine; other address kinds
+(`file:`, `javascript:`) are refused while rules exist. Enforcement is in the service where the bot's browser tools pass
+(`WorkspaceRuntime`): `browser_navigate` to a refused address is turned away before the guest sees it, a
+`get_browser_state` for a tab that is on a refused page is hidden from the bot and its tab is refused for
+further browser actions until it navigates to an allowed site, and the bot is told in plain words which sites are allowed.
+Credentials in an address (`https://allowed.com@blocked.com`) never count as the host. A person who has taken over is
+not limited. Limits to know: it covers the page-aware browser tools only, so the bot using another program, the
+terminal or native keyboard input on its own computer is not stopped; it is a guardrail against a browsing bot
+wandering or being steered, not a sandbox. The page address is read only from the driver's own fields, captured live in a Debian guest: `page.url` in a
+`get_browser_state` snapshot, `url` in a `browser_navigate` result and `tabs[].url` when a window is bound, never from
+links or text on the page; the same check runs on the result of every browser action, so a redirect or a click that
+lands on a refused site hides that page too.
+
+Live check (Debian 13 guest, Chromium driven by the Cua driver, rules: blocked `example.com`; page served at
+`http://10.0.2.2:8000/` with a link to example.com): `browser_navigate` to example.com came back "example.com is a blocked
+website for this bot" without reaching the guest; navigating to the allowed page worked and its snapshot was readable;
+clicking its link landed the tab on example.com and the next `get_browser_state` came back "The page content is
+hidden. Navigate this tab to an allowed website". A fresh bind afterwards still reported the tab's title and address
+(`tabs[]`); that gap is closed by reading `tabs[].url` as above.
+
+**Memory.** Short facts the bot remembers about the person (up to 100, 400 characters each). The person sees, adds,
+edits and deletes them under Memory. Every new or resumed task starts with the list as a system note that says it
+informs but never overrides the task or grants permission, and the bot has a `remember_fact` tool; saving a fact is an
+action the person approves ("Remember this about you"), and facts it saved are labelled "Added by the bot, approved by
+you". Duplicates (ignoring case) are not stored twice. Live check in the Debian guest: a fact added in the Memory card reached the task as the system note and the bot answered "4417" to "What is my favourite number?" without tools (the bot-written `remember_fact` approval path is covered by tests, not run live). This is separate from GChat's own Memory library
+(`docs/memory.md`), which the bot does not read.
+
+Checks: Rust cases cover address parsing and spoofing (`@` credentials, look-alike hosts), allowed/blocked
+precedence, the blocked-tab lifecycle, rule and memory persistence and bounds; web cases cover both cards and the new
+approval wording.
+
+## Windows Cua runtime ships as one zip (WINDOWS-INSTALLER-NSIS-2GB)
+
+With the loose Cua runtime (about 153 MB, 6,200 files) in `resources/gbot`, the Windows payload passed NSIS's 2 GB limit
+and `makensis` stopped with `error mmapping file`; only an MSI could be built, while the updater and
+`windows/hooks.nsh` need NSIS. The release builder now zips the verified runtime into `resources/gbot/runtime.zip`
+(54 MB) and writes `runtime-zip.json` (`zip_sha256`, `zip_bytes`). Measured on the Windows build PC: NSIS fails
+with the loose tree, passes with no runtime (1,484,836,327 B) and passes with the zip (1,536,880,026 B).
+
+On the first Gbot start `core/gbot/runtime_pack.rs` checks the zip's SHA-256 and size, unpacks it into
+`<data>/gbot/runtime/<zip hash>.unpacking`, copies Bun beside it and renames the folder into place only when complete,
+so a crash or a full disk never leaves a half-unpacked runtime (a leftover `.unpacking` folder is removed on the next
+start). A marker records the zip hash and the app version; either changing unpacks again, and older unpacked
+runtimes are deleted. A damaged zip ("Reinstall GChat to repair it") or an unpack failure ("Gbot could not unpack its
+runtime: … Free up disk space or check that GChat may write to its data folder, then start Gbot again.") surfaces as
+the typed Bot unavailable message. An upgrade from an NSIS install that still has the loose tree works because the
+new installer replaces `resources/gbot` and the app reads only the unpacked copy; a build without the zip (Linux, or
+any loose tree) is used as installed. Four Rust cases cover unpack-once and reuse, version and zip changes, a damaged
+zip and failed or interrupted unpacking.
+
+## Keep the computer awake while a task runs (always-on gap)
+
+`GBOT-KEEP-AWAKE`: while a bot task is running, the Gbot service asks the computer it runs on not to go to idle
+sleep (`src-tauri/gbot-service/src/keep_awake.rs`, held for the life of each task's worker, so concurrent tasks each
+hold their own and the hold ends the moment a task stops or waits for a person). Linux uses `systemd-inhibit --what=idle:sleep
+--mode=block` as a child process killed on release, falling back to `--what=idle` when the system refuses to block sleep (it needs an active desktop session; observed in a seatless guest); Windows uses `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`
+on a dedicated thread; other systems, or a Linux machine without systemd, quietly do nothing. It does not stop a person
+pressing sleep or closing the lid, and it cannot wake a sleeping or switched-off computer, so "always on" still means the
+service computer must be on; the Scheduled tasks card now says so in plain words. A task waiting for an answer from the
+person does not hold the computer awake. Live check (Debian 13 guest, model-driven Mousepad task): `systemd-inhibit --list` showed
+`GChat ... idle ... A Gbot task is running ... block` while a task ran (the first try with `idle:sleep` was refused in the seatless guest,
+which is why the fallback exists) and showed none once every task was stopped.
+## Run now for a schedule
+
+`GBOT-RUN-NOW`: each schedule in the Scheduled tasks card has a **Run now** button that starts one run immediately,
+whatever the timing and even while the schedule is turned off (`POST /v1/schedules/run_now`). The run is a normal
+occurrence marked `manual`: it uses the same one-at-a-time rule, so a second press while a run is going or waiting for
+review is refused in plain words, the scheduled time is unchanged, and turning the schedule off before it starts skips it.
+
+Windows proof of the runtime zip (laptop RON-X17R2, unlocked Windows 11 profile, real 53,737,869-byte zip, test build of the
+app's `runtime_pack` run from a fresh folder): first unpack 29 s and the Gbot service accepted the unpacked runtime; an
+immediate re-run did not unpack again (0.4 ms); a different zip unpacked again and the old `<hash>` folder was removed;
+a changed app version unpacked again (36 s). Expect roughly 30 s for the first Gbot start after an install or upgrade.
+Log: `out/core-nsis-zip-20261019/laptop-windows-proof.log`; the opt-in test is `real_runtime_zip_unpacks_and_is_accepted_by_the_service`.

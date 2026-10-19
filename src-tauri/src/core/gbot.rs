@@ -11,6 +11,7 @@ use tokio::sync::Mutex;
 mod background;
 mod cloud;
 mod inference;
+mod runtime_pack;
 #[cfg(any(windows, test))]
 mod login_windows;
 #[cfg(target_os = "linux")]
@@ -617,6 +618,72 @@ fn supported_route(path: &str) -> bool {
     path == "/v1/control/recover"
         || (path != "/v1/updates" && ginfer_host::gbot_control::supported_route(path))
 }
+/// Saves or opens one file a bot handed back from a task. `open` writes it to a private
+/// temporary folder and opens it with the system's default app; otherwise a Save dialog
+/// asks where to keep it. Returns the saved path, or None when the person cancels.
+#[tauri::command]
+pub async fn gbot_task_file<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, GbotState>,
+    task_id: String,
+    file_id: String,
+    open: bool,
+) -> Result<Option<String>, String> {
+    use base64::Engine;
+    let task_id = uuid::Uuid::parse_str(&task_id).map_err(|_| "Unknown task file")?;
+    let file_id = uuid::Uuid::parse_str(&file_id).map_err(|_| "Unknown task file")?;
+    let reply = state
+        .call(
+            &app,
+            "/v1/tasks/file",
+            serde_json::json!({"task_id": task_id, "file_id": file_id}),
+        )
+        .await?;
+    let name = reply["name"]
+        .as_str()
+        .filter(|name| !name.is_empty() && !name.contains(['/', '\\']))
+        .ok_or("The file could not be read from the task")?
+        .to_owned();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(reply["data_base64"].as_str().unwrap_or_default())
+        .map_err(|_| "The file could not be read from the task")?;
+    if open {
+        use tauri_plugin_opener::OpenerExt;
+        let directory = std::env::temp_dir()
+            .join("gchat-gbot-files")
+            .join(file_id.simple().to_string());
+        let target = directory.join(&name);
+        let written = target.clone();
+        tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&directory)?;
+            }
+            #[cfg(not(unix))]
+            std::fs::create_dir_all(&directory)?;
+            std::fs::write(&written, &bytes)
+        })
+        .await
+        .map_err(|_| "The file could not be opened")?
+        .map_err(|_| "The file could not be saved to open it".to_string())?;
+        app.opener()
+            .open_path(target.to_string_lossy(), None::<String>)
+            .map_err(|_| "No app is set up to open this kind of file. Use Save as instead.".to_string())?;
+        return Ok(Some(target.to_string_lossy().into_owned()));
+    }
+    let Some(chosen) = rfd::AsyncFileDialog::new().set_file_name(&name).save_file().await else {
+        return Ok(None);
+    };
+    let path = chosen.path().to_owned();
+    let to_write = path.clone();
+    tokio::task::spawn_blocking(move || std::fs::write(&to_write, &bytes))
+        .await
+        .map_err(|_| "The file could not be saved")?
+        .map_err(|_| "The file could not be saved there. Choose another place.".to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 #[tauri::command]
 pub async fn gbot_command<R: Runtime>(
     app: AppHandle<R>,

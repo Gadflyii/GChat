@@ -4,6 +4,96 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
+## GCHAT-KEYRING-PROMPT-AT-LAUNCH: OAuth tokens, Gbot recovery and Windows — core, October 19
+
+The audit of every secret consumer against the October 16 decision found no
+remaining path that opens secure storage at launch or idle; three leaves that were
+listed as unqualified now have proof at the level that does not need a live account:
+
+- **OAuth tokens and refresh (source).** `AccountsState` reads and writes the
+  credential store only inside `configure`, `begin_auth`/`finish_auth`,
+  `persist_account`, `token` (refresh) and `disconnect`. `initialize`, `view`,
+  `select`, `resolve_account_id`, `has_account` and `prepare` never reach it.
+  `reopened_saved_accounts_display_and_resolve_without_credential_access` reopens a
+  state over a saved account with a counting vault and asserts **zero** vault calls
+  for display, selection, resolution and tool preparation; the existing
+  `google_restart_refresh_uses_vault_and_retains_unrotated_refresh_token` shows the
+  refresh token is read only when a token is requested. A live provider refresh
+  still needs Ron's sign-in and stays under the release gate.
+- **Gbot task recovery (source).** Binding the service API reads or creates the
+  service's own token: that is the explicit **Start Gbot service** action already
+  qualified natively. After it, restoring persisted SSH workspaces and listing state,
+  tasks, approvals and schedules reads no workspace credential
+  (`service_restart_restores_state_without_touching_the_vault`). Workspace keys are
+  read only when a connection is exercised.
+- **Windows native credential store.** On the 4090 Windows box (Windows 11 build
+  26200, MSVC toolchain installed under `C:\Users\Ron\gchat-core-20261019`, no PATH or
+  setting change) the `jan-utils` credential-store suite ran natively: 14 passed,
+  including `windows_native_oversized_synthetic_credentials_round_trip_and_delete`
+  against the real Credential Manager (values above the 2560-byte limit, replacement,
+  deletion, restart through a new handle):
+  [log](../../out/core-keyring-20261019/windows-credential-store-test.log). Windows
+  Credential Manager has no unlock prompt, so launch cannot raise one; a Windows
+  installed-app launch trace is not claimed.
+
+The Linux launch/idle and explicit-use behavior is unchanged since the accepted
+installed receipts below (no startup code changed), so no new GUI launch was run.
+Live OAuth refresh in the running app and an end-to-end Gbot task recovered after a
+crash remain unqualified; the row stays OPEN for those.
+
+## GCHAT-HERMES-PLAIN-COMPRESS: plain `/compress` fix — core, October 19
+
+Cause (measured on Qwen 3.8 27B INT with the real Hermes summarizer prompt, six runs each):
+Hermes sends the compaction summary with no output cap and no reasoning setting, so the
+model thinks at its default level. That took **6,162 to 8,192 tokens** for a summary that
+needs about 2,000: one run in six hit the server's 8192 cap (the abort), and the rest
+produced more text than the ~3k tokens they replaced (the "would grow" refusal). The focused
+form only worked by chance of a shorter generation. At `reasoning_effort: low` all six
+finished in **1,941 to 2,147 tokens**.
+
+Fix: `configure_hermes_agent` now seeds Hermes' own per-task key
+`auxiliary.compression.reasoning_effort: low`, leaving any value the user set (a unit
+test covers create, merge beside other tasks, preserve and idempotence). Proof on the S1
+fixture: plain `/compress` with no focus compacted **16 to 12 messages, about 34,515 to
+16,025 tokens, in an 18.7 s summary call** (before: 106 s abort or a refusal), and the next
+answer (95) needed no file read. The fixture desktop is the older release build, so the key
+was written with the tested function, not by that desktop's Save. Evidence:
+[result](../../out/core-hermes-compress-20261019/result.json). Not claimed: other models,
+summary-only retention.
+
+## OI-068 Linux Hermes compaction and saved-session recovery — core, October 19
+
+The Linux Hermes compaction leaf **passes** on Codex 3's prepared fixture (release
+desktop `919b569dd`, Engine `b26ec5b8f`, Hermes 0.22.2), S1 PRO 6000 GPU1, Qwen 3.8 27B
+INT, native input in a private X display, nothing injected. The model had to be saved
+through the **Ready Host** route; the other Hermes picker choice (local provider on the
+GChat API port, not running) leaves Hermes retrying "waiting for the provider to recover".
+
+- **Compaction.** A seeded `read_file` of the workshop note (code `copper-finch-4827`, counts
+  37 and 58) sat in the middle of a 30-message session. `/compress project code and
+  inspection counts` compacted **30 to 12 messages, about 38,544 to 17,297 tokens** in 72 s.
+  The summary message (12,226 characters) carries the code and both counts; the original
+  read result and 20 other turns are inactive in `state.db`. The next answer (95) did not
+  reread the file.
+- **Recovery.** Ordinary `/exit`, GChat **Restart** (a new session) and `/resume
+  20261019_031014_05f8db` reopened the saved transcript; a further answer (58 minus 37 =
+  21) was correct at 17k of 65.5k context.
+- **Finding, not closed.** Plain `/compress` never compacted: two attempts refused ("summary
+  would grow", only about 3k tokens were replaceable) and two aborted with the summary
+  truncated at the output cap after about 106 s. A hand-written summary request to the same
+  endpoint finishes in 4 s, so the Hermes summarizer prompt drives the long generation; the
+  cause is not isolated. The recent tail also carried the counts, so the answers prove
+  continuity, not summary-only retention.
+- **Also seen.** The Host profile is bound to the CPU grant: after the container CPU set
+  changed, **Check model settings** failed ("does not cover the current allowed CPU grant")
+  until the card was measured again (8.4 minutes).
+
+Evidence: [result and screenshots](../../out/core-oi068-hermes-compaction-20261019/result.json),
+`hermes-agent-compression.log`, `session-messages.json`. Not claimed: automatic resume,
+abrupt process loss, Windows, full-context input. The parent OI-068 stays PARTIAL.
+All private processes and the GPU booking are released; Codex 3's 52 GB fixture directory
+remains for the coordinator to retire.
+
 ## OI-068 Linux Hermes reply, file tool and continuation — October 18, Codex 3
 
 The Linux Hermes leaf **passes** on normal Release candidate

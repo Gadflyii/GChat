@@ -9,7 +9,7 @@ import {
   within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import GbotSchedules from './GbotSchedules'
+import GbotSchedules, { describeTiming } from './GbotSchedules'
 
 const { request, listen } = vi.hoisted(() => ({
   request: vi.fn(),
@@ -374,6 +374,9 @@ it('lists this bot schedules, states the background lifetime requirement and dis
   ).toHaveTextContent(
     'the Gbot service, the bot’s computer and its model server must stay on and connected.'
   )
+  expect(
+    screen.getByText(/Scheduled tasks can keep running after GChat closes/)
+  ).toHaveTextContent('asks this computer not to go to sleep')
   await screen.findByText('Check the calendar')
   expect(screen.queryByText('Other bot task')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Disable schedule' }))
@@ -1213,4 +1216,145 @@ it('keeps the schedule explanation inside the Scheduled tasks section like Linke
     screen.getByText(/Scheduled tasks can keep running after GChat closes/)
   )
   expect(section.parentElement?.firstElementChild).toBe(section)
+})
+
+it('describes every kind of schedule in plain words', () => {
+  expect(describeTiming({ kind: 'once', at: 1 })).toBe('Once')
+  expect(describeTiming({ kind: 'interval', first_at: 1, every_seconds: 60 })).toBe('Every 60 seconds')
+  expect(
+    describeTiming({ kind: 'calendar', rule: { kind: 'days', days: [0, 1, 2, 3, 4], hour: 9, minute: 0 } })
+  ).toBe('Weekdays at 09:00')
+  expect(
+    describeTiming({ kind: 'calendar', rule: { kind: 'days', days: [0, 2], hour: 7, minute: 5 } })
+  ).toBe('Every Monday, Wednesday at 07:05')
+  expect(
+    describeTiming({ kind: 'calendar', rule: { kind: 'monthly_weekday', nth: 1, weekday: 0, hour: 9, minute: 30 } })
+  ).toBe('First Monday of each month at 09:30')
+  expect(
+    describeTiming({ kind: 'calendar', rule: { kind: 'monthly_weekday', nth: 5, weekday: 4, hour: 17, minute: 0 } })
+  ).toBe('Last Friday of each month at 17:00')
+  expect(describeTiming({ kind: 'event', source: { kind: 'folder_arrival', path: '/home/gbot/Inbox' } })).toBe(
+    'When a file arrives in /home/gbot/Inbox on the bot’s computer'
+  )
+  expect(describeTiming({ kind: 'event', source: { kind: 'mail_folder', path: '/home/me/Mail' } })).toBe(
+    'When new mail arrives in the mail folder /home/me/Mail'
+  )
+})
+
+it('creates a weekdays-at-nine schedule and a first-Monday schedule', async () => {
+  const user = userEvent.setup()
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+    target: { value: 'Send the morning summary' },
+  })
+  await user.click(screen.getByRole('button', { name: 'Schedule repetition' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'On chosen days at a set time' }))
+  expect(screen.queryByLabelText('Schedule start time')).toBeNull()
+  fireEvent.change(screen.getByLabelText('Time of day'), { target: { value: '09:00' } })
+  fireEvent.submit(screen.getByRole('form', { name: 'Schedule a bot task' }))
+  await waitFor(() =>
+    expect(request).toHaveBeenCalledWith('schedules/create', {
+      workspace_id: 'bot-one',
+      prompt: 'Send the morning summary',
+      timing: { kind: 'calendar', rule: { kind: 'days', days: [0, 1, 2, 3, 4], hour: 9, minute: 0 } },
+      missed_run_policy: 'run_latest',
+    })
+  )
+  await waitFor(() => expect(screen.getByLabelText('Scheduled task prompt')).not.toBeDisabled())
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), { target: { value: 'Month start review' } })
+  await user.click(screen.getByRole('button', { name: 'Schedule repetition' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Once a month on a chosen weekday' }))
+  fireEvent.change(screen.getByLabelText('Time of day'), { target: { value: '08:30' } })
+  fireEvent.submit(screen.getByRole('form', { name: 'Schedule a bot task' }))
+  await waitFor(() =>
+    expect(request).toHaveBeenCalledWith('schedules/create', {
+      workspace_id: 'bot-one',
+      prompt: 'Month start review',
+      timing: { kind: 'calendar', rule: { kind: 'monthly_weekday', nth: 1, weekday: 0, hour: 8, minute: 30 } },
+      missed_run_policy: 'run_latest',
+    })
+  )
+})
+
+it('creates file-arrival and mail-folder schedules and explains them', async () => {
+  const user = userEvent.setup()
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+    target: { value: 'File this invoice' },
+  })
+  await user.click(screen.getByRole('button', { name: 'Schedule repetition' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'When a file arrives on the bot’s computer' }))
+  expect(screen.getByText(/once for each new file/)).toBeVisible()
+  expect(screen.queryByLabelText('Missed run policy')).toBeNull()
+  fireEvent.submit(screen.getByRole('form', { name: 'Schedule a bot task' }))
+  expect(screen.getByRole('alert')).toHaveTextContent('full folder path')
+  fireEvent.change(screen.getByLabelText('Folder to watch'), { target: { value: '/home/gbot/Inbox' } })
+  fireEvent.submit(screen.getByRole('form', { name: 'Schedule a bot task' }))
+  await waitFor(() =>
+    expect(request).toHaveBeenCalledWith('schedules/create', {
+      workspace_id: 'bot-one',
+      prompt: 'File this invoice',
+      timing: { kind: 'event', source: { kind: 'folder_arrival', path: '/home/gbot/Inbox' } },
+      missed_run_policy: 'run_latest',
+    })
+  )
+  await waitFor(() => expect(screen.getByLabelText('Scheduled task prompt')).not.toBeDisabled())
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), { target: { value: 'Reply to this email' } })
+  await user.click(screen.getByRole('button', { name: 'Schedule repetition' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'When new mail arrives in a mail folder' }))
+  expect(screen.getByText(/Mail from connected Google or Microsoft accounts is not watched yet/)).toBeVisible()
+  fireEvent.change(screen.getByLabelText('Mail folder to watch'), { target: { value: '/home/me/Mail/inbox' } })
+  fireEvent.submit(screen.getByRole('form', { name: 'Schedule a bot task' }))
+  await waitFor(() =>
+    expect(request).toHaveBeenCalledWith('schedules/create', {
+      workspace_id: 'bot-one',
+      prompt: 'Reply to this email',
+      timing: { kind: 'event', source: { kind: 'mail_folder', path: '/home/me/Mail/inbox' } },
+      missed_run_policy: 'run_latest',
+    })
+  )
+})
+
+it('shows what an event schedule is watching and why a look failed', async () => {
+  request.mockResolvedValueOnce({
+    schedules: [
+      {
+        ...schedule,
+        timing: { kind: 'event', source: { kind: 'folder_arrival', path: '/home/gbot/Inbox' } },
+        next_at: null,
+        watch: { primed: true, last_error: 'The folder /home/gbot/Inbox could not be read on the bot’s computer. Check that it exists.' },
+      },
+    ],
+    stopped: null,
+  })
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  expect(await screen.findByText(/When a file arrives in \/home\/gbot\/Inbox/)).toBeVisible()
+  expect(screen.getByText(/Watching for new arrivals/)).toBeVisible()
+  expect(screen.getByRole('alert')).toHaveTextContent('Check that it exists')
+})
+
+it('starts a run now for the chosen schedule and says plainly when it cannot', async () => {
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+  request.mockImplementation(async (route: string, input?: Record<string, unknown>) => {
+    if (route === 'schedules/run_now') return { ...schedule }
+    if (route === 'schedules') return { schedules: [schedule], stopped: null }
+    return { ...schedule, ...input }
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Run now' }))
+  await waitFor(() => expect(request).toHaveBeenCalledWith('schedules/run_now', { id: 'schedule-one' }))
+  request.mockImplementation(async (route: string) => {
+    if (route === 'schedules/run_now') throw new Error('A run of this schedule is already going or needs your review.')
+    return { schedules: [schedule], stopped: null }
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Run now' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not start a run now')
+  fireEvent.click(within(screen.getByRole('alert')).getByText('Details'))
+  expect(screen.getByText('A run of this schedule is already going or needs your review.')).toBeVisible()
 })

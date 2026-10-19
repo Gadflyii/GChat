@@ -1,3 +1,5 @@
+import { GbotTaskFiles } from '@/components/GbotTaskFiles'
+import { ReadAloud, VoiceInput } from '@/components/GbotVoice'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { listen } from '@tauri-apps/api/event'
@@ -9,10 +11,14 @@ import GbotTaskActions from '@/components/GbotTaskActions'
 import GbotTaskInterruption from '@/components/GbotTaskInterruption'
 import HumanHelp from '@/components/GbotHumanHelp'
 import GbotTaskApproval from '@/components/GbotTaskApproval'
+import { GbotSubAgents } from '@/components/GbotSubAgents'
+import { gbotTopLevelTasks } from '@/lib/gbot-sub-agents'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
 import GbotLanBot from '@/components/GbotLanBot'
 import GbotConnectors from '@/components/GbotConnectors'
 import GbotSchedules from '@/components/GbotSchedules'
+import GbotSites from '@/components/GbotSites'
+import GbotMemory from '@/components/GbotMemory'
 import GbotSetup, {
   type BotConnection,
   type SetupResume,
@@ -1414,6 +1420,8 @@ function GbotPage() {
                     </div>
                   )}
                   <GbotConnectors key={bot.id} workspaceId={bot.id} />
+                  <GbotSites workspaceId={bot.id} />
+                  <GbotMemory workspaceId={bot.id} />
                   <GbotSchedules
                     key={`schedules-${bot.id}`}
                     workspaceId={bot.id}
@@ -1462,7 +1470,7 @@ function GbotPage() {
                         }
                       />
                     ))}
-                  {history.map((task) => (
+                  {gbotTopLevelTasks(history).map((task) => (
                     <article
                       key={task.id}
                       className="space-y-2 rounded-lg border p-3"
@@ -1494,7 +1502,7 @@ function GbotPage() {
                             message.role === 'user' ||
                             message.role === 'assistant'
                         )
-                        .map((message, index) => (
+                        .map((message, index, shown) => (
                           <div key={index} className="space-y-1">
                             <p className="text-xs font-medium text-muted-foreground">
                               {message.role === 'user' ? 'You' : bot.name}
@@ -1502,6 +1510,11 @@ function GbotPage() {
                             <p className="whitespace-pre-wrap break-words text-sm">
                               {messageText(message.content)}
                             </p>
+                            {message.role === 'assistant' &&
+                              index === shown.length - 1 &&
+                              task.state !== 'running' && (
+                                <ReadAloud text={messageText(message.content)} />
+                              )}
                           </div>
                         ))}
                       {task.help_requests?.map((request) => (
@@ -1523,6 +1536,27 @@ function GbotPage() {
                           }
                         />
                       ))}
+                      <GbotTaskFiles task={task} />
+                      <GbotSubAgents
+                        parent={task}
+                        tasks={history}
+                        approvals={approvals}
+                        busy={busy}
+                        onStop={(id) =>
+                          void perform(() => gbot('tasks/cancel', { id }))
+                        }
+                        onAnswer={(id, requestId, response) =>
+                          perform(
+                            () =>
+                              gbot('tasks/help', {
+                                id,
+                                request_id: requestId,
+                                response,
+                              }),
+                            true
+                          )
+                        }
+                      />
                     </article>
                   ))}
                   <p
@@ -1546,7 +1580,7 @@ function GbotPage() {
                     </div>
                   )}
                   <form
-                    className="flex gap-2"
+                    className="flex flex-wrap gap-2"
                     aria-busy={submittingTask === workspaceId}
                     onSubmit={(event) => {
                       event.preventDefault()
@@ -1601,6 +1635,7 @@ function GbotPage() {
                     }}
                   >
                     <Input
+                      className="min-w-0 flex-1"
                       aria-label="Bot task"
                       aria-describedby={
                         taskError !== undefined
@@ -1615,6 +1650,18 @@ function GbotPage() {
                           setPrompts((previous) => ({
                             ...previous,
                             [workspaceId]: value,
+                          }))
+                      }}
+                    />
+                    <VoiceInput
+                      disabled={busy || Boolean(submittingTask) || !ready || !botHasControl}
+                      onText={(spoken) => {
+                        if (workspaceId)
+                          setPrompts((previous) => ({
+                            ...previous,
+                            [workspaceId]: previous[workspaceId]
+                              ? `${previous[workspaceId]} ${spoken}`
+                              : spoken,
                           }))
                       }}
                     />

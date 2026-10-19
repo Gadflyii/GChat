@@ -115,6 +115,14 @@ pub fn run() {
     let app_builder = app_builder.invoke_handler(tauri::generate_handler![
         core::setup::bundled_resources_ready,
         core::gbot::gbot_command,
+        core::gbot::gbot_task_file,
+        core::voice::commands::voice_status,
+        core::voice::commands::voice_prepare,
+        core::voice::commands::voice_listen_start,
+        core::voice::commands::voice_listen_stop,
+        core::voice::commands::voice_listen_cancel,
+        core::voice::commands::voice_speak,
+        core::voice::commands::voice_speak_stop,
         core::gbot::gbot_service_quit,
         core::gbot::gbot_service_start,
         core::gbot::gbot_service_target,
@@ -124,6 +132,7 @@ pub fn run() {
         core::benchmark_submission::submit_benchmark,
         core::benchmark_submission::delete_benchmark,
         core::connectors::connector_accounts,
+        core::connectors::connector_saved_accounts,
         core::connectors::connector_configure,
         core::connectors::connector_begin_auth,
         core::connectors::connector_auth_status,
@@ -524,6 +533,7 @@ pub fn run() {
                 .level_for("hyper_util", log::LevelFilter::Warn)
                 .level_for("rustls", log::LevelFilter::Warn)
                 .level_for("h2", log::LevelFilter::Warn)
+                .level_for("mdns_sd", log::LevelFilter::Warn)
                 .max_file_size(LOG_MAX_FILE_SIZE)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(
                     LOG_GENERATIONS,

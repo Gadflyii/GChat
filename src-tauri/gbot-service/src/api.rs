@@ -169,6 +169,28 @@ pub struct SaveAssignment {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct MemoryText {
+    pub workspace_id: WorkspaceId,
+    pub text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryEdit {
+    pub workspace_id: WorkspaceId,
+    pub id: Uuid,
+    pub text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryDelete {
+    pub workspace_id: WorkspaceId,
+    pub id: Uuid,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GetAssignment {
     pub workspace_id: WorkspaceId,
 }
@@ -185,6 +207,13 @@ pub struct RenameLanBot {
 struct PrepareLanTools {
     workspace_id: WorkspaceId,
     consent: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TaskFileRequest {
+    task_id: Uuid,
+    file_id: Uuid,
 }
 
 #[derive(Deserialize)]
@@ -969,6 +998,20 @@ async fn route(
             (None, _) => executor_unavailable(),
             _ => invalid_request(),
         },
+        (&Method::POST, "/v1/schedules/run_now") => match (
+            tasks,
+            parse_body::<crate::schedules::RunNow>(request).await,
+        ) {
+            (Some(tasks), Some(input)) => match tasks.schedules.run_now(input).await {
+                Ok(schedule) => {
+                    tasks.notify();
+                    json_response(StatusCode::OK, &schedule)
+                }
+                Err(error) => schedule_error(error),
+            },
+            (None, _) => executor_unavailable(),
+            _ => invalid_request(),
+        },
         (&Method::POST, "/v1/schedules/enabled") => match (
             tasks,
             parse_body::<crate::schedules::SetEnabled>(request).await,
@@ -1007,6 +1050,50 @@ async fn route(
             match parse_body::<BotConnectorAccounts>(request).await {
                 Some(input) => match runtime.save_bot_connectors(input).await {
                     Ok(settings) => json_response(StatusCode::OK, &settings),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
+        (&Method::POST, "/v1/memory/get") => match parse_body::<GetAssignment>(request).await {
+            Some(input) => match runtime.memory_facts(input.workspace_id).await {
+                Ok(facts) => json_response(StatusCode::OK, &serde_json::json!({"facts": facts})),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/memory/add") => match parse_body::<MemoryText>(request).await {
+            Some(input) => match runtime.add_fact(input.workspace_id, &input.text, crate::memory::Author::Person).await {
+                Ok(facts) => json_response(StatusCode::OK, &serde_json::json!({"facts": facts})),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/memory/edit") => match parse_body::<MemoryEdit>(request).await {
+            Some(input) => match runtime.edit_fact(input.workspace_id, input.id, &input.text).await {
+                Ok(facts) => json_response(StatusCode::OK, &serde_json::json!({"facts": facts})),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/memory/delete") => match parse_body::<MemoryDelete>(request).await {
+            Some(input) => match runtime.delete_fact(input.workspace_id, input.id).await {
+                Ok(facts) => json_response(StatusCode::OK, &serde_json::json!({"facts": facts})),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/sites/get") => match parse_body::<GetAssignment>(request).await {
+            Some(input) => match runtime.site_rules(input.workspace_id).await {
+                Ok(rules) => json_response(StatusCode::OK, &rules),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/sites/save") => {
+            match parse_body::<crate::sites::BotSiteRules>(request).await {
+                Some(input) => match runtime.save_site_rules(input).await {
+                    Ok(rules) => json_response(StatusCode::OK, &rules),
                     Err(error) => workspace_error(error),
                 },
                 None => invalid_request(),
@@ -1078,6 +1165,27 @@ async fn route(
             (None, _) => executor_unavailable(),
             _ => invalid_request(),
         },
+        (&Method::POST, "/v1/tasks/file") => {
+            match (tasks, parse_body::<TaskFileRequest>(request).await) {
+                (Some(tasks), Some(input)) => task_result(
+                    tasks
+                        .task_file(input.task_id, input.file_id)
+                        .await
+                        .map(|(name, bytes)| {
+                            serde_json::json!({
+                                "name": name,
+                                "bytes": bytes.len(),
+                                "data_base64": base64::Engine::encode(
+                                    &base64::engine::general_purpose::STANDARD,
+                                    &bytes
+                                ),
+                            })
+                        }),
+                ),
+                (None, _) => executor_unavailable(),
+                _ => invalid_request(),
+            }
+        }
         (&Method::POST, "/v1/tasks/approval") => {
             match (tasks, parse_body::<ApprovalDecision>(request).await) {
                 (Some(tasks), Some(input)) => {
@@ -1394,7 +1502,7 @@ fn schedule_error(error: WorkspaceError) -> Response<Body> {
         WorkspaceError::State(ServiceError::InvalidState) => error_response(
             StatusCode::BAD_REQUEST,
             "invalid_schedule",
-            "Enter a nonempty prompt, a UTC start time and a positive interval",
+            "Enter a nonempty prompt and a valid schedule: a UTC start time and a positive interval, a day and time of day, or a full folder path",
         ),
         _ => workspace_error(error),
     }
@@ -2061,6 +2169,46 @@ mod tests {
         assert_eq!(schedule["assignment"]["model"], "scheduled-model");
         assert_eq!(schedule["workspace_id"], id);
         assert_eq!(schedule["enabled"], true);
+        // Calendar rules and event triggers share the same route and validation.
+        let calendar = client
+            .call(
+                "/v1/schedules/create",
+                serde_json::json!({"workspace_id": id, "prompt": "Weekday summary", "timing": {"kind":"calendar","rule":{"kind":"days","days":[0,1,2,3,4],"hour":9,"minute":0}}, "missed_run_policy":"skip_missed"}),
+            )
+            .await
+            .unwrap();
+        assert!(calendar["next_at"].as_u64().unwrap() > 0);
+        let first_monday = client
+            .call(
+                "/v1/schedules/create",
+                serde_json::json!({"workspace_id": id, "prompt": "Month start", "timing": {"kind":"calendar","rule":{"kind":"monthly_weekday","nth":1,"weekday":0,"hour":9,"minute":30}}, "missed_run_policy":"run_latest"}),
+            )
+            .await
+            .unwrap();
+        assert!(first_monday["next_at"].as_u64().unwrap() > 0);
+        let watcher = client
+            .call(
+                "/v1/schedules/create",
+                serde_json::json!({"workspace_id": id, "prompt": "File it", "timing": {"kind":"event","source":{"kind":"folder_arrival","path":"/home/gbot/Inbox"}}, "missed_run_policy":"run_latest"}),
+            )
+            .await
+            .unwrap();
+        assert!(watcher["next_at"].is_null());
+        assert_eq!(watcher["watch"]["primed"], false);
+        for bad in [
+            serde_json::json!({"kind":"event","source":{"kind":"folder_arrival","path":"Inbox"}}),
+            serde_json::json!({"kind":"calendar","rule":{"kind":"days","days":[],"hour":9,"minute":0}}),
+            serde_json::json!({"kind":"calendar","rule":{"kind":"monthly_weekday","nth":9,"weekday":0,"hour":9,"minute":0}}),
+            serde_json::json!({"kind":"event","source":{"kind":"mail_folder","path":"relative/mail"}}),
+        ] {
+            assert!(client
+                .call(
+                    "/v1/schedules/create",
+                    serde_json::json!({"workspace_id": id, "prompt": "Bad", "timing": bad, "missed_run_policy":"run_latest"}),
+                )
+                .await
+                .is_err());
+        }
         assert_eq!(
             client
                 .call("/v1/schedules", serde_json::json!({}))
@@ -2082,6 +2230,22 @@ mod tests {
             .unwrap();
         assert_eq!(disabled["enabled"], false);
         assert!(disabled["occurrences"].as_array().unwrap().is_empty());
+        // Run now starts one run and refuses a second while the first is outstanding.
+        let started = client
+            .call("/v1/schedules/run_now", serde_json::json!({"id": schedule["id"]}))
+            .await
+            .unwrap();
+        assert_eq!(started["occurrences"].as_array().unwrap().len(), 1);
+        assert_eq!(started["occurrences"][0]["manual"], true);
+        assert!(client
+            .call("/v1/schedules/run_now", serde_json::json!({"id": schedule["id"]}))
+            .await
+            .unwrap_err()
+            .contains("already going"));
+        assert!(client
+            .call("/v1/schedules/run_now", serde_json::json!({"id": uuid::Uuid::new_v4()}))
+            .await
+            .is_err());
         api.tasks
             .as_ref()
             .unwrap()
@@ -2434,6 +2598,64 @@ mod tests {
             assert!(!persisted.contains("PRIVATE KEY"));
             assert!(!persisted.contains("passphrase"));
         }
+    }
+
+    struct CountingVault(MemoryVault, std::sync::atomic::AtomicUsize);
+    impl Vault for CountingVault {
+        fn get(&self, reference: Uuid) -> VaultFuture<'_, Option<Secret>> {
+            self.1.fetch_add(1, Ordering::SeqCst);
+            self.0.get(reference)
+        }
+        fn put(&self, reference: Uuid, secret: Secret) -> VaultFuture<'_, ()> {
+            self.1.fetch_add(1, Ordering::SeqCst);
+            self.0.put(reference, secret)
+        }
+        fn delete(&self, reference: Uuid) -> VaultFuture<'_, ()> {
+            self.1.fetch_add(1, Ordering::SeqCst);
+            self.0.delete(reference)
+        }
+    }
+
+    // GCHAT-KEYRING-PROMPT-AT-LAUNCH: after an explicit service start (which reads
+    // the service's own token), restoring persisted SSH workspaces, tasks and
+    // schedules reads no workspace credential. The vault is used only when a
+    // workspace connection is exercised.
+    #[tokio::test]
+    async fn service_restart_restores_state_without_touching_the_vault() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.json");
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        let seed = Arc::new(MemoryVault::default());
+        let api = Api::bind(service.clone(), seed.clone(), 0).await.unwrap();
+        let input = ssh_workspace_request();
+        api.client()
+            .call("/v1/workspaces/ssh", input.clone())
+            .await
+            .unwrap();
+        drop(api);
+        drop(service);
+
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        assert_eq!(service.snapshot().await.workspaces.len(), 1);
+        let vault = Arc::new(CountingVault(MemoryVault::default(), Default::default()));
+        let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+        let client = api.client();
+        // Binding reads the service's own token: that is the explicit Start action.
+        let at_start = vault.1.load(Ordering::SeqCst);
+        client
+            .call("/v1/state", serde_json::Value::Null)
+            .await
+            .unwrap();
+        // Task routes may be unavailable without a task runtime; they still must
+        // not reach the vault.
+        for route in ["/v1/tasks", "/v1/tasks/approvals", "/v1/schedules"] {
+            let _ = client.call(route, serde_json::Value::Null).await;
+        }
+        assert_eq!(
+            vault.1.load(Ordering::SeqCst),
+            at_start,
+            "restoring workspaces, tasks and schedules must not read workspace credentials"
+        );
     }
 
     #[tokio::test]

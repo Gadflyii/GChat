@@ -17,6 +17,8 @@ hyper = { version = "0.14", features = ["full"] }
 keyring = { version = "3.6", features = ["windows-native", "sync-secret-service", "crypto-rust", "vendored"] }
 clap = { version = "4", features = ["derive"] }
 russh = { version = "=0.63.1", default-features = false, features = ["ring", "rsa"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+base64 = "0.22"
 
 [dev-dependencies]
 cua-spacesd-client = { path = "../vendor/cua-media/crates/cua-spacesd-client", features = ["testing"] }

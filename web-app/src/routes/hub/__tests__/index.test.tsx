@@ -389,6 +389,29 @@ describe('host-scoped Models', () => {
     expect(screen.queryByRole('button', { name: /Download to/ })).not.toBeInTheDocument()
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
   })
+  it('announces download status and ten-percent progress without announcing changing speed or estimates', async () => {
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    await waitFor(() => expect(useLocalModelDownloads.getState().loaded).toBe(true))
+    const job: ModelDownload = { id: 'accessible-download', release, status: 'downloading', received: 1024, bytes_per_second: 1024, error: null, path: null }
+    act(() => useLocalModelDownloads.setState({ jobs: [job] }))
+    const row = screen.getByRole('heading', { name: 'Blackwell model' }).closest('section')!
+    const status = within(row).getByRole('status')
+    expect(status).toHaveAttribute('aria-live', 'polite')
+    expect(status).toHaveAttribute('aria-atomic', 'true')
+    expect(status).toHaveTextContent('Blackwell model:')
+    expect(status).toHaveTextContent('20%')
+    const firstAnnouncement = status.textContent
+    act(() => useLocalModelDownloads.setState({ jobs: [{ ...job, received: 1100, bytes_per_second: 2048 }] }))
+    expect(status.textContent).toBe(firstAnnouncement)
+    expect(within(row).getByRole('progressbar', { name: 'Blackwell model download' })).toHaveAttribute('value', '1100')
+    act(() => useLocalModelDownloads.setState({ jobs: [{ ...job, received: 2048 }] }))
+    expect(status).toHaveTextContent('50%')
+    expect(status).not.toHaveTextContent(/MiB\/s|seconds left/)
+    act(() => useLocalModelDownloads.setState({ jobs: [{ ...job, received: 4096, status: 'installed' }] }))
+    expect(status).toHaveTextContent('Download complete')
+    expect(status).not.toHaveTextContent('%')
+  })
   it('keeps the host selector clear of the window edge', () => {
     render(<ModelManagement />)
     const header = screen.getByRole('heading', { name: 'Models' }).parentElement
@@ -719,16 +742,45 @@ describe('host-scoped Models', () => {
     expect(screen.getByText('Failed to load Qwen: Not enough graphics memory.')).toBeVisible()
     expect(alert).not.toHaveTextContent(/^Error:/)
     expect(alert).not.toHaveTextContent('Saved inventory may be out of date')
+    expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model could not be loaded. Check the error below before trying again.')
     mocks.switchModel.mockResolvedValue(undefined)
   })
-  it('directs a named model without automatic settings to start from GInfer Hosts', async () => {
+  it('checks and starts settings itself for a model without tested settings, with plain progress', async () => {
     spyConfirm().mockReturnValueOnce(true)
-    mocks.switchModel.mockRejectedValue(Object.assign(new Error('Failed to load 483343c2deadbeef: No qualified automatic profile is available for this model.'), { code: 'no_qualified_profile' }))
+    mocks.switchModel.mockRejectedValue(Object.assign(new Error('No qualified automatic profile is available for this model.'), { code: 'no_qualified_profile' }))
+    const gpu = { uuid: 'gpu-1', name: 'GPU', memory_mib: 32768 }
+    const model = { id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'qwen3.8-27b', weights_id: 'w' }, tp_size: 1 } }
+    mocks.localSnapshot = { host_id: 'local-host', gpus: [gpu], models: [model], instances: [] }
+    let launched: Record<string, unknown> | undefined
+    mocks.command.mockImplementation(async (action, args) => {
+      if (action === 'snapshot') return { host_id: 'local-host', gpus: [gpu], models: [model], instances: launched ? [{ instance_id: 'i1', status: 'ready', configuration: { gpu_uuids: ['gpu-1'] } }] : [] }
+      if (action === 'quote') {
+        if ((args!.body as { max_context: number }).max_context > 131072) throw new Error('Not enough graphics memory for this length.')
+        return { instance_count: 1 }
+      }
+      if (action === 'launch') { launched = args!.body as Record<string, unknown>; return {} }
+      return []
+    })
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model loaded and ready to use.'))
+    expect(launched).toMatchObject({ model_id: 'host-model', gpu_uuids: ['gpu-1'], max_context: 131072 })
+    expect(screen.queryByRole('link', { name: 'Open GInfer Hosts' })).toBeNull()
+    mocks.switchModel.mockResolvedValue(undefined)
+  })
+  it('shows one plain sentence and one action only when the settings check fails', async () => {
+    spyConfirm().mockReturnValueOnce(true)
+    mocks.switchModel.mockRejectedValue(Object.assign(new Error('x'), { code: 'no_qualified_profile' }))
+    mocks.localSnapshot = { host_id: 'local-host', gpus: [], models: [], instances: [] }
+    mocks.command.mockImplementation(async action => {
+      if (action === 'snapshot') return { host_id: 'local-host', gpus: [{ uuid: 'gpu-1', name: 'GPU', memory_mib: 1 }], models: [{ id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'other', weights_id: 'w' }, tp_size: 1 } }], instances: [] }
+      if (action === 'quote') throw new Error('Not enough graphics memory.')
+      return []
+    })
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('Installed locally has no tested settings for automatic loading. To start it, open GInfer Hosts, expand Model and memory settings and Choose model settings, then select Check model settings and Start model with these settings.')
-    expect(alert).not.toHaveTextContent('483343c2')
+    expect(alert).toHaveTextContent('could not be started automatically. Open GInfer Hosts to choose its settings yourself.')
     expect(screen.getByRole('link', { name: 'Open GInfer Hosts' })).toHaveAttribute('href', '/engines/')
     mocks.switchModel.mockResolvedValue(undefined)
   })
@@ -936,14 +988,14 @@ describe('host-scoped Models', () => {
     const view = render(<ModelManagement />)
     const loadButton = screen.getByRole('button', { name: 'Load model' })
     expect(loadButton).toBeDisabled()
-    expect(screen.getByRole('status')).toHaveTextContent('Preparing GInfer to run models on this computer…')
+    expect(screen.getByText('Preparing GInfer to run models on this computer…')).toHaveAttribute('role', 'status')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     fireEvent.click(loadButton)
     expect(mocks.switchModel).not.toHaveBeenCalled()
 
     mocks.resources = { ready: true, error: '' }
     view.rerender(<ModelManagement />)
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByText('Preparing GInfer to run models on this computer…')).not.toBeInTheDocument()
     expect(loadButton).toBeEnabled()
     fireEvent.click(loadButton)
     await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledWith({
@@ -1035,11 +1087,16 @@ describe('host-scoped Models', () => {
     expect(screen.getByText('Selected-model CPU experts')).not.toBeVisible()
     fireEvent.click(screen.getByText('Startup details'))
     expect(screen.getByText('Selected-model CPU experts')).toBeVisible()
-    expect(screen.getByRole('status')).toHaveTextContent('Time since you chose Load model: 601 seconds')
+    expect(screen.getByText('Time since you chose Load model: 601 seconds')).toBeVisible()
+    expect(screen.getByRole('status')).not.toHaveTextContent('Time since')
+    expect(screen.getByRole('status')).not.toHaveTextContent('Selected-model CPU experts')
     expect(screen.getByRole('status')).not.toHaveTextContent(/remaining|expected/i)
     expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
     await act(async () => { finish() })
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model loaded and ready to use.')
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.getByRole('status')).toHaveAttribute('aria-atomic', 'true')
+    expect(screen.queryByText(/Time since you chose Load model/)).not.toBeInTheDocument()
     expect(mocks.switchModel).toHaveBeenCalledTimes(1)
   })
 
@@ -1087,6 +1144,7 @@ describe('host-scoped Models', () => {
     await act(async () => { reject(new DOMException('Cancelled', 'AbortError')) })
     expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model startup cancelled.')
     expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_load_cancel')).toHaveLength(1)
   })
 

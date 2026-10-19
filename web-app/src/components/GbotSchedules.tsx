@@ -5,15 +5,70 @@ import { ChoiceSelect } from '@/components/ui/choice-select'
 import { Input } from '@/components/ui/input'
 import { gbot, type SavedAssignment } from '@/services/gbot'
 
+type CalendarRule =
+  | { kind: 'days'; days: number[]; hour: number; minute: number }
+  | {
+      kind: 'monthly_weekday'
+      nth: number
+      weekday: number
+      hour: number
+      minute: number
+    }
+type EventSource =
+  | { kind: 'folder_arrival'; path: string }
+  | { kind: 'mail_folder'; path: string }
+type Timing =
+  | { kind: 'once'; at: number }
+  | { kind: 'interval'; first_at: number; every_seconds: number }
+  | { kind: 'calendar'; rule: CalendarRule }
+  | { kind: 'event'; source: EventSource }
+
+type Kind = 'once' | 'interval' | 'days' | 'monthly' | 'folder' | 'mail'
+
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+const NTH_NAMES = ['First', 'Second', 'Third', 'Fourth', 'Last']
+
+function clock(hour: number, minute: number): string {
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
+/** Plain words for when a schedule runs. */
+export function describeTiming(timing: Timing): string {
+  switch (timing.kind) {
+    case 'interval':
+      return `Every ${timing.every_seconds} seconds`
+    case 'calendar': {
+      const rule = timing.rule
+      if (rule.kind === 'days') {
+        const days = [...rule.days].sort((a, b) => a - b)
+        const weekdays = days.length === 5 && days.every((day, index) => day === index)
+        const every = days.length === 7
+        const label = weekdays
+          ? 'Weekdays'
+          : every
+            ? 'Every day'
+            : `Every ${days.map((day) => DAY_NAMES[day]).join(', ')}`
+        return `${label} at ${clock(rule.hour, rule.minute)}`
+      }
+      return `${NTH_NAMES[rule.nth - 1]} ${DAY_NAMES[rule.weekday]} of each month at ${clock(rule.hour, rule.minute)}`
+    }
+    case 'event':
+      return timing.source.kind === 'folder_arrival'
+        ? `When a file arrives in ${timing.source.path} on the bot’s computer`
+        : `When new mail arrives in the mail folder ${timing.source.path}`
+    default:
+      return 'Once'
+  }
+}
+
 type Schedule = {
   id: string
   workspace_id: string
   prompt: string
   enabled: boolean
   assignment: SavedAssignment
-  timing:
-    | { kind: 'once'; at: number }
-    | { kind: 'interval'; first_at: number; every_seconds: number }
+  timing: Timing
+  watch?: { primed: boolean; last_error: string | null }
   missed_run_policy: 'run_latest' | 'skip_missed'
   next_at: number | null
   occurrences: {
@@ -51,7 +106,12 @@ function WorkspaceSchedules({
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [prompt, setPrompt] = useState('')
   const [at, setAt] = useState('')
-  const [kind, setKind] = useState<'once' | 'interval'>('once')
+  const [kind, setKind] = useState<Kind>('once')
+  const [days, setDays] = useState<number[]>([0, 1, 2, 3, 4])
+  const [time, setTime] = useState('09:00')
+  const [nth, setNth] = useState('1')
+  const [weekday, setWeekday] = useState('0')
+  const [folder, setFolder] = useState('')
   const [seconds, setSeconds] = useState('3600')
   const [policy, setPolicy] = useState<'run_latest' | 'skip_missed'>(
     'run_latest'
@@ -199,7 +259,9 @@ function WorkspaceSchedules({
         <p className="mb-3 text-sm text-muted-foreground">
           Set a time for this bot to carry out a task. Scheduled tasks can keep
           running after GChat closes, but the Gbot service, the bot’s computer
-          and its model server must stay on and connected.
+          and its model server must stay on and connected. While a task is
+          running, GChat asks this computer not to go to sleep, but it cannot
+          wake a computer that is asleep or switched off.
         </p>
         <p className="mb-3 text-xs text-muted-foreground">
           Schedules use the model saved in this bot’s brain settings and the
@@ -216,13 +278,18 @@ function WorkspaceSchedules({
             <p className="text-xs text-muted-foreground">
               {schedule.enabled ? 'Enabled' : 'Disabled'} ·{' '}
               {schedule.assignment.model} ·{' '}
-              {schedule.timing.kind === 'interval'
-                ? `Every ${schedule.timing.every_seconds} seconds`
-                : 'Once'}
-              {schedule.next_at
-                ? ` · Next: ${new Date(schedule.next_at * 1000).toLocaleString()}`
-                : ' · No later scheduled occurrences'}
+              {describeTiming(schedule.timing)}
+              {schedule.timing.kind === 'event'
+                ? ' · Watching for new arrivals'
+                : schedule.next_at
+                  ? ` · Next: ${new Date(schedule.next_at * 1000).toLocaleString()}`
+                  : ' · No later scheduled occurrences'}
             </p>
+            {schedule.watch?.last_error && (
+              <p role="alert" className="text-sm text-destructive">
+                {schedule.watch.last_error}
+              </p>
+            )}
             {schedule.enabled &&
               !stopped &&
               !schedule.occurrences.some(
@@ -274,6 +341,21 @@ function WorkspaceSchedules({
                   ? 'Disable schedule'
                   : 'Enable schedule'}
             </Button>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                void perform(
+                  'Starting run…',
+                  () =>
+                    gbot<Schedule>('schedules/run_now', { id: schedule.id }),
+                  'Could not start a run now. It may already be running or waiting for your review.',
+                  schedule.id
+                )
+              }
+            >
+              Run now
+            </Button>
             {!!schedule.occurrences.length && (
               <details>
                 <summary className="cursor-pointer text-xs">
@@ -305,34 +387,68 @@ function WorkspaceSchedules({
             event.preventDefault()
             if (pendingRef.current || !assignment || stopped) return
             const timestamp = Math.floor(new Date(at).getTime() / 1000)
+            const [hour, minute] = time.split(':').map(Number)
+            const timed = kind === 'once' || kind === 'interval'
+            const needsPath = kind === 'folder' || kind === 'mail'
             if (
-              !Number.isFinite(timestamp) ||
-              timestamp <= 0 ||
               !prompt.trim() ||
+              (timed && (!Number.isFinite(timestamp) || timestamp <= 0)) ||
               (kind === 'interval' &&
                 (!Number.isSafeInteger(Number(seconds)) ||
-                  Number(seconds) <= 0))
+                  Number(seconds) <= 0)) ||
+              ((kind === 'days' || kind === 'monthly') &&
+                !Number.isFinite(hour) || !Number.isFinite(minute)) ||
+              (kind === 'days' && days.length === 0) ||
+              (needsPath && !folder.trim())
             ) {
               setError({
-                message:
-                  'Enter a prompt, start time and positive whole interval in seconds.',
+                message: timed
+                  ? 'Enter a prompt, start time and positive whole interval in seconds.'
+                  : needsPath
+                    ? 'Enter what the bot should do and the full folder path to watch.'
+                    : 'Enter what the bot should do, the time of day and at least one day.',
               })
               return
             }
+            const timing: Timing =
+              kind === 'once'
+                ? { kind, at: timestamp }
+                : kind === 'interval'
+                  ? {
+                      kind,
+                      first_at: timestamp,
+                      every_seconds: Number(seconds),
+                    }
+                  : kind === 'days'
+                    ? {
+                        kind: 'calendar',
+                        rule: { kind: 'days', days: [...days].sort(), hour, minute },
+                      }
+                    : kind === 'monthly'
+                      ? {
+                          kind: 'calendar',
+                          rule: {
+                            kind: 'monthly_weekday',
+                            nth: Number(nth),
+                            weekday: Number(weekday),
+                            hour,
+                            minute,
+                          },
+                        }
+                      : {
+                          kind: 'event',
+                          source: {
+                            kind: kind === 'folder' ? 'folder_arrival' : 'mail_folder',
+                            path: folder.trim(),
+                          },
+                        }
             void perform(
               'Creating schedule…',
               async () => {
                 const saved = await gbot<Schedule>('schedules/create', {
                   workspace_id: workspaceId,
                   prompt,
-                  timing:
-                    kind === 'once'
-                      ? { kind, at: timestamp }
-                      : {
-                          kind,
-                          first_at: timestamp,
-                          every_seconds: Number(seconds),
-                        },
+                  timing,
                   missed_run_policy: policy,
                 })
                 setPrompt('')
@@ -353,31 +469,35 @@ function WorkspaceSchedules({
             />
           </label>
           <label className="block text-sm">
-            First run (your local time)
-            <Input
-              aria-label="Schedule start time"
-              type="datetime-local"
-              value={at}
-              onChange={(event) => setAt(event.target.value)}
-              disabled={busy || !assignment}
-            />
-          </label>
-          <label className="block text-sm">
-            Repeat
+            When should it run?
             <ChoiceSelect
               aria-label="Schedule repetition"
               className="ml-2 rounded-md border bg-background p-1"
               value={kind}
-              onValueChange={(value) =>
-                setKind(value as 'once' | 'interval')
-              }
+              onValueChange={(value) => setKind(value as Kind)}
               disabled={busy || !assignment}
               options={[
                 { value: 'once', label: 'Once' },
                 { value: 'interval', label: 'At an interval' },
+                { value: 'days', label: 'On chosen days at a set time' },
+                { value: 'monthly', label: 'Once a month on a chosen weekday' },
+                { value: 'folder', label: 'When a file arrives on the bot’s computer' },
+                { value: 'mail', label: 'When new mail arrives in a mail folder' },
               ]}
             />
           </label>
+          {(kind === 'once' || kind === 'interval') && (
+            <label className="block text-sm">
+              First run (your local time)
+              <Input
+                aria-label="Schedule start time"
+                type="datetime-local"
+                value={at}
+                onChange={(event) => setAt(event.target.value)}
+                disabled={busy || !assignment}
+              />
+            </label>
+          )}
           {kind === 'interval' && (
             <label className="block text-sm">
               Interval in seconds
@@ -392,7 +512,93 @@ function WorkspaceSchedules({
               />
             </label>
           )}
-          <label className="block text-sm">
+          {kind === 'days' && (
+            <fieldset className="space-y-1 text-sm">
+              <legend>Days</legend>
+              <div className="flex flex-wrap gap-3">
+                {DAY_NAMES.map((name, index) => (
+                  <label key={name} className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={days.includes(index)}
+                      disabled={busy || !assignment}
+                      onChange={(event) =>
+                        setDays((current) =>
+                          event.target.checked
+                            ? [...current, index]
+                            : current.filter((day) => day !== index)
+                        )
+                      }
+                    />
+                    {name}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          {kind === 'monthly' && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <ChoiceSelect
+                aria-label="Which weekday of the month"
+                className="rounded-md border bg-background p-1"
+                value={nth}
+                onValueChange={setNth}
+                disabled={busy || !assignment}
+                options={NTH_NAMES.map((name, index) => ({
+                  value: String(index + 1),
+                  label: name,
+                }))}
+              />
+              <ChoiceSelect
+                aria-label="Weekday"
+                className="rounded-md border bg-background p-1"
+                value={weekday}
+                onValueChange={setWeekday}
+                disabled={busy || !assignment}
+                options={DAY_NAMES.map((name, index) => ({
+                  value: String(index),
+                  label: name,
+                }))}
+              />
+              <span>of each month</span>
+            </div>
+          )}
+          {(kind === 'days' || kind === 'monthly') && (
+            <label className="block text-sm">
+              Time of day (your computer’s time zone)
+              <Input
+                aria-label="Time of day"
+                type="time"
+                value={time}
+                onChange={(event) => setTime(event.target.value)}
+                disabled={busy || !assignment}
+              />
+            </label>
+          )}
+          {(kind === 'folder' || kind === 'mail') && (
+            <label className="block text-sm">
+              {kind === 'folder'
+                ? 'Folder on the bot’s computer (full path)'
+                : 'Mail folder on this computer (full path)'}
+              <Input
+                aria-label={
+                  kind === 'folder' ? 'Folder to watch' : 'Mail folder to watch'
+                }
+                value={folder}
+                placeholder={kind === 'folder' ? '/home/gbot/Inbox' : '/home/me/Mail/inbox'}
+                onChange={(event) => setFolder(event.target.value)}
+                disabled={busy || !assignment}
+              />
+            </label>
+          )}
+          {(kind === 'folder' || kind === 'mail') && (
+            <p className="text-xs text-muted-foreground">
+              {kind === 'folder'
+                ? 'The bot starts the task above once for each new file that appears in this folder, after the file has finished arriving. Files already there are ignored. Up to five tasks wait at a time.'
+                : 'The bot starts the task above once for each new message that appears in this folder (a Maildir or a folder of .eml files), and is told who it is from, the subject and the start of the message. Messages already there are ignored. Mail from connected Google or Microsoft accounts is not watched yet.'}
+            </p>
+          )}
+          {kind !== 'folder' && kind !== 'mail' && (<><label className="block text-sm">
             Missed runs
             <ChoiceSelect
               aria-label="Missed run policy"
@@ -413,9 +619,15 @@ function WorkspaceSchedules({
             missed: run the latest missed task once, or skip it and wait for the
             next time. If Gbot cannot confirm whether a task started, review it
             yourself; it will not try that task again automatically.
-          </p>
+          </p></>)}
           <Button
-            disabled={busy || !!stopped || !assignment || !prompt.trim() || !at}
+            disabled={
+              busy ||
+              !!stopped ||
+              !assignment ||
+              !prompt.trim() ||
+              ((kind === 'once' || kind === 'interval') && !at)
+            }
           >
             {pending && !pending.scheduleId && !pending.refreshing
               ? pending.label

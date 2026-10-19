@@ -88,6 +88,8 @@ hmac = "0.12"
 hyper = { version = "0.14", features = ["server"] }
 jan-utils = { path = "./utils" }
 libloading = "0.8.7"
+cpal = "=0.18.2"
+whisper-rs = "=0.16.0"
 log = "0.4"
 png = "0.18"
 rand = "0.8"

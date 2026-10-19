@@ -1525,9 +1525,7 @@ impl Host {
         let registered = match metadata.identity.model_id.as_str() {
             "qwen3.8-27b" => matches!(metadata.identity.weights_id.as_str(),
                 "groupwise-int-dflash2-q4" | "groupwise-int-dflash2-q4-g32"
-                | "smol-q2g64-dflash2-q4"
-                | "smol-q2g64-fullattn-gate-value-l51down-q4-dflash2-q4"
-                | "smol-q2g64-l51down-q4-dflash2-q4"
+                | "smol-q2g64-mix-dflash2-q4"
                 | "groupwise-int-dflash2-q4w8" | "groupwise-int-dflash2-w8"
                 | "nvfp4" | "nvfp4-dflash2-q4" | "nvfp4-dflash2-q4w8"
                 | "nvfp4-dflash2-w8" | "nvfp4-dflash2-nvfp4"),
@@ -1535,7 +1533,7 @@ impl Host {
                 "groupwise-int" | "groupwise-int-dflash-q4" | "groupwise-int-dflash-q4-g32"
                 | "groupwise-int-dflash-q4w8" | "groupwise-int-dflash-w8"
                 | "nvfp4" | "nvfp4-dflash-q4w8" | "nvfp4-dflash-w8"
-                | "nvfp4-dflash-nvfp4" | "smol-q2g64-dflash-q4"),
+                | "nvfp4-dflash-nvfp4" | "smol-q2g64-mix-dflash-q4"),
             "qwen3.8-flash-next" => matches!(metadata.identity.weights_id.as_str(),
                 "groupwise-int" | "smol-q2g64" | "nvfp4"),
             _ => false,
@@ -4284,8 +4282,9 @@ time.sleep(60)
         let job = host.processes.lock().await.hardware_profile.clone().unwrap();
         wait_for_profile_completion(&job).await;
         let args: Vec<String> = serde_json::from_slice(&std::fs::read(dir.path().join("profile-argv.json")).unwrap()).unwrap();
-        assert_eq!(args.len(), 3);
-        assert_eq!(&args[..2], ["profile-hardware", "--hardware-profile"]);
+        assert_eq!(args.len(), 4);
+        let output = args[2].clone();
+        assert_eq!(args, vec!["profile-hardware", "--hardware-profile", output.as_str(), "--json"]);
         assert!(!dir.path().join("quote-started").exists());
         assert!(!dir.path().join("serve-started").exists());
     }

@@ -467,6 +467,25 @@ impl TaskRunner {
         if prompt.trim().is_empty() {
             return Err(TaskRunnerError::InvalidPrompt);
         }
+        self.start_task(
+            id,
+            identity,
+            vec![json!({"role":"user","content":prompt})],
+            assignment,
+            None,
+        )
+        .await
+    }
+
+    /// Top-level tasks may dispatch sub-agents; a sub-agent never can.
+    async fn start_task(
+        &self,
+        id: Uuid,
+        identity: SessionIdentity,
+        messages: Vec<Value>,
+        assignment: Option<crate::inference::ResolvedAssignment>,
+        sub_agent: Option<crate::sub_agents::SubAgentLink>,
+    ) -> Result<TaskRecord> {
         let assignment = match assignment {
             Some(assignment) => assignment,
             None => {
@@ -491,6 +510,12 @@ impl TaskRunner {
                 .get(&id)
                 .map_or_else(|| record.clone(), |actor| actor.record.borrow().clone()));
         }
+        let mut messages = messages;
+        if let Ok(facts) = self.runtime.memory_facts(identity.workspace_id).await {
+            if let Some(note) = crate::memory::context_message(&facts) {
+                messages.insert(0, note);
+            }
+        }
         let mut tools: Vec<_> = self
             .runtime
             .desktop_tools(identity)
@@ -506,17 +531,98 @@ impl TaskRunner {
             })
             .collect();
         tools.extend(self.runtime.connector_tools(identity.workspace_id).await?);
-        let task = CuaTask::create_with_id(
-            self.path(id),
-            id,
-            identity,
-            vec![json!({"role":"user","content":prompt})],
-            tools,
-        )
-        .await?;
+        if sub_agent.is_none() && self.runtime.task_runner().is_some() {
+            tools.push(crate::sub_agents::tool());
+        }
+        tools.push(crate::task_files::tool());
+        tools.push(crate::memory::tool());
+        let mut task =
+            CuaTask::create_with_id(self.path(id), id, identity, messages, tools).await?;
+        if let Some(link) = sub_agent {
+            task.link_sub_agent(link).await?;
+        }
         let record = task.snapshot().clone();
         self.launch(&mut state, task, assignment);
         Ok(record)
+    }
+
+    /// Starts one sub-agent on its parent's computer with a freshly resolved
+    /// model assignment, so each child holds its own inference lease.
+    pub(crate) async fn start_sub_agent(
+        &self,
+        identity: SessionIdentity,
+        link: crate::sub_agents::SubAgentLink,
+        task: &str,
+    ) -> Result<Uuid> {
+        let id = Uuid::new_v4();
+        self.start_task(
+            id,
+            identity,
+            crate::sub_agents::child_messages(task),
+            None,
+            Some(link),
+        )
+        .await?;
+        Ok(id)
+    }
+
+    /// Children already started for one dispatch call, in no particular order.
+    pub(crate) async fn sub_agents_of(
+        &self,
+        parent: Uuid,
+        call_id: &str,
+    ) -> Vec<(crate::sub_agents::SubAgentLink, Uuid)> {
+        let state = self.state.lock("sub_agents_of", None, Some(parent)).await;
+        state
+            .records
+            .iter()
+            .filter_map(|(id, record)| {
+                let link = record.sub_agent.as_ref()?;
+                (link.parent == parent && link.call_id == call_id).then(|| (link.clone(), *id))
+            })
+            .collect()
+    }
+
+    /// Waits until a child settles; a child waiting for a person's answer keeps waiting.
+    pub(crate) async fn wait_sub_agent(&self, id: Uuid) -> Result<TaskRecord> {
+        let mut changes = self.subscribe();
+        loop {
+            {
+                let state = self.state.lock("wait_sub_agent", None, Some(id)).await;
+                if state.closed {
+                    return Err(TaskRunnerError::Closed);
+                }
+                let (record, running) = match state.actors.get(&id) {
+                    Some(actor) => (actor.record.borrow().clone(), !actor.join.is_finished()),
+                    None => (
+                        state.records.get(&id).cloned().ok_or(TaskRunnerError::NotFound)?,
+                        false,
+                    ),
+                };
+                if !running && crate::sub_agents::settled(record.state) {
+                    return Ok(record);
+                }
+            }
+            changes
+                .changed()
+                .await
+                .map_err(|_| TaskRunnerError::Closed)?;
+        }
+    }
+
+    /// Resuming a parent resumes the children an interruption or pause left unfinished.
+    pub(crate) async fn resume_sub_agents(&self, children: &[(crate::sub_agents::SubAgentLink, Uuid)]) {
+        for (_, id) in children {
+            let resumable = matches!(
+                self.snapshot(*id).await.map(|record| record.state),
+                Ok(crate::executor::TaskState::Interrupted | crate::executor::TaskState::Paused)
+            );
+            if resumable {
+                if let Err(error) = self.resume(*id, None).await {
+                    eprintln!("Gbot sub-agent {id} could not resume: {error}");
+                }
+            }
+        }
     }
 
     pub async fn resume(&self, id: Uuid, assignment: Option<Assignment>) -> Result<TaskRecord> {
@@ -578,6 +684,8 @@ impl TaskRunner {
         let processes = self.processes.clone();
         let approvals = self.approvals.clone();
         let join = tokio::spawn(async move {
+            // Keep the computer awake while this task is working; it ends when the task stops or waits for a person.
+            let _awake = crate::keep_awake::hold();
             let result = {
                 let execution = task.run(
                     &runtime,
@@ -716,6 +824,29 @@ impl TaskRunner {
             .ok_or(TaskRunnerError::NotFound)
     }
 
+    /// Cancelling a parent also cancels its unfinished sub-agents.
+    /// The bytes of one file the bot handed back, with the name to save it under.
+    pub async fn task_file(&self, id: Uuid, file: Uuid) -> Result<(String, Vec<u8>)> {
+        let output = {
+            let state = self.state.lock("task_file", None, Some(id)).await;
+            let record = match state.actors.get(&id) {
+                Some(actor) => actor.record.borrow().clone(),
+                None => state.records.get(&id).cloned().ok_or(TaskRunnerError::NotFound)?,
+            };
+            record
+                .outputs
+                .into_iter()
+                .find(|output| output.id == file)
+                .ok_or(TaskRunnerError::NotFound)?
+        };
+        let path = crate::task_files::dir_of(&self.path(id)).join(&output.stored);
+        let bytes = tokio::task::spawn_blocking(move || std::fs::read(path))
+            .await
+            .map_err(|_| TaskRunnerError::NotFound)?
+            .map_err(|_| TaskRunnerError::NotFound)?;
+        Ok((output.name, bytes))
+    }
+
     pub async fn cancel(&self, id: Uuid) -> Result<TaskRecord> {
         let mut state = self.state.lock("cancel", None, Some(id)).await;
         if state.closed {
@@ -724,15 +855,40 @@ impl TaskRunner {
         if !state.records.contains_key(&id) {
             return Err(TaskRunnerError::NotFound);
         }
+        let record = self.cancel_one(&mut state, id).await?;
+        let children: Vec<_> = state
+            .records
+            .iter()
+            .filter(|(child, record)| {
+                let live = state
+                    .actors
+                    .get(child)
+                    .map_or(record.state, |actor| actor.record.borrow().state);
+                record.sub_agent.as_ref().is_some_and(|link| link.parent == id)
+                    && !matches!(
+                        live,
+                        crate::executor::TaskState::Completed
+                            | crate::executor::TaskState::Cancelled
+                    )
+            })
+            .map(|(child, _)| *child)
+            .collect();
+        for child in children {
+            self.cancel_one(&mut state, child).await?;
+        }
+        self.approvals.touch();
+        Ok(record)
+    }
+
+    async fn cancel_one(&self, state: &mut State, id: Uuid) -> Result<TaskRecord> {
         if let Some(actor) = state.actors.get(&id) {
             actor.cancel.send_replace(true);
         }
-        self.reap(&mut state, id).await?;
+        self.reap(state, id).await?;
         let mut task = CuaTask::open(self.path(id)).await?;
         task.cancel().await?;
         let record = task.snapshot().clone();
         state.records.insert(id, record.clone());
-        self.approvals.touch();
         Ok(record)
     }
 

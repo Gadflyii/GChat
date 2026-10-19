@@ -39,7 +39,7 @@ describe('executeChatToolCalls', () => {
       callCapability,
       addToolOutput: (output) => { outputs.push(output) },
     })
-    expect(callCapability).toHaveBeenCalledWith({ toolName: 'gchat_capability_search', arguments: { query: 'read files' } })
+    expect(callCapability).toHaveBeenCalledWith({ toolName: 'gchat_capability_search', arguments: { query: 'read files' }, toolCallId: 'discover' })
     expect(outputs).toEqual([{
       tool: 'gchat_capability_search',
       toolCallId: 'discover',

@@ -1145,6 +1145,8 @@ function ThreadDetail() {
                   {Object.entries(workerRuns)
                     .filter(
                       ([, worker]) =>
+                        // Sub-agents render as cards inside their dispatch message.
+                        !worker.subAgent &&
                         !runActivity.runIds.has(worker.runId ?? '')
                     )
                     .map(([key, worker]) => (

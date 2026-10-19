@@ -2585,3 +2585,176 @@ async fn scheduled_dispatch_recovers_restart_and_keeps_completed_receipt() {
     .await
     .unwrap();
 }
+
+/// The parent asks for two sub-agents; each child records that it started and
+/// waits until both have, so a sequential dispatch can never finish.
+fn dispatch_processes(dir: &std::path::Path) -> ExecutorProcesses {
+    let script = r#"IFS= read -r start
+case "$start" in
+*'"name":"agent_dispatch"'*)
+  printf '%s\n' '{"method":"model","payload":{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"dispatch-1","type":"function","function":{"name":"agent_dispatch","arguments":"{\"agents\":[{\"title\":\"First\",\"task\":\"Report alpha\"},{\"title\":\"Second\",\"task\":\"Report beta\"}]}"}}]}}]}}'
+  IFS= read -r reply
+  printf '%s\n' '{"method":"tool","payload":{"call_id":"dispatch-1","name":"agent_dispatch","arguments":{"agents":[{"title":"First","task":"Report alpha"},{"title":"Second","task":"Report beta"}]}}}'
+  IFS= read -r reply
+  printf '%s\n' "$reply" > "$1/parent-tool-reply.json"
+  printf '%s\n' '{"method":"model","payload":{"choices":[{"message":{"role":"assistant","content":"Both sub-agents reported."}}]}}'
+  IFS= read -r reply
+  printf '%s\n' '{"method":"done","payload":{}}'
+  IFS= read -r reply;;
+*)
+  case "$start" in *'Report alpha'*) name=alpha;; *'Report beta'*) name=beta;; *) exit 1;; esac
+  : > "$1/started-$name"
+  i=0
+  while [ ! -e "$1/started-alpha" ] || [ ! -e "$1/started-beta" ]; do
+    i=$((i+1)); [ "$i" -gt 250 ] && exit 1; sleep 0.02
+  done
+  if [ -e "$1/hold-$name" ]; then IFS= read -r never; exit 1; fi
+  printf '{"method":"model","payload":{"choices":[{"message":{"role":"assistant","content":"Result %s"}}]}}\n' "$name"
+  IFS= read -r reply
+  printf '%s\n' '{"method":"done","payload":{}}'
+  IFS= read -r reply;;
+esac"#;
+    ExecutorProcesses {
+        python: ProcessSpec {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), script.into(), "fixture".into(), dir.display().to_string()],
+        },
+        context: ProcessSpec {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), "while IFS= read -r line; do :; done".into()],
+        },
+    }
+}
+
+async fn tasks_until(
+    client: &gbot_service::api::ApiClient,
+    done: impl Fn(&[serde_json::Value]) -> bool,
+) -> Vec<serde_json::Value> {
+    let mut changes = client.subscribe_tasks().unwrap();
+    timeout(WAIT, async {
+        loop {
+            let tasks = client.call("/v1/tasks", serde_json::json!({})).await.unwrap();
+            let tasks = tasks.as_array().unwrap().clone();
+            if done(&tasks) {
+                break tasks;
+            }
+            changes.changed().await.unwrap();
+        }
+    })
+    .await
+    .expect("tasks did not reach the expected states")
+}
+
+#[tokio::test]
+async fn sub_agents_run_together_report_each_outcome_and_stop_with_their_parent() {
+    timeout(Duration::from_secs(20), async {
+        for stop_parent in [false, true] {
+            let fixture = Fixture::new().await;
+            let service = Arc::new(
+                Service::open(&fixture.directory.path().join("service.json"))
+                    .await
+                    .unwrap(),
+            );
+            let runtime = fixture.runtime(service.clone()).await;
+            scheduled_assignment(&fixture, &service).await;
+            let marks = fixture.directory.path().join("marks");
+            tokio::fs::create_dir(&marks).await.unwrap();
+            // The second sub-agent waits until it is stopped.
+            tokio::fs::write(marks.join("hold-beta"), b"").await.unwrap();
+            let api = Api::bind(service, fixture.vault.clone(), 0)
+                .await
+                .unwrap()
+                .with_executor(fixture.directory.path().join("tasks"), dispatch_processes(&marks))
+                .await
+                .unwrap();
+            let client = api.client();
+            let identity = fixture.guest.hello.identity;
+            client
+                .call("/v1/connect", serde_json::to_value(identity).unwrap())
+                .await
+                .unwrap();
+            let parent = client
+                .call(
+                    "/v1/tasks/start",
+                    serde_json::json!({"identity": identity, "prompt": "Get alpha and beta reports"}),
+                )
+                .await
+                .unwrap();
+            let parent_id = parent["id"].as_str().unwrap().to_owned();
+            assert!(parent["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["name"] == "agent_dispatch"));
+            let child = |tasks: &[serde_json::Value], index: u64| {
+                tasks
+                    .iter()
+                    .find(|task| {
+                        task["sub_agent"]["parent"] == parent_id.as_str()
+                            && task["sub_agent"]["index"] == index
+                    })
+                    .cloned()
+            };
+            let tasks = tasks_until(&client, |tasks| {
+                child(tasks, 0).is_some_and(|task| task["state"] == "completed")
+                    && child(tasks, 1).is_some_and(|task| task["state"] == "running")
+            })
+            .await;
+            assert!(marks.join("started-alpha").exists() && marks.join("started-beta").exists());
+            let (first, second) = (child(&tasks, 0).unwrap(), child(&tasks, 1).unwrap());
+            assert_eq!(first["sub_agent"]["title"], "First");
+            assert_eq!(second["sub_agent"]["title"], "Second");
+            for task in [&first, &second] {
+                assert_eq!(task["identity"], serde_json::to_value(identity).unwrap());
+                assert!(task["messages"][0]["content"].as_str().unwrap().contains("sub-agent"));
+                assert!(!task["tools"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|tool| tool["name"] == "agent_dispatch"));
+            }
+            let stop = if stop_parent { &parent_id } else { second["id"].as_str().unwrap() };
+            client
+                .call("/v1/tasks/cancel", serde_json::json!({"id": stop}))
+                .await
+                .unwrap();
+            let tasks = tasks_until(&client, |tasks| {
+                let parent_state = tasks
+                    .iter()
+                    .find(|task| task["id"] == parent_id.as_str())
+                    .map(|task| task["state"].clone());
+                parent_state
+                    == Some(if stop_parent { "cancelled" } else { "completed" }.into())
+                    && child(tasks, 1).is_some_and(|task| task["state"] == "cancelled")
+            })
+            .await;
+            let parent = tasks
+                .iter()
+                .find(|task| task["id"] == parent_id.as_str())
+                .unwrap();
+            if stop_parent {
+                // Stopping the parent stops its running sub-agent; nothing replies.
+                assert!(parent["dispatches"][0]["reply"].is_null());
+                assert!(!marks.join("parent-tool-reply.json").exists());
+            } else {
+                let agents = &parent["dispatches"][0]["reply"]["agents"];
+                assert_eq!(agents[0]["title"], "First");
+                assert_eq!(agents[0]["status"], "done");
+                assert_eq!(agents[0]["result"], "Result alpha");
+                assert_eq!(agents[0]["taskId"], first["id"]);
+                assert_eq!(agents[1]["status"], "stopped");
+                assert!(agents[1]["note"].as_str().unwrap().contains("Do not dispatch it again"));
+                let seen: serde_json::Value = serde_json::from_slice(
+                    &tokio::fs::read(marks.join("parent-tool-reply.json")).await.unwrap(),
+                )
+                .unwrap();
+                assert_eq!(&seen["ok"]["agents"], agents);
+            }
+            assert_eq!(child(&tasks, 0).unwrap()["state"], "completed");
+            runtime.close().await.unwrap();
+            fixture.shutdown().await;
+        }
+    })
+    .await
+    .unwrap();
+}

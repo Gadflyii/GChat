@@ -453,10 +453,19 @@ export type AgentRunTrace = {
   stepCount?: number
 }
 
+/** Chat sub-agent card identity: the dispatch tool call and brief that started a worker. */
+export type SubAgentAttribution = {
+  dispatchId: string
+  index: number
+  title: string
+  task: string
+}
+
 export type AgentRunState = {
   runId?: string
   originSessionId?: string
   parentRunId?: string
+  subAgent?: SubAgentAttribution
   startedAtMs?: number
   finishedAtMs?: number
   status: AgentRunStatus

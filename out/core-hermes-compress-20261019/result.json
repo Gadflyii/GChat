@@ -1,0 +1,36 @@
+{
+ "row": "GCHAT-HERMES-PLAIN-COMPRESS",
+ "model": "Qwen 3.8 27B INT, S1 PRO 6000, Hermes 0.22.2",
+ "cause": "Hermes sends the summary call with no output cap and no reasoning setting, so the model thinks at its default level: the same summarizer prompt took 6,162 to 8,192 completion tokens at default (1 of 6 truncated at the 8192 server cap, the others grew past the ~3k tokens replaced) but 1,941 to 2,147 at reasoning_effort low (6 of 6 stop)",
+ "probe": {
+  "default_completion_tokens": [
+   7680,
+   8192,
+   7250,
+   7651,
+   6162,
+   6172
+  ],
+  "default_finish": [
+   "stop",
+   "length",
+   "stop",
+   "stop",
+   "stop",
+   "stop"
+  ],
+  "low_completion_tokens": [
+   2071,
+   2121,
+   2089,
+   2147,
+   1950,
+   1941
+  ],
+  "nothink_single": 1902,
+  "prompt_tokens": 3480
+ },
+ "fix": "GChat configure_hermes_agent seeds auxiliary.compression.reasoning_effort: low (Hermes' per-task knob) unless the user already set it; unit test covers create, merge, preserve and idempotence",
+ "fixture_proof": "config keyed by the tested function's output (the fixture desktop is the older release build); plain /compress with no focus: 16 -> 12 messages, ~34,515 -> ~16,025 tokens, aux call 18.7 s (before: 106 s abort or growth); next answer 95 without a file read",
+ "not_claimed": "summary-only retention; the key seeded by a rebuilt desktop's Save; other models"
+}

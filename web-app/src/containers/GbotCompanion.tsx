@@ -16,6 +16,8 @@ import GbotDesktopView, {
 } from '@/components/GbotDesktopView'
 import GbotHumanHelp from '@/components/GbotHumanHelp'
 import GbotTaskApproval from '@/components/GbotTaskApproval'
+import { GbotSubAgents } from '@/components/GbotSubAgents'
+import { gbotTopLevelTasks } from '@/lib/gbot-sub-agents'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -60,6 +62,8 @@ export default function GbotCompanion() {
   const pageState = useGbotPage()
   const [owner] = useState(gbotControlOwner)
   const [busy, setBusy] = useState(false)
+  const [retryingConnection, setRetryingConnection] = useState(false)
+  const connectionRetry = useRef(false)
   const [submittingTask, setSubmittingTask] = useState<string>()
   const [taskErrors, setTaskErrors] = useState<Record<string, string | undefined>>(
     {}
@@ -209,6 +213,18 @@ export default function GbotCompanion() {
     wasVisible.current = visible
   }, [visible, workspaceId])
 
+  const retryConnection = async () => {
+    const current = useGbotCompanion.getState()
+    if (connectionRetry.current || current.loading) return
+    connectionRetry.current = true
+    setRetryingConnection(true)
+    try {
+      await current.refresh()
+    } finally {
+      connectionRetry.current = false
+      setRetryingConnection(false)
+    }
+  }
   const perform = async (
     action: () => Promise<unknown>,
     propagateError = false
@@ -395,17 +411,41 @@ export default function GbotCompanion() {
       )}
       {connectionError && (
         <div role="alert" className="space-y-2 border-b p-4 text-sm">
-          <p>{connectionError}</p>
-          {resources.error ? (
-            <p>Restart GChat to try resource preparation again.</p>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void state.refresh()}
-            >
-              Retry connection
-            </Button>
+          <p>
+            {resources.error
+              ? 'Could not prepare the files Gbot needs. Restart GChat to try resource preparation again.'
+              : 'Could not connect to the Gbot service. Choose Retry connection to try again, or open Gbot settings to check the service.'}
+          </p>
+          <details className="text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="whitespace-pre-wrap break-words">{connectionError}</p>
+          </details>
+          {!resources.error && (retryingConnection || state.loading) && (
+            <p role="status">
+              Checking the Gbot service connection. You can hide this pane
+              while the check finishes.
+            </p>
+          )}
+          {!resources.error && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={retryingConnection || state.loading}
+                onClick={() => void retryConnection()}
+              >
+                {retryingConnection || state.loading
+                  ? 'Checking connection…'
+                  : 'Retry connection'}
+              </Button>
+              <Link
+                to={route.gbot.index}
+                onClick={hide}
+                className="text-primary underline"
+              >
+                Open Gbot settings
+              </Link>
+            </div>
           )}
         </div>
       )}
@@ -448,7 +488,7 @@ export default function GbotCompanion() {
                   }
                 />
               ))}
-              {history.map((task) => (
+              {gbotTopLevelTasks(history).map((task) => (
                 <article
                   key={task.id}
                   className="space-y-3 rounded-lg border p-3"
@@ -520,6 +560,26 @@ export default function GbotCompanion() {
                       }
                     />
                   ))}
+                  <GbotSubAgents
+                    parent={task}
+                    tasks={history}
+                    approvals={approvals}
+                    busy={busy}
+                    onStop={(id) =>
+                      void perform(() => gbot('tasks/cancel', { id }))
+                    }
+                    onAnswer={(id, requestId, response) =>
+                      perform(
+                        () =>
+                          gbot('tasks/help', {
+                            id,
+                            request_id: requestId,
+                            response,
+                          }),
+                        true
+                      )
+                    }
+                  />
                 </article>
               ))}
               {state.executorError && (

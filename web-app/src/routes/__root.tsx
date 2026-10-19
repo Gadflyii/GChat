@@ -14,6 +14,8 @@ import { useOnboardingModelReminder } from '@/hooks/useOnboardingModelReminder'
 import { PromptOnboardingModel } from '@/containers/PromptOnboardingModel'
 import { useLeftPanel } from '@/hooks/useLeftPanel'
 import { useTrayStatusSync } from '@/hooks/useTrayStatusSync'
+import { useGbotNotifications } from '@/hooks/useGbotNotifications'
+import { useAccountServiceAutoConnect } from '@/hooks/useAccountServiceAutoConnect'
 import AgentApprovalDialog from '@/containers/dialogs/AgentApprovalDialog'
 import AgentFolderAccessDialog from '@/containers/dialogs/AgentFolderAccessDialog'
 import { TranslationProvider } from '@/i18n/TranslationContext'
@@ -62,6 +64,8 @@ const AppLayout = () => {
   // Feeds live server / model / RAM state into the desktop system tray.
   // No-op outside macOS and Windows Tauri builds (see hook implementation).
   useTrayStatusSync()
+  useGbotNotifications()
+  useAccountServiceAutoConnect()
 
   return (
     <div className="bg-background relative h-svh w-full overflow-hidden">

@@ -1,0 +1,36 @@
+{
+ "state": "completed",
+ "calls": [
+  "list_windows",
+  "get_window_state",
+  "hotkey",
+  "get_window_state",
+  "click",
+  "type_text",
+  "get_window_state",
+  "click",
+  "get_window_state",
+  "click",
+  "list_windows",
+  "get_window_state",
+  "click",
+  "type_text",
+  "get_window_state",
+  "get_window_state",
+  "click",
+  "verify_state",
+  "list_windows",
+  "get_window_state"
+ ],
+ "outputs": [
+  {
+   "id": "dba78098-a0e9-4333-9b98-74ca4a027c9a",
+   "call_id": "call_f944df6a88753e5d",
+   "name": "status-report.txt",
+   "guest_path": "/home/gbot/status-report.txt",
+   "stored": "01-dba78098-status-report.txt",
+   "bytes": 209,
+   "at": 1792394141
+  }
+ ]
+}

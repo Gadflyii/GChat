@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom'
 import type { ServiceHub } from '@/services'
 import { seedServiceHub } from '@/test/service-hub'
@@ -19,8 +20,12 @@ const { hardwareFixture, defaultGpu } = vi.hoisted(() => {
       api_version: '1.3',
     },
   })
-  return { hardwareFixture: { gpus: [defaultGpu()] }, defaultGpu }
+  return { hardwareFixture: { gpus: [defaultGpu()], setHardwareData: vi.fn(), updateSystemUsage: vi.fn() }, defaultGpu }
 })
+
+const windowService = {
+  openSystemMonitorWindow: vi.fn().mockResolvedValue(undefined),
+}
 
 const hardwareService = {
   getHardwareInfo: vi.fn().mockResolvedValue(null),
@@ -39,42 +44,9 @@ vi.mock('@/containers/HeaderPage', () => ({
   ),
 }))
 
-vi.mock('@/containers/Card', () => ({
-  Card: ({
-    title,
-    children,
-  }: {
-    title?: string
-    children: React.ReactNode
-  }) => (
-    <div data-testid="card">
-      {title && <div>{title}</div>}
-      {children}
-    </div>
-  ),
-  CardItem: ({
-    title,
-    actions,
-  }: {
-    title?: string
-    actions?: React.ReactNode
-  }) => (
-    <div data-testid="card-item">
-      {title && <div>{title}</div>}
-      {actions}
-    </div>
-  ),
-}))
-
 vi.mock('@/components/ui/switch', () => ({
   Switch: ({ checked }: { checked: boolean }) => (
     <input data-testid="switch" type="checkbox" checked={checked} readOnly />
-  ),
-}))
-
-vi.mock('@/components/ui/progress', () => ({
-  Progress: ({ value }: { value: number }) => (
-    <div data-testid="progress">Progress: {value}%</div>
   ),
 }))
 
@@ -97,8 +69,8 @@ vi.mock('@/hooks/useHardware', () => ({
       gpus: hardwareFixture.gpus,
     },
     systemUsage: { cpu: 50, used_memory: 8192, total_memory: 16384, gpus: [] },
-    setHardwareData: vi.fn(),
-    updateSystemUsage: vi.fn(),
+    setHardwareData: hardwareFixture.setHardwareData,
+    updateSystemUsage: hardwareFixture.updateSystemUsage,
     pollingPaused: false,
   }),
 }))
@@ -170,15 +142,115 @@ describe('Hardware Settings', () => {
     hardwareFixture.gpus = [defaultGpu()]
     seedServiceHub({
       hardware: hardwareService as ReturnType<ServiceHub['hardware']>,
-      window: {
-        openSystemMonitorWindow: vi.fn().mockResolvedValue(undefined),
-      } as ReturnType<ServiceHub['window']>,
+      window: windowService as ReturnType<ServiceHub['window']>,
       models: {
         stopAllModels: vi.fn().mockResolvedValue(undefined),
         getActiveModels: vi.fn().mockResolvedValue([]),
       } as ReturnType<ServiceHub['models']>,
     })
     global.IS_MACOS = false
+  })
+
+  it('announces initial loading and the completed inventory', async () => {
+    let finish!: (value: null) => void
+    hardwareService.getHardwareInfo.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const Component = Route.component as React.ComponentType
+    render(<Component />)
+
+    const status = screen.getByRole('status')
+    expect(status).toHaveAttribute('aria-live', 'polite')
+    expect(status).toHaveAttribute('aria-atomic', 'true')
+    expect(status).toHaveTextContent('Loading hardware information...')
+    await act(async () => finish(null))
+    expect(status).toHaveTextContent('Hardware information ready.')
+  })
+
+  it('exposes named numeric CPU and memory usage', async () => {
+    const Component = Route.component as React.ComponentType
+    render(<Component />)
+
+    for (const name of ['CPU usage', 'Memory usage']) {
+      const progress = await screen.findByRole('progressbar', { name })
+      expect(progress).toHaveAttribute('aria-valuenow', '50')
+      expect(progress).toHaveAttribute('aria-valuemin', '0')
+      expect(progress).toHaveAttribute('aria-valuemax', '100')
+    }
+  })
+
+  it('keeps Refresh hardware in keyboard order and focused through a pending refresh', async () => {
+    const user = userEvent.setup()
+    let finish!: () => void
+    hardwareService.refreshHardwareInfo.mockReturnValueOnce(new Promise<void>(resolve => { finish = resolve }))
+    const Component = Route.component as React.ComponentType
+    render(<Component />)
+    const refresh = await screen.findByRole('button', { name: 'Refresh hardware' })
+    const monitor = screen.getByRole('button', { name: 'settings:hardware.systemMonitor' })
+
+    await user.tab()
+    expect(monitor).toHaveFocus()
+    await user.tab()
+    expect(refresh).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(refresh).toHaveFocus()
+    expect(refresh).toHaveAccessibleName('Refreshing…')
+    expect(refresh).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('Intel i7')).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent('Refreshing hardware information…')
+    await user.keyboard('{Enter} ')
+    expect(hardwareService.refreshHardwareInfo).toHaveBeenCalledTimes(1)
+
+    await act(async () => finish())
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Hardware information refreshed.'))
+    expect(refresh).toHaveAccessibleName('Refresh hardware')
+    expect(refresh).toHaveAttribute('aria-disabled', 'false')
+    expect(refresh).toHaveFocus()
+    await user.tab({ shift: true })
+    expect(monitor).toHaveFocus()
+    await user.tab()
+    expect(refresh).toHaveFocus()
+  })
+
+  it('announces a failed refresh and keeps the same keyboard retry', async () => {
+    const user = userEvent.setup()
+    hardwareService.refreshHardwareInfo.mockRejectedValueOnce(new Error('hardware unavailable'))
+    const Component = Route.component as React.ComponentType
+    render(<Component />)
+    const refresh = await screen.findByRole('button', { name: 'Refresh hardware' })
+    refresh.focus()
+    await user.keyboard('{Enter}')
+
+    expect(screen.getByRole('status')).toHaveTextContent('Hardware information could not be refreshed. Choose Refresh hardware to try again.')
+    expect(refresh).toHaveFocus()
+    expect(screen.getByText('Intel i7')).toBeVisible()
+    await user.keyboard(' ')
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Hardware information refreshed.'))
+    expect(hardwareService.refreshHardwareInfo).toHaveBeenCalledTimes(2)
+    expect(refresh).toHaveFocus()
+  })
+
+  it('announces a System Monitor error and leaves its keyboard retry focused', async () => {
+    const user = userEvent.setup()
+    windowService.openSystemMonitorWindow.mockRejectedValueOnce(new Error('window unavailable'))
+    const Component = Route.component as React.ComponentType
+    render(<Component />)
+    await screen.findByRole('button', { name: 'Refresh hardware' })
+    const monitor = screen.getByRole('button', { name: 'settings:hardware.systemMonitor' })
+    monitor.focus()
+    await user.keyboard('{Enter}')
+
+    expect(screen.getByRole('status')).toHaveTextContent('System Monitor could not open. Try opening System Monitor again.')
+    expect(monitor).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(windowService.openSystemMonitorWindow).toHaveBeenCalledTimes(2)
+  })
+
+  it('announces initial read failure and offers Refresh hardware', async () => {
+    hardwareService.getHardwareInfo.mockRejectedValueOnce(new Error('hardware unavailable'))
+    const Component = Route.component as React.ComponentType
+    render(<Component />)
+
+    await screen.findByRole('button', { name: 'Refresh hardware' })
+    expect(screen.getByRole('status')).toHaveTextContent('Hardware information could not be fully loaded. Choose Refresh hardware to try again.')
   })
 
   it('renders hardware settings page', async () => {

@@ -63,7 +63,7 @@ it('shows checkpoint uncertainty and errors, disables offline actions and render
   expect(action).toHaveBeenCalledExactlyOnceWith('resume')
   view.rerender(<EngineHardwareProfile gpus={gpus} profile={{ ...profile('completed'), finished_unix_ms: 62000 }} offline={false} disabled={false} action={action} />)
   expect(screen.getByRole('status')).toHaveTextContent('Graphics-card settings ready · 61 seconds elapsed')
-  expect(screen.getByText(/do not guarantee that every model or conversation length will fit/)).toBeInTheDocument()
+  expect(screen.getByText(/do not guarantee that every model or context length will fit/)).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Continue setup' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('checkbox'))
   fireEvent.click(screen.getByRole('button', { name: 'Measure again' }))
@@ -144,4 +144,29 @@ it('drops the how-long-it-takes note once the profile is ready and keeps it whil
   view.rerender(<EngineHardwareProfile gpus={gpus} profile={profile('completed')} offline={false} disabled={false} action={vi.fn()} />)
   expect(screen.queryByText(/Allow 10 minutes to an hour/)).not.toBeInTheDocument()
   expect(screen.getByText(/Your graphics-card settings are ready/)).toBeInTheDocument()
+})
+
+it('explains the typed RAM shortfall before opening details and resumes only on request', () => {
+  const action = vi.fn().mockResolvedValue(undefined)
+  const failure = {
+    resource: 'host_ram' as const, phase: 'GPU staging', total_bytes: 64 * 1024 ** 3,
+    reserve_bytes: 16 * 1024 ** 3, retained_buffer_bytes: 8 * 1024 ** 3,
+    available_bytes: 22 * 1024 ** 3 - 1, required_available_bytes: 24 * 1024 ** 3,
+    bytes_to_free: 2 * 1024 ** 3 + 1,
+    nodes: [{ numa_node: 0, retained_buffer_bytes: 8 * 1024 ** 3,
+      available_bytes: 7 * 1024 ** 3, bytes_to_free: 1024 ** 3 }],
+  }
+  render(<EngineHardwareProfile gpus={gpus} profile={{ ...profile('failed'),
+    host_memory_admission_failure: failure, error: 'Native RAM admission warning with exact bytes' }}
+    offline={false} disabled={false} action={action} />)
+  expect(screen.getByText('Graphics-card setup needs more free system memory.')).toBeVisible()
+  expect(screen.getByText(/Close apps to free at least 2.15 GB, then retry/)).toBeVisible()
+  expect(screen.getByText(/System-memory reserve: 17.18 GB. Measurement buffers: 8.59 GB. Available: 23.63 GB; required: 25.77 GB/)).toBeVisible()
+  expect(screen.getByText(/Memory node 0: 7.52 GB available; 8.59 GB needed.*Free at least 1.08 GB/)).toBeVisible()
+  expect(screen.getByText('Native RAM admission warning with exact bytes')).not.toBeVisible()
+  expect(action).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Continue setup' }))
+  expect(action).toHaveBeenCalledExactlyOnceWith('resume')
+  fireEvent.click(screen.getByText('Setup error details'))
+  expect(screen.getByText('Native RAM admission warning with exact bytes')).toBeVisible()
 })

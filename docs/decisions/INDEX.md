@@ -569,3 +569,5 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-18** — [Restrict plugin IPC to local app webviews](2026-10-18-restrict-plugin-ipc-to-local-webviews.md)
 - **2026-10-18** — [Isolate HTML previews from desktop commands](2026-10-18-isolate-html-previews-from-desktop-commands.md)
 - **2026-10-18** — [Preserve confirmed model Stop during status recovery](2026-10-18-preserve-confirmed-model-stop-during-status-recovery.md)
+- **2026-10-19** — [Dispatch Chat sub-agents through spawn and wait](2026-10-19-dispatch-chat-sub-agents-through-spawn-and-wait.md)
+- **2026-10-19** — [Dispatch Gbot sub-agents as child tasks](2026-10-19-dispatch-gbot-sub-agents-as-child-tasks.md)

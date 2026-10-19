@@ -149,7 +149,7 @@ Advanced model settings** for **GPU memory to keep free (MB)**. New custom
 launches default to 300 MB, where one MB is 1,048,576 bytes. The amount applies to
 each selected GPU. Raise it if desktop apps or games on that GPU cause slowdowns.
 Editing an existing model retains its saved reserve; use **Save and restart model**
-to apply a change. Automatic conversation memory adjusts to the reserve. A fixed
+to apply a change. Automatic K/V cache adjusts to the reserve. A fixed
 conversation-memory limit may prevent startup if it leaves too little memory free;
 GChat shows the Engine's reason and recovery steps.
 

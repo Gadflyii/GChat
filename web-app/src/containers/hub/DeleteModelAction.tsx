@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, type RefObject } from 'react'
 import { IconTrash } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTranslation } from '@/i18n/react-i18next-compat'
@@ -26,6 +27,8 @@ export type DeleteModelActionProps = {
   externalReference?: boolean
   /** Called after accepted removal and the initial inventory refresh attempt. */
   onDeleted?: () => void
+  /** Stable page control to focus if deleting the model removes its row. */
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 /**
@@ -41,6 +44,7 @@ export function DeleteModelAction({
   label,
   externalReference = false,
   onDeleted,
+  returnFocusRef,
 }: DeleteModelActionProps) {
   const { t } = useTranslation()
   const serviceHub = useServiceHub()
@@ -48,6 +52,8 @@ export function DeleteModelAction({
   const [open, setOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const deletingRef = useRef(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleDelete = useCallback(async () => {
@@ -55,6 +61,7 @@ export function DeleteModelAction({
     deletingRef.current = true
     setDeleting(true)
     setError(null)
+    closeRef.current?.focus()
     try {
       const refreshError = await deleteLocalModel(serviceHub, modelId, provider)
       onDeleted?.()
@@ -80,22 +87,28 @@ export function DeleteModelAction({
   }, [externalReference, label, modelId, onDeleted, provider, serviceHub, t])
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => {
-      if (!deletingRef.current) setOpen(nextOpen)
-    }}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        disabled={deleting}
-        onClick={() => { setError(null); setOpen(true) }}
-        title={externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
-        aria-label={externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
-        className="shrink-0 text-muted-foreground hover:text-destructive"
-      >
-        <IconTrash size={16} />
-      </Button>
-      <DialogContent showCloseButton={!deleting} aria-busy={deleting}>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          ref={triggerRef}
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => { setError(null) }}
+          title={externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
+          aria-label={externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
+          className="shrink-0 text-muted-foreground hover:text-destructive"
+        >
+          <IconTrash size={16} />
+        </Button>
+      </DialogTrigger>
+      <DialogContent onCloseAutoFocus={event => {
+        const target = triggerRef.current?.isConnected ? triggerRef.current : returnFocusRef?.current
+        if (target) {
+          event.preventDefault()
+          target.focus()
+        }
+      }}>
         <DialogHeader>
           <DialogTitle>
             {externalReference ? `Remove ${label ?? modelId} from Models?` : t('common:deleteModel.title', { modelId: label ?? modelId })}
@@ -104,19 +117,20 @@ export function DeleteModelAction({
             {externalReference ? 'The original model file will remain in place. Only its Models entry will be removed.' : t('common:deleteModel.description')}
           </DialogDescription>
         </DialogHeader>
+        {deleting && <p role="status" aria-live="polite">{externalReference ? 'Removing model…' : 'Deleting model…'} You can close this dialog while the request finishes.</p>}
         {error && <div role="alert" className="space-y-2 text-sm text-destructive">
           <p>{externalReference ? 'Could not remove this model from Models. Stop it if it is running, then try again.' : 'Could not delete this model. Stop it if it is running, then try again.'}</p>
           <details><summary className="cursor-pointer">Technical details</summary><p className="mt-2 whitespace-pre-wrap break-words">{error}</p></details>
         </div>}
         <DialogFooter className="mt-2">
           <Button
+            ref={closeRef}
             variant="ghost"
             size="sm"
             autoFocus
-            disabled={deleting}
-            onClick={() => { if (!deletingRef.current) setOpen(false) }}
+            onClick={() => setOpen(false)}
           >
-            {t('common:deleteModel.cancel')}
+            {deleting ? 'Close' : t('common:deleteModel.cancel')}
           </Button>
           <Button
             variant="destructive"

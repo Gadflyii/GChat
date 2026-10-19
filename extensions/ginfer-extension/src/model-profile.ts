@@ -13,9 +13,7 @@ const QWEN_WEIGHTS = new Set([
   'groupwise-int-dflash2-q4-g32',
   'groupwise-int-dflash2-q4w8',
   'groupwise-int-dflash2-w8',
-  'smol-q2g64-dflash2-q4',
-  'smol-q2g64-l51down-q4-dflash2-q4',
-  'smol-q2g64-fullattn-gate-value-l51down-q4-dflash2-q4',
+  'smol-q2g64-mix-dflash2-q4',
   'nvfp4',
   'nvfp4-dflash2-q4',
   'nvfp4-dflash2-q4w8',
@@ -32,7 +30,7 @@ const MUSE_WEIGHTS = new Set([
   'nvfp4-dflash-q4w8',
   'nvfp4-dflash-w8',
   'nvfp4-dflash-nvfp4',
-  'smol-q2g64-dflash-q4',
+  'smol-q2g64-mix-dflash-q4',
 ])
 const FLASH_WEIGHTS = new Set(['groupwise-int', 'smol-q2g64', 'nvfp4'])
 

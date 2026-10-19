@@ -1,0 +1,16 @@
+75c75
+<   default: ginfer/a3527060-3d93-4563-8b7a-37fb9f5f1bc5/503ff511-925e-42b8-94b2-1902706699fe
+---
+>   default: ginfer/a3527060-3d93-4563-8b7a-37fb9f5f1bc5/f679da32-0b69-4dab-b736-9c9d9010c4ac
+2338c2338
+<   model: ginfer/a3527060-3d93-4563-8b7a-37fb9f5f1bc5/503ff511-925e-42b8-94b2-1902706699fe
+---
+>   model: ginfer/a3527060-3d93-4563-8b7a-37fb9f5f1bc5/f679da32-0b69-4dab-b736-9c9d9010c4ac
+2340c2340
+<     ginfer/a3527060-3d93-4563-8b7a-37fb9f5f1bc5/503ff511-925e-42b8-94b2-1902706699fe:
+---
+>     ginfer/a3527060-3d93-4563-8b7a-37fb9f5f1bc5/f679da32-0b69-4dab-b736-9c9d9010c4ac:
+2347a2348,2350
+> auxiliary:
+>   compression:
+>     reasoning_effort: "low"
