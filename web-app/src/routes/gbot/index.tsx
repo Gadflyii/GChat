@@ -1,4 +1,5 @@
 import { GbotTaskFiles } from '@/components/GbotTaskFiles'
+import { ReadAloud, VoiceInput } from '@/components/GbotVoice'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { listen } from '@tauri-apps/api/event'
@@ -1497,7 +1498,7 @@ function GbotPage() {
                             message.role === 'user' ||
                             message.role === 'assistant'
                         )
-                        .map((message, index) => (
+                        .map((message, index, shown) => (
                           <div key={index} className="space-y-1">
                             <p className="text-xs font-medium text-muted-foreground">
                               {message.role === 'user' ? 'You' : bot.name}
@@ -1505,6 +1506,11 @@ function GbotPage() {
                             <p className="whitespace-pre-wrap break-words text-sm">
                               {messageText(message.content)}
                             </p>
+                            {message.role === 'assistant' &&
+                              index === shown.length - 1 &&
+                              task.state !== 'running' && (
+                                <ReadAloud text={messageText(message.content)} />
+                              )}
                           </div>
                         ))}
                       {task.help_requests?.map((request) => (
@@ -1570,7 +1576,7 @@ function GbotPage() {
                     </div>
                   )}
                   <form
-                    className="flex gap-2"
+                    className="flex flex-wrap gap-2"
                     aria-busy={submittingTask === workspaceId}
                     onSubmit={(event) => {
                       event.preventDefault()
@@ -1625,6 +1631,7 @@ function GbotPage() {
                     }}
                   >
                     <Input
+                      className="min-w-0 flex-1"
                       aria-label="Bot task"
                       aria-describedby={
                         taskError !== undefined
@@ -1639,6 +1646,18 @@ function GbotPage() {
                           setPrompts((previous) => ({
                             ...previous,
                             [workspaceId]: value,
+                          }))
+                      }}
+                    />
+                    <VoiceInput
+                      disabled={busy || Boolean(submittingTask) || !ready || !botHasControl}
+                      onText={(spoken) => {
+                        if (workspaceId)
+                          setPrompts((previous) => ({
+                            ...previous,
+                            [workspaceId]: previous[workspaceId]
+                              ? `${previous[workspaceId]} ${spoken}`
+                              : spoken,
                           }))
                       }}
                     />

@@ -32,3 +32,5 @@ pub mod tray_status;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod updater;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod voice;
