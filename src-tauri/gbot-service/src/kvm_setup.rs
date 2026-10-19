@@ -1797,6 +1797,8 @@ mod tests {
             }],
             assignments: vec![],
             connector_accounts: vec![],
+            site_rules: vec![],
+            memories: vec![],
         };
         let other = SessionIdentity {
             workspace_id: WorkspaceId::new(),

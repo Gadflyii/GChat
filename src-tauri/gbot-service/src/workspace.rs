@@ -1520,7 +1520,7 @@ impl WorkspaceRuntime {
         let GuestOperationKind::Desktop { tool, arguments } = &request.operation else {
             return;
         };
-        if tool != "get_browser_state" {
+        if tool != "get_browser_state" && !tool.starts_with("browser_") {
             return;
         }
         let GuestOutcome::Success { result: GuestResult::Desktop { result } } = &reply.outcome else {

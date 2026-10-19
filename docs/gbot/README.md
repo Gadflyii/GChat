@@ -4244,7 +4244,7 @@ Credentials in an address (`https://allowed.com@blocked.com`) never count as the
 not limited. Limits to know: it covers the page-aware browser tools only, so the bot using another program, the
 terminal or native keyboard input on its own computer is not stopped; it is a guardrail against a browsing bot
 wandering or being steered, not a sandbox. The page address is read from the tab's own fields in the browser state
-(`url`, `tab_url`, `page_url`, `current_url`), never from links on the page.
+(`url`, `tab_url`, `page_url`, `current_url`), never from links on the page, and the same check runs on the result of every browser action (so a redirect or a click that lands on a refused site hides that page too). The driver's exact field name for the page address was not captured live in this session; if the driver reports it under another name the hiding step does not act, and the navigate refusal still applies.
 
 **Memory.** Short facts the bot remembers about the person (up to 100, 400 characters each). The person sees, adds,
 edits and deletes them under Memory. Every new or resumed task starts with the list as a system note that says it
