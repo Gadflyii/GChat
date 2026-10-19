@@ -528,6 +528,7 @@ impl TaskRunner {
         if sub_agent.is_none() && self.runtime.task_runner().is_some() {
             tools.push(crate::sub_agents::tool());
         }
+        tools.push(crate::task_files::tool());
         let mut task =
             CuaTask::create_with_id(self.path(id), id, identity, messages, tools).await?;
         if let Some(link) = sub_agent {
@@ -815,6 +816,28 @@ impl TaskRunner {
     }
 
     /// Cancelling a parent also cancels its unfinished sub-agents.
+    /// The bytes of one file the bot handed back, with the name to save it under.
+    pub async fn task_file(&self, id: Uuid, file: Uuid) -> Result<(String, Vec<u8>)> {
+        let output = {
+            let state = self.state.lock("task_file", None, Some(id)).await;
+            let record = match state.actors.get(&id) {
+                Some(actor) => actor.record.borrow().clone(),
+                None => state.records.get(&id).cloned().ok_or(TaskRunnerError::NotFound)?,
+            };
+            record
+                .outputs
+                .into_iter()
+                .find(|output| output.id == file)
+                .ok_or(TaskRunnerError::NotFound)?
+        };
+        let path = crate::task_files::dir_of(&self.path(id)).join(&output.stored);
+        let bytes = tokio::task::spawn_blocking(move || std::fs::read(path))
+            .await
+            .map_err(|_| TaskRunnerError::NotFound)?
+            .map_err(|_| TaskRunnerError::NotFound)?;
+        Ok((output.name, bytes))
+    }
+
     pub async fn cancel(&self, id: Uuid) -> Result<TaskRecord> {
         let mut state = self.state.lock("cancel", None, Some(id)).await;
         if state.closed {

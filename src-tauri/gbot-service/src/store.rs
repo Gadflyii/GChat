@@ -46,6 +46,11 @@ pub(crate) fn try_lock_settled(file: &fs::File) -> Result<(), fs::TryLockError> 
 }
 
 impl Store {
+    /// Folder for files that belong to this record, beside it.
+    pub(crate) fn files_dir(&self) -> PathBuf {
+        crate::task_files::dir_of(&self.path)
+    }
+
     pub(crate) async fn open(path: PathBuf) -> Result<Self, ServiceError> {
         if path.file_name().is_none() {
             return Err(ServiceError::InvalidState);

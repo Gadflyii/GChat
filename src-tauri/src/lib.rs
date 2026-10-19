@@ -110,6 +110,7 @@ pub fn run() {
     let app_builder = app_builder.invoke_handler(tauri::generate_handler![
         core::setup::bundled_resources_ready,
         core::gbot::gbot_command,
+        core::gbot::gbot_task_file,
         core::gbot::gbot_service_quit,
         core::gbot::gbot_service_start,
         core::gbot::gbot_service_target,

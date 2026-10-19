@@ -4145,3 +4145,24 @@ Seven Rust and four web cases cover calendar rules, DST, the mailbox fixture, li
 the UI; the folder trigger was also run on the bot's computer in a Debian 13 guest (error
 shown for a missing folder, baseline after it was created, one task started with the file
 details when the bot wrote a file into it).
+
+## Files a bot hands back — core, October 19
+
+A bot can now hand back finished files. The model gets one more tool, `hand_back_file`
+(`gbot-service/src/task_files.rs`): after the usual approval it copies a saved file from the
+bot's computer into that task's own folder on the service computer
+(`<data>/gbot/tasks/<task>.files/`, private, 16 MB and 12 files per task) and records it on the
+task. Any format the bot's computer can produce works; the service stores bytes and never runs
+or interprets them. The task card shows **Files from this task** with **Open** (the system's
+default app for that kind of file) and **Save as…** (a native Save dialog). The files travel
+through the service's `tasks/file` route, so they work when GChat is connected to a Gbot
+service on another computer too.
+
+Checked live in a fresh Debian 13 guest on S1 (the accepted RC DEB with this build's
+binary, Qwen 3.8 27B INT brain): the bot wrote a status report in Mousepad, saved it and
+handed it back (209 bytes); the task listed it, **Save as…** wrote an identical file and **Open**
+opened it in the default app. [Record and images](../../out/core-gbot-files-20261019/task-record.json).
+Five Rust and three page cases cover the rules (full path required, approval first, nothing
+stored on refusal or denial, no second copy on resume, size and count limits). Not done: a
+spreadsheet or deck produced by an office suite (the bot's computer has none; the format is
+whatever its apps can save), and hand-back from a bot on Windows or a cloud computer.

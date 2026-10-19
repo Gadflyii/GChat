@@ -189,6 +189,13 @@ struct PrepareLanTools {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct TaskFileRequest {
+    task_id: Uuid,
+    file_id: Uuid,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct TaskId {
     id: Uuid,
 }
@@ -1078,6 +1085,27 @@ async fn route(
             (None, _) => executor_unavailable(),
             _ => invalid_request(),
         },
+        (&Method::POST, "/v1/tasks/file") => {
+            match (tasks, parse_body::<TaskFileRequest>(request).await) {
+                (Some(tasks), Some(input)) => task_result(
+                    tasks
+                        .task_file(input.task_id, input.file_id)
+                        .await
+                        .map(|(name, bytes)| {
+                            serde_json::json!({
+                                "name": name,
+                                "bytes": bytes.len(),
+                                "data_base64": base64::Engine::encode(
+                                    &base64::engine::general_purpose::STANDARD,
+                                    &bytes
+                                ),
+                            })
+                        }),
+                ),
+                (None, _) => executor_unavailable(),
+                _ => invalid_request(),
+            }
+        }
         (&Method::POST, "/v1/tasks/approval") => {
             match (tasks, parse_body::<ApprovalDecision>(request).await) {
                 (Some(tasks), Some(input)) => {
