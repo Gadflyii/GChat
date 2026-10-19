@@ -104,26 +104,29 @@ impl BotSiteRules {
     }
 }
 
-/// The address of the page a get_browser_state result describes, read only from the tab's own
-/// fields (never from links or text on the page).
-pub fn page_url(result: &serde_json::Value) -> Option<String> {
+/// The addresses of the pages a browser-tool result describes, with the tab each belongs to. Read only
+/// from the driver's own page fields: `page.url` in a snapshot, `url` in a navigate result and
+/// `tabs[].url` when binding a window (verified live), never from links or text on the page.
+pub fn page_urls(result: &serde_json::Value) -> Vec<(Option<String>, String)> {
     let content = result.get("structuredContent").unwrap_or(result);
-    for holder in [Some(content), content.get("tab"), content.get("page"), content.get("snapshot")]
-        .into_iter()
-        .flatten()
-    {
+    let own_tab = content.get("tab_id").and_then(serde_json::Value::as_str).map(str::to_owned);
+    let mut found = Vec::new();
+    for holder in [Some(content), content.get("tab"), content.get("page")].into_iter().flatten() {
         for key in ["url", "tab_url", "page_url", "current_url"] {
             if let Some(url) = holder.get(key).and_then(serde_json::Value::as_str) {
-                return Some(url.to_owned());
+                found.push((own_tab.clone(), url.to_owned()));
+                break;
             }
         }
     }
-    None
-}
-
-pub fn page_tab(result: &serde_json::Value) -> Option<String> {
-    let content = result.get("structuredContent").unwrap_or(result);
-    content.get("tab_id").and_then(serde_json::Value::as_str).map(str::to_owned)
+    if let Some(tabs) = content.get("tabs").and_then(serde_json::Value::as_array) {
+        for tab in tabs {
+            if let Some(url) = tab.get("url").and_then(serde_json::Value::as_str) {
+                found.push((tab.get("tab_id").and_then(serde_json::Value::as_str).map(str::to_owned), url.to_owned()));
+            }
+        }
+    }
+    found
 }
 
 #[cfg(test)]
@@ -164,12 +167,16 @@ mod tests {
 
     #[test]
     fn the_page_address_comes_from_the_tab_not_from_links_on_the_page() {
-        let state = serde_json::json!({"structuredContent": {"tab_id": "t1", "url": "https://bank.com/x",
-            "outline": [{"role": "link", "name": "Go", "url": "https://ok.com"}]}});
-        assert_eq!(page_url(&state).as_deref(), Some("https://bank.com/x"));
-        assert_eq!(page_tab(&state).as_deref(), Some("t1"));
+        let navigate = serde_json::json!({"structuredContent": {"tab_id": "t1", "url": "https://bank.com/x"}});
+        assert_eq!(page_urls(&navigate), [(Some("t1".to_owned()), "https://bank.com/x".to_owned())]);
+        let snapshot = serde_json::json!({"structuredContent": {"tab_id": "t2", "page": {"title": "T", "url": "http://10.0.2.2:8000/"},
+            "refs": [{"url": "https://bank.com"}], "content_refs": [{"name": "link", "url": "https://bank.com"}]}});
+        assert_eq!(page_urls(&snapshot), [(Some("t2".to_owned()), "http://10.0.2.2:8000/".to_owned())]);
+        let bind = serde_json::json!({"structuredContent": {"mode": "bind", "tabs": [
+            {"tab_id": "a", "url": "https://ok.com", "title": "x"}, {"tab_id": "b", "url": "https://bank.com/", "title": "y"}]}});
+        assert_eq!(page_urls(&bind).len(), 2);
         let only_links = serde_json::json!({"structuredContent": {"outline": [{"url": "https://bank.com"}]}});
-        assert_eq!(page_url(&only_links), None);
+        assert!(page_urls(&only_links).is_empty());
     }
 
     #[test]

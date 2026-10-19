@@ -4243,8 +4243,17 @@ further browser actions until it navigates to an allowed site, and the bot is to
 Credentials in an address (`https://allowed.com@blocked.com`) never count as the host. A person who has taken over is
 not limited. Limits to know: it covers the page-aware browser tools only, so the bot using another program, the
 terminal or native keyboard input on its own computer is not stopped; it is a guardrail against a browsing bot
-wandering or being steered, not a sandbox. The page address is read from the tab's own fields in the browser state
-(`url`, `tab_url`, `page_url`, `current_url`), never from links on the page, and the same check runs on the result of every browser action (so a redirect or a click that lands on a refused site hides that page too). The driver's exact field name for the page address was not captured live in this session; if the driver reports it under another name the hiding step does not act, and the navigate refusal still applies.
+wandering or being steered, not a sandbox. The page address is read only from the driver's own fields, captured live in a Debian guest: `page.url` in a
+`get_browser_state` snapshot, `url` in a `browser_navigate` result and `tabs[].url` when a window is bound, never from
+links or text on the page; the same check runs on the result of every browser action, so a redirect or a click that
+lands on a refused site hides that page too.
+
+Live check (Debian 13 guest, Chromium driven by the Cua driver, rules: blocked `example.com`; page served at
+`http://10.0.2.2:8000/` with a link to example.com): `browser_navigate` to example.com came back "example.com is a blocked
+website for this bot" without reaching the guest; navigating to the allowed page worked and its snapshot was readable;
+clicking its link landed the tab on example.com and the next `get_browser_state` came back "The page content is
+hidden. Navigate this tab to an allowed website". A fresh bind afterwards still reported the tab's title and address
+(`tabs[]`); that gap is closed by reading `tabs[].url` as above.
 
 **Memory.** Short facts the bot remembers about the person (up to 100, 400 characters each). The person sees, adds,
 edits and deletes them under Memory. Every new or resumed task starts with the list as a system note that says it

@@ -1531,29 +1531,35 @@ impl WorkspaceRuntime {
         if rules.is_empty() {
             return;
         }
-        let Some(url) = crate::sites::page_url(result) else { return };
-        let tab = arguments
-            .get("tab_id")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned)
-            .or_else(|| crate::sites::page_tab(result));
-        match rules.check(&url) {
-            Ok(()) => {
-                if let Some(tab) = tab {
-                    if let Some(set) = self.blocked_tabs.lock().await.get_mut(&workspace) {
-                        set.remove(&tab);
+        let pages = crate::sites::page_urls(result);
+        if pages.is_empty() {
+            return;
+        }
+        let mut refusal = None;
+        {
+            let mut blocked = self.blocked_tabs.lock().await;
+            for (tab, url) in &pages {
+                let tab = tab.clone().or_else(|| arguments.get("tab_id").and_then(serde_json::Value::as_str).map(str::to_owned));
+                match rules.check(url) {
+                    Ok(()) => {
+                        if let (Some(tab), Some(set)) = (&tab, blocked.get_mut(&workspace)) {
+                            set.remove(tab);
+                        }
+                    }
+                    Err(reason) => {
+                        if let Some(tab) = tab {
+                            blocked.entry(workspace).or_default().insert(tab);
+                        }
+                        refusal.get_or_insert(reason);
                     }
                 }
             }
-            Err(reason) => {
-                if let Some(tab) = tab {
-                    self.blocked_tabs.lock().await.entry(workspace).or_default().insert(tab);
-                }
-                *reply = Self::site_refusal_reply(
-                    request,
-                    &format!("{reason} The page content is hidden. Navigate this tab to an allowed website."),
-                );
-            }
+        }
+        if let Some(reason) = refusal {
+            *reply = Self::site_refusal_reply(
+                request,
+                &format!("{reason} The page content is hidden. Navigate this tab to an allowed website."),
+            );
         }
     }
 
@@ -2031,6 +2037,20 @@ mod site_tests {
         assert!(runtime.site_refusal(&browser(id, "browser_click", json!({"tab_id": "t2", "ref": "p1:2"}))).await.is_none());
         assert!(runtime.site_refusal(&browser(id, "browser_navigate", json!({"tab_id": "t1", "url": "https://ok.com"}))).await.is_none());
         assert!(runtime.site_refusal(&click).await.is_none());
+        // Binding a window lists its tabs with their addresses; a refused tab hides the whole list.
+        let bind_request = browser(id, "get_browser_state", json!({"pid": 1, "window_id": 2}));
+        let mut bind = GuestReply {
+            identity: bind_request.identity,
+            operation_id: bind_request.operation_id,
+            outcome: GuestOutcome::Success {
+                result: GuestResult::Desktop {
+                    result: json!({"isError": false, "structuredContent": {"mode": "bind", "tabs": [{"tab_id": "t9", "url": "https://bank.com/", "title": "Bank"}]}}),
+                },
+            },
+        };
+        runtime.site_scrub(&bind_request, &mut bind).await;
+        assert!(text_of(&bind).contains("hidden"));
+        assert!(text_of(&runtime.site_refusal(&browser(id, "browser_click", json!({"tab_id": "t9", "ref": "p1:1"}))).await.unwrap()).contains("Navigate the tab"));
         // An ordinary page is shown as it is.
         let mut fine = GuestReply {
             identity: state_request.identity,
