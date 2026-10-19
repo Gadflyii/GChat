@@ -726,9 +726,14 @@ if (location.pathname === '/logs') {
             .result
             .as_ref()
             .ok_or("No main result (not a denial PASS)")?;
+        // join_path resolves its base with canonicalize, which yields the
+        // verbatim \\?\ form on Windows.
+        let expected_join = metadata["expectedJoin"].as_str().unwrap_or_default();
         require(
             result["mainApp"]["kind"] == "success"
-                && result["mainApp"]["value"] == metadata["expectedJoin"],
+                && result["mainApp"]["value"].as_str().is_some_and(|joined| {
+                    joined.strip_prefix(r"\\?\").unwrap_or(joined) == expected_join
+                }),
             "Main application invoke did not succeed",
         )?;
         require(
