@@ -752,6 +752,10 @@ function reportModelLoadError(
     return
   }
 
+  // No tested settings: the Models page checks and starts settings itself and says so in plain words,
+  // so a second toast pointing at GInfer Hosts would only contradict it.
+  if (err.code === 'no_qualified_profile') return
+
   // Only user-initiated loads surface a toast for every other failure.
   // Automatic/background loads (startup auto-start, ChatInput auto-start,
   // onboarding launches, post-import auto-switch) pass `isAutoStart` and

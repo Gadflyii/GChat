@@ -321,12 +321,20 @@ async fn load_on_host_inner(
             let launch: LaunchRequest = serde_json::from_value(i["profile"].clone()).ok()?;
             let id: Uuid = serde_json::from_value(i["instance_id"].clone()).ok()?;
             let settings_match = if config.use_profile_defaults {
-                automatic_launch.as_ref().is_some_and(|expected| {
-                    launch.gpu_uuids == expected.gpu_uuids
-                        && launch.max_context == expected.max_context
-                        && launch.concurrency == expected.concurrency
-                        && launch.options == expected.options
-                })
+                match automatic_launch.as_ref() {
+                    Some(expected) => {
+                        launch.gpu_uuids == expected.gpu_uuids
+                            && launch.max_context == expected.max_context
+                            && launch.concurrency == expected.concurrency
+                            && launch.options == expected.options
+                    }
+                    // No tested profile exists, so the settings the Models page checked and started with are the
+                    // only ones there can be: use the running instance of this model on the visible cards.
+                    None => launch
+                        .gpu_uuids
+                        .iter()
+                        .all(|uuid| visible.iter().any(|v| v == uuid)),
+                }
             } else {
                 matches_resident(&launch, &config, &requested, &visible)
             };
@@ -358,7 +366,7 @@ async fn load_on_host_inner(
         ).await;
     }
     if config.use_profile_defaults || config.max_context == 0 || config.max_concurrency == 0 {
-        return Err(format!("[{NO_QUALIFIED_PROFILE}] {}", "No tested settings are available to load this model automatically. To start it, open GInfer Hosts, expand Model and memory settings and Choose model settings, then select Check model settings and Start model with these settings."));
+        return Err(format!("[{NO_QUALIFIED_PROFILE}] {}", "No tested settings are available for this model on this computer."));
     }
     let occupied: BTreeSet<&str> = snapshot["instances"]
         .as_array()
@@ -1030,8 +1038,9 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
             sessions.clone(), control.clone(), "desktop-alias".into(),
             artifact.to_string_lossy().into_owned(),
             GinferConfig { use_profile_defaults: true, ..config.clone() }, 5,
-        ).await.unwrap_err();
-        assert_eq!(automatic, "[no_qualified_profile] No tested settings are available to load this model automatically. To start it, open GInfer Hosts, expand Model and memory settings and Choose model settings, then select Check model settings and Start model with these settings.");
+        ).await.unwrap();
+        // With no tested profile the running instance of this model is used, not refused and not duplicated.
+        assert_eq!(sessions.lock().await[&automatic.pid].owner.connection.instance_id, id);
         assert_eq!(host.processes.lock().await.instances().count(), 1);
         assert!(host.processes.lock().await.endpoint(id).is_ok());
         let changed = GinferConfig {
