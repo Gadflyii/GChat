@@ -4030,3 +4030,18 @@ Service selection persists and M365 account metadata comes from that service; re
 Acceptance: focused grant/lease/TLS, saved selection, account metadata and wizard/owner-control cases; affected types/lint and strict Clippy. Host adds only the existing `jan-utils` dependency edge, with no new packages or versions.
 Status: Host 4, TLS 1, M365 3, native 4 and UI 33 cases pass; types/lint and strict Clippy pass. Next action: reviewed main merge; physical paired-LAN qualification remains owed. [Control-grant decision](../decisions/2026-10-13-approve-lan-gbot-control-separately.md).
 Inventory: GChat-owned `/ai/gchat-worktrees/gbot-guided-service-36ce`, branch `feat/gbot-guided-service-36ce`, baseline `cf2dd919c`; borrowed cache `/ai/gchat/src-tauri/target`; retained checks `/ai/gchat/out/gbot-guided-service-20261013/result.json`. All checks ended; no owned job, guest or model.
+
+## Task and approval notifications — core, October 19
+
+Gbot now raises a desktop notification, through the shipped notification path, when a
+task **finishes**, **needs review**, is **waiting for your answer**, or a new **approval**
+is pending, even while another page is open. `useGbotNotifications` (mounted once in the
+root layout) listens to the service's `gbot-task-update` event, reads task and approval
+lists the connected service already provides and compares them with the previous
+snapshot (`lib/gbot-alerts.ts`); the first snapshot after a connection is only recorded,
+so history is never replayed. It is silent when the service is not connected (the fetch
+fails), so it never starts the service or opens secure storage. It is skipped while the
+window is focused on the Gbot page and follows the same master switch as reply
+notifications. Eight focused cases cover the diff rules and the hook; ONE `make verify`
+passes. Not run: an installed notification on a real desktop, and the sleep or
+notification-permission behaviour of each OS. Closes parity row 18 at source level.
