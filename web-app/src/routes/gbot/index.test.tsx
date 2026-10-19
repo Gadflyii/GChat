@@ -116,6 +116,9 @@ function readyTaskBots(
           ...stateOverrides,
         }
       if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+      if (path === 'sites/get')
+        return { workspace_id: 'x', allowed: [], blocked: [] }
+      if (path === 'memory/get') return { facts: [] }
       if (path === 'schedules') return { schedules: [], stopped: null }
       if (path === 'tasks/start') return startTask ? startTask(body) : {}
       return []
@@ -1310,6 +1313,9 @@ it('explicitly recovers an orphaned paused owner while keeping hand-back and set
     if (path === 'setup/local-vm/preflight') return { ready: true, issues: [] }
     if (path === 'setup/local-vm/start') return record
     if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+    if (path === 'sites/get')
+      return { workspace_id: 'x', allowed: [], blocked: [] }
+    if (path === 'memory/get') return { facts: [] }
     if (path === 'control/recover') {
       expect(body).toEqual({ identity, expected_owner: previousOwner, owner })
       if (++recoveries === 1) throw new Error('Media close failed')
@@ -1425,6 +1431,9 @@ it.each([
   mocks.listen.mockResolvedValue(() => {})
   mocks.call.mockImplementation(async (path: string) => {
     if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+    if (path === 'sites/get')
+      return { workspace_id: 'x', allowed: [], blocked: [] }
+    if (path === 'memory/get') return { facts: [] }
     return path === 'state'
       ? {
           workspaces: [{ id: identity.workspace_id, name: 'Writer' }],
@@ -2308,6 +2317,9 @@ it('imports an SSH workspace and preserves setup identity on retry', async () =>
   mocks.call.mockImplementation(
     async (path: string, body: Record<string, unknown>) => {
       if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+      if (path === 'sites/get')
+        return { workspace_id: 'x', allowed: [], blocked: [] }
+      if (path === 'memory/get') return { facts: [] }
       if (path === 'state')
         return { workspaces, live_sessions: [], assignments: [], controls: [] }
       if (path === 'workspaces/ssh/key')
@@ -2513,6 +2525,9 @@ it.each([false, true])(
     mocks.call.mockImplementation(
       async (path: string, body: Record<string, string>) => {
         if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+        if (path === 'sites/get')
+          return { workspace_id: 'x', allowed: [], blocked: [] }
+        if (path === 'memory/get') return { facts: [] }
         if (path === 'state')
           return actionFinished ? refreshedState : snapshot()
         if (path === action) {
@@ -2573,6 +2588,9 @@ it('isolates bot assignments and approvals, and holds new tasks during takeover'
   mocks.call.mockImplementation(
     async (path: string, body: Record<string, unknown>) => {
       if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+      if (path === 'sites/get')
+        return { workspace_id: 'x', allowed: [], blocked: [] }
+      if (path === 'memory/get') return { facts: [] }
       if (path === 'state')
         return {
           workspaces: [
@@ -3514,6 +3532,9 @@ it('sends task-bound human replies and declines, retaining them after reload', a
   mocks.call.mockImplementation(
     async (path: string, body: Record<string, unknown>) => {
       if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+      if (path === 'sites/get')
+        return { workspace_id: 'x', allowed: [], blocked: [] }
+      if (path === 'memory/get') return { facts: [] }
       if (path === 'state')
         return {
           workspaces: [{ id: 'one', name: 'Writer' }],
@@ -3696,6 +3717,9 @@ it('opens view-only and closes interactive input before handing back to the bot'
   mocks.call.mockImplementation(
     async (path: string, body: Record<string, unknown>) => {
       if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+      if (path === 'sites/get')
+        return { workspace_id: 'x', allowed: [], blocked: [] }
+      if (path === 'memory/get') return { facts: [] }
       if (path === 'state')
         return {
           workspaces: [{ id: 'one', name: 'Writer' }],
@@ -3910,6 +3934,9 @@ it.each([false, true])(
     mocks.call.mockImplementation(
       async (path: string, body: Record<string, unknown>) => {
         if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+        if (path === 'sites/get')
+          return { workspace_id: 'x', allowed: [], blocked: [] }
+        if (path === 'memory/get') return { facts: [] }
         if (path === 'state')
           return {
             workspaces: [{ id: 'one', name: 'Writer' }],
@@ -4610,6 +4637,9 @@ it('renders service session identities, holds unfinished KVM and admits actions 
         return [{ id: 'task', identity, state: 'paused', messages: [] }]
       if (path === 'schedules') return { schedules: [], stopped: null }
       if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+      if (path === 'sites/get')
+        return { workspace_id: 'x', allowed: [], blocked: [] }
+      if (path === 'memory/get') return { facts: [] }
       if (path === 'tasks/start') return { identity: body.identity }
       return []
     }
@@ -4769,6 +4799,9 @@ it.each(['human', 'paused'])(
         if (path === 'tasks')
           return [{ id: 'task', identity, state: 'paused', messages: [] }]
         if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+        if (path === 'sites/get')
+          return { workspace_id: 'x', allowed: [], blocked: [] }
+        if (path === 'memory/get') return { facts: [] }
         if (path === 'schedules') return { schedules: [], stopped: null }
         if (path === 'control/hand-back') {
           expect(body).toEqual({ identity, owner })
@@ -4937,6 +4970,9 @@ it.each([
         ]
       }
       if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+      if (path === 'sites/get')
+        return { workspace_id: 'x', allowed: [], blocked: [] }
+      if (path === 'memory/get') return { facts: [] }
       if (path === 'schedules') return { schedules: [], stopped: null }
       return []
     })

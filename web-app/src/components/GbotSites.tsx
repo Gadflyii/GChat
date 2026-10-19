@@ -24,8 +24,8 @@ function WorkspaceSites({ workspaceId }: { workspaceId: string }) {
   const dirty = useRef(false)
 
   const show = (rules: SiteRules) => {
-    setAllowed(rules.allowed.join('\n'))
-    setBlocked(rules.blocked.join('\n'))
+    setAllowed((rules.allowed ?? []).join('\n'))
+    setBlocked((rules.blocked ?? []).join('\n'))
   }
 
   const load = useCallback(async () => {
@@ -59,7 +59,7 @@ function WorkspaceSites({ workspaceId }: { workspaceId: string }) {
       show(rules)
       dirty.current = false
       setStatus(
-        rules.allowed.length || rules.blocked.length
+        rules.allowed?.length || rules.blocked?.length
           ? 'Website rules saved. They apply to the bot’s next browser action.'
           : 'No website rules. The bot may open any website.'
       )

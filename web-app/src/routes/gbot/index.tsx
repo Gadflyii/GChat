@@ -1420,8 +1420,8 @@ function GbotPage() {
                     </div>
                   )}
                   <GbotConnectors key={bot.id} workspaceId={bot.id} />
-                  <GbotSites key={bot.id} workspaceId={bot.id} />
-                  <GbotMemory key={bot.id} workspaceId={bot.id} />
+                  <GbotSites workspaceId={bot.id} />
+                  <GbotMemory workspaceId={bot.id} />
                   <GbotSchedules
                     key={`schedules-${bot.id}`}
                     workspaceId={bot.id}
