@@ -278,7 +278,7 @@ pub async fn start_mcp_server<R: Runtime>(
     }
 }
 
-async fn connect_remote_mcp(
+pub(crate) async fn connect_remote_mcp(
     config: &McpServerConfig,
     transport_type: &str,
 ) -> Result<RunningService<RoleClient, InitializeRequestParam>, String> {

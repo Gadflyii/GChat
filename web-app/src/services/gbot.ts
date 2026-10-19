@@ -3,7 +3,9 @@ import type { ConnectorAccount } from './workspace-connectors'
 
 export type BotConnectors = {
   account_ids: string[]
-  accounts: Omit<ConnectorAccount, 'subject'>[]
+  accounts: (Omit<ConnectorAccount, 'subject' | 'provider'> & {
+    provider: ConnectorAccount['provider'] | 'mcp'
+  })[]
 }
 
 export type Identity = { workspace_id: string; session_id: string }

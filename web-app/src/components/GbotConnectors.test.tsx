@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import {
   act,
   cleanup,
@@ -17,7 +18,7 @@ vi.mock('@/services/gbot', () => ({ gbot: request }))
 function account(
   id: string,
   displayName: string,
-  provider: 'google' | 'microsoft' = 'google'
+  provider: 'google' | 'microsoft' | 'mcp' = 'google'
 ): BotConnectors['accounts'][number] {
   return {
     id,
@@ -474,4 +475,25 @@ it('keeps Save enabled to unlink a disconnected account when none are connected'
   })
   expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   expect(save).toBeDisabled()
+})
+
+it('shows a linked tool server in plain words and saves the link like an account', async () => {
+  const server = {
+    ...account('mcp:notes', 'notes', 'mcp'),
+    email: null,
+    services: ['local tool server'],
+    access: 'read_write' as const,
+  }
+  request.mockResolvedValueOnce(connectors([], [google, server]))
+  const user = userEvent.setup()
+  mount()
+  expect(await screen.findByText(/Tool server · Runs on the computer running the Gbot service/)).toBeVisible()
+  expect(screen.getByText(/MCP servers you added in Settings/i)).toBeVisible()
+  await user.click(screen.getByRole('checkbox', { name: /notes/ }))
+  request.mockResolvedValueOnce(connectors(['mcp:notes'], [google, server]))
+  await user.click(screen.getByRole('button', { name: 'Save linked accounts' }))
+  expect(request).toHaveBeenCalledWith('connectors/save', {
+    workspace_id: 'bot-one',
+    account_ids: ['mcp:notes'],
+  })
 })

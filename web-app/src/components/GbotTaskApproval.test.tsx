@@ -65,6 +65,17 @@ it.each([
     summary: 'Change data in a connected account',
     target: 'microsoft.calendar.create · Account: work-account',
   },
+  {
+    name: 'tool server use',
+    operation: {
+      name: 'mcp__office-notes__lookup_vault_code',
+      account_id: 'mcp:office-notes',
+      arguments: { room: 'Library' },
+      write: true,
+    },
+    summary: 'Use a tool server on the Gbot service computer',
+    target: 'mcp__office-notes__lookup_vault_code · Tool server: office-notes',
+  },
 ])(
   'explains $name before expandable complete details',
   ({ operation, summary, target }) => {
