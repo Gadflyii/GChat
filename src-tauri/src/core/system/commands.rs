@@ -1382,10 +1382,16 @@ pub fn configure_hermes_agent(
     let after_timeout =
         upsert_provider_request_timeout(&after_cp, "custom", HERMES_REQUEST_TIMEOUT_SECONDS);
 
-    let final_content = if content.ends_with('\n') && !after_timeout.ends_with('\n') {
-        format!("{}\n", after_timeout)
+    // Compaction summaries on a thinking model: see HERMES_COMPRESSION_REASONING_EFFORT.
+    let after_effort = upsert_compression_reasoning_effort(
+        &after_timeout,
+        HERMES_COMPRESSION_REASONING_EFFORT,
+    );
+
+    let final_content = if content.ends_with('\n') && !after_effort.ends_with('\n') {
+        format!("{}\n", after_effort)
     } else {
-        after_timeout
+        after_effort
     };
 
     std::fs::write(&config_path, &final_content)
@@ -1517,6 +1523,15 @@ const GCHAT_PROVIDER_NAME: &str = "gchat";
 /// Hermes otherwise defaults to 1800s (`HERMES_API_TIMEOUT`); a tighter cap
 /// lets a wedged local turn fail fast without waiting half an hour.
 const HERMES_REQUEST_TIMEOUT_SECONDS: u32 = 180;
+
+/// Thinking level Hermes uses for its context-compression summary call
+/// (`auxiliary.compression.reasoning_effort`, Hermes' per-task knob). Hermes sends
+/// that call with no output cap, so at the model's default level a reasoning model
+/// spent 6,000 to 8,200 tokens on a summary that needs about 2,000: one run in six
+/// hit the server's 8192 cap and aborted, and the rest grew past the text they
+/// replaced. At `low` six of six finished in about 2,000 tokens (measured on Qwen 3.8
+/// 27B INT, same summarizer prompt). A value the user already set is preserved.
+const HERMES_COMPRESSION_REASONING_EFFORT: &str = "low";
 
 /// Minimal Hermes `config.yaml` skeleton seeded when none exists yet.
 ///
@@ -1829,6 +1844,70 @@ fn upsert_provider_request_timeout(content: &str, provider_id: &str, seconds: u3
         }
     }
 
+    let out = lines.join("\n");
+    if out.ends_with('\n') {
+        out
+    } else {
+        format!("{}\n", out)
+    }
+}
+
+/// Ensure `auxiliary.compression.reasoning_effort` exists, creating the `auxiliary:`
+/// map and the `compression:` sub-block when missing. Any value already present for
+/// the key is preserved, and nothing else in the file changes.
+fn upsert_compression_reasoning_effort(content: &str, effort: &str) -> String {
+    let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+    let sub_line = "  compression:".to_string();
+    let field_line = format!("    reasoning_effort: \"{}\"", effort);
+    let aux_idx = lines.iter().position(|l| {
+        let t = l.trim_end();
+        is_top_level_yaml_key(l) && (t == "auxiliary:" || t == "auxiliary: {}" || t == "auxiliary:{}")
+    });
+    match aux_idx {
+        None => {
+            while lines.last().is_some_and(|l| l.trim().is_empty()) {
+                lines.pop();
+            }
+            lines.push("auxiliary:".to_string());
+            lines.push(sub_line);
+            lines.push(field_line);
+        }
+        Some(aidx) => {
+            if lines[aidx].trim_end() != "auxiliary:" {
+                lines[aidx] = "auxiliary:".to_string();
+            }
+            let mut block_end = lines.len();
+            for (i, line) in lines.iter().enumerate().skip(aidx + 1) {
+                if is_top_level_yaml_key(line) {
+                    block_end = i;
+                    break;
+                }
+            }
+            match (aidx + 1..block_end).find(|&i| lines[i].trim_end() == sub_line) {
+                None => {
+                    lines.insert(aidx + 1, field_line);
+                    lines.insert(aidx + 1, sub_line);
+                }
+                Some(ck) => {
+                    let mut sub_end = block_end;
+                    for (i, l) in lines.iter().enumerate().take(block_end).skip(ck + 1) {
+                        if l.trim().is_empty() || l.trim_start().starts_with('#') {
+                            continue;
+                        }
+                        if l.len() - l.trim_start().len() <= 2 {
+                            sub_end = i;
+                            break;
+                        }
+                    }
+                    let has_field = (ck + 1..sub_end)
+                        .any(|i| lines[i].trim_start().starts_with("reasoning_effort:"));
+                    if !has_field {
+                        lines.insert(ck + 1, field_line);
+                    }
+                }
+            }
+        }
+    }
     let out = lines.join("\n");
     if out.ends_with('\n') {
         out
@@ -6347,5 +6426,33 @@ mod dsh_tests {
             assert!(err.contains(DSH_KEY_ENV));
             assert!(!err.contains(bad), "the error must never echo the value");
         }
+    }
+
+    #[test]
+    fn compression_reasoning_effort_is_seeded_without_touching_user_settings() {
+        // No auxiliary map at all: created.
+        let seeded = upsert_compression_reasoning_effort("model:\n  default: a\n", "low");
+        let v: serde_yaml::Value = serde_yaml::from_str(&seeded).unwrap();
+        assert_eq!(v["auxiliary"]["compression"]["reasoning_effort"], "low");
+        assert_eq!(v["model"]["default"], "a");
+        // Existing auxiliary block with other tasks: compression added beside them.
+        let other = "auxiliary:\n  vision:\n    timeout: 30\ndisplay:\n  skin: x\n";
+        let v: serde_yaml::Value =
+            serde_yaml::from_str(&upsert_compression_reasoning_effort(other, "low")).unwrap();
+        assert_eq!(v["auxiliary"]["vision"]["timeout"], 30);
+        assert_eq!(v["auxiliary"]["compression"]["reasoning_effort"], "low");
+        assert_eq!(v["display"]["skin"], "x");
+        // A user-chosen value (even empty or "high") is preserved, and the call is idempotent.
+        let chosen = "auxiliary:\n  compression:\n    provider: auto\n    reasoning_effort: high\ndisplay:\n  skin: x\n";
+        let once = upsert_compression_reasoning_effort(chosen, "low");
+        assert_eq!(once, chosen);
+        let twice = upsert_compression_reasoning_effort(&seeded, "low");
+        assert_eq!(twice, seeded);
+        // Compression block without the key: key added, siblings kept.
+        let sibling = "auxiliary:\n  compression:\n    provider: auto\n";
+        let v: serde_yaml::Value =
+            serde_yaml::from_str(&upsert_compression_reasoning_effort(sibling, "low")).unwrap();
+        assert_eq!(v["auxiliary"]["compression"]["provider"], "auto");
+        assert_eq!(v["auxiliary"]["compression"]["reasoning_effort"], "low");
     }
 }
