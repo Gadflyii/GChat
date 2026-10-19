@@ -4166,3 +4166,23 @@ Five Rust and three page cases cover the rules (full path required, approval fir
 stored on refusal or denial, no second copy on resume, size and count limits). Not done: a
 spreadsheet or deck produced by an office suite (the bot's computer has none; the format is
 whatever its apps can save), and hand-back from a bot on Windows or a cloud computer.
+
+## Tool servers for a bot (MCP link)
+
+`GBOT-MCP-LINK` lets a bot use the MCP servers the user already added in GChat (Settings
+→ MCP Servers: a local command or a web address). They appear in the bot's Linked accounts
+list as "Tool server" entries; linking one offers its tools to the bot's brain at the next
+new or resumed task. There is no per-service integration: the bot sees whatever tools the
+server lists, named `mcp__<server>__<tool>`.
+
+- Every use of a tool server needs the same approval as an account action that changes data
+  (the service cannot know whether an arbitrary tool only reads).
+- The server runs on the computer that runs the Gbot service, not inside the bot's computer.
+  Local commands start on first use and are reused; changing the server in Settings applies
+  on the next task. A server that cannot start is left out and the bot's other tools still work.
+- Secrets in the server's own environment or headers are removed from results before the
+  brain sees them, using the same redaction as GChat's chat tools.
+- Code: `src-tauri/src/core/connectors/mcp_link.rs`, routed from `BotConnectorHost`; it reuses
+  GChat's MCP configuration parser, remote connection and redaction. Two Rust cases run a stdio
+  fixture server; one web case covers the Linked accounts wording and saving a link.
+- No new dependency: `rmcp` and `json5` are already in the app.

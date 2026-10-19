@@ -102,14 +102,16 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
     <details className="rounded-lg border p-3">
       <summary className="cursor-pointer text-sm">Linked accounts</summary>
       <p className="my-3 text-xs text-muted-foreground">
-        Choose which of your connected Google or Microsoft accounts this bot may
-        use, then choose Save linked accounts. New bots start without accounts.
+        Choose which of your connected Google or Microsoft accounts and which tool
+        servers this bot may use, then choose Save linked accounts. New bots start without accounts.
         The selection applies to new or resumed tasks; actions that change your
-        account data still require approval.
+        account data and every tool server action still require approval.
       </p>
       <p id={setupHelpId} className="mb-3 text-xs text-muted-foreground">
         To add or reconnect an account, open Settings → Workspace connections,
         then refresh this list. Linking an account does not change its permissions.
+        Tool servers are the MCP servers you added in Settings → MCP Servers
+        (a local command or a web address). Link one to give this bot its tools.
       </p>
       {refreshError !== undefined && (
         <div role="alert" className="mb-3 space-y-1 text-sm">
@@ -165,10 +167,13 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
                 <span>
                   {account.display_name || account.email || account.id}
                   <span className="block text-xs text-muted-foreground">
-                    {account.provider === 'google' ? 'Google' : 'Microsoft'} ·{' '}
-                    {account.access === 'read_write'
-                      ? 'Read and write'
-                      : 'Read only'}
+                    {account.provider === 'mcp'
+                      ? 'Tool server · Runs on the computer running the Gbot service · Every use needs your approval'
+                      : `${account.provider === 'google' ? 'Google' : 'Microsoft'} · ${
+                          account.access === 'read_write'
+                            ? 'Read and write'
+                            : 'Read only'
+                        }`}
                     {' · '}
                     {account.services.join(', ')}
                     {account.needs_reconnect &&

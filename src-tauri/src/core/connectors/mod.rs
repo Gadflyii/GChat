@@ -1,5 +1,6 @@
 pub mod accounts;
 mod cloud_pc;
+pub mod mcp_link;
 pub mod google;
 pub mod microsoft;
 
@@ -227,16 +228,19 @@ pub struct BotConnectorHost {
     state: Arc<AccountsState>,
     stopping: std::sync::atomic::AtomicBool,
     operations: std::sync::Mutex<NativeOperations>,
+    mcp: mcp_link::McpLinks,
 }
 
 impl BotConnectorHost {
     pub fn open(root: std::path::PathBuf) -> Result<Self, String> {
         let state = Arc::new(AccountsState::default());
+        let mcp = mcp_link::McpLinks::new(root.clone());
         state.initialize(root)?;
         Ok(Self {
             state,
             stopping: std::sync::atomic::AtomicBool::new(false),
             operations: std::sync::Mutex::new(NativeOperations::default()),
+            mcp,
         })
     }
 }
@@ -256,6 +260,7 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
             for operation in operations.into_values() {
                 operation.cancellation.cancel();
             }
+            self.mcp.close().await;
             for flow in self.state.view()?.active_flows {
                 let _ = self.state.cancel_auth(&flow.flow_id).await;
             }
@@ -437,6 +442,7 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
         Vec<gbot_service::connectors::ConnectorAccount>,
     > {
         Box::pin(async {
+            let tool_servers = self.mcp.accounts();
             Ok(self
                 .state
                 .clone()
@@ -458,6 +464,7 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
                     granted_scopes: account.granted_scopes,
                     needs_reconnect: account.needs_reconnect,
                 })
+                .chain(tool_servers)
                 .collect())
         })
     }
@@ -469,7 +476,7 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
     {
         Box::pin(async move {
             let state = self.state.clone();
-            Ok(catalog_for_accounts(&state, Some(linked))?
+            let mut tools: Vec<_> = catalog_for_accounts(&state, Some(linked))?
                 .into_iter()
                 .map(|tool| gbot_service::connectors::ConnectorTool {
                     name: tool.name.into(),
@@ -477,7 +484,9 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
                     input_schema: tool.input_schema,
                     write: tool.write,
                 })
-                .collect())
+                .collect();
+            tools.extend(self.mcp.catalog(linked).await);
+            Ok(tools)
         })
     }
 
@@ -489,6 +498,9 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
     ) -> gbot_service::connectors::ConnectorFuture<'a, gbot_service::connectors::PreparedConnector>
     {
         Box::pin(async move {
+            if name.starts_with(mcp_link::TOOL_PREFIX) {
+                return self.mcp.prepare(linked, name, arguments).await;
+            }
             let state = self.state.clone();
             let arguments = prepare_linked(&state, linked, name, arguments)?;
             Ok(gbot_service::connectors::PreparedConnector {
@@ -508,6 +520,9 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
         request: &'a gbot_service::connectors::PreparedConnector,
     ) -> gbot_service::connectors::ConnectorFuture<'a, Value> {
         Box::pin(async move {
+            if mcp_link::is_link(&request.account_id) {
+                return self.mcp.execute(request).await;
+            }
             let cancellation = CancellationToken::new();
             let _cancel_on_drop = cancellation.clone().drop_guard();
             execute_native(
