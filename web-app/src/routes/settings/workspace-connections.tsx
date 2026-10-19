@@ -1088,6 +1088,7 @@ export function WorkspaceConnections() {
   )
   const [revoke, setRevoke] = useState(false)
   const snapshotSequence = useRef(0)
+  const autoConnected = useRef(false)
   const flowSequence = useRef(0)
   const [saved, setSaved] = useState<ConnectorAccount[]>([])
 
@@ -1193,6 +1194,16 @@ export function WorkspaceConnections() {
       setBusy(null)
     }
   }
+  // The account service connects on its own once the first look finds it cold. Connecting does not
+  // read any saved sign-in; that happens only when an account is used. A failure leaves a retry.
+  useEffect(() => {
+    if (loading || view || busy !== null || autoConnected.current) return
+    autoConnected.current = true
+    void perform('Connecting account service', async () =>
+      acceptSnapshot(await connectorAccounts(true))
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, view, busy])
   const acceptSnapshot = (next: ConnectorAccountsView) => {
     snapshotSequence.current++
     receiveSnapshot(next)
@@ -1274,12 +1285,12 @@ export function WorkspaceConnections() {
             </p>
           )}
           {loading && !view && <p role="status">Loading accounts…</p>}
-          {!loading && !view && (
+          {!loading && !view && busy === null && autoConnected.current && (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Choose Connect account service to check secure storage and show
-                your saved accounts and sign-in options. Your computer may ask
-                you to unlock its password storage first.
+                GChat could not connect the account service yet. Choose Try
+                again. Your computer may ask you to unlock its password storage
+                first.
               </p>
               <Button
                 disabled={busy !== null}
@@ -1289,7 +1300,7 @@ export function WorkspaceConnections() {
                   )
                 }
               >
-                Connect account service
+                Try again
               </Button>
               {saved.length > 0 && (
                 <section aria-label="Saved accounts" className="space-y-2">
@@ -1318,8 +1329,7 @@ export function WorkspaceConnections() {
                     ))}
                   </ul>
                   <p className="text-sm text-muted-foreground">
-                    Choose Connect account service to use these accounts or to
-                    sign in again.
+                    Choose Try again to use these accounts or to sign in again.
                   </p>
                 </section>
               )}
