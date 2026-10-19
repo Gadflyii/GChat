@@ -1,6 +1,6 @@
 {
  "row": "GCHAT-APP-COMMAND-ADMISSION",
- "updated_at": "2026-10-19T14:40Z",
+ "updated_at": "2026-10-19T14:50Z",
  "owner": "claude-gchat-security",
  "status": "WINDOWS_NATIVE_PASS",
  "merge_ready": true,
@@ -113,5 +113,27 @@
   "ada": "F:\\gchat1-app-command-admission-20261018 (exe copies and logs only) retained",
   "s1": "/media/ron/SSD_RAID/ai/tmp-claude-gchat-security-app-command-admission (26 GB) retained until merge"
  },
- "fixture_source": "a282a237d2b36694a075366133d7427c0b502dd4"
+ "fixture_source": "a282a237d2b36694a075366133d7427c0b502dd4",
+ "merge_2": {
+  "commit": "0ea2e888fb540e14eae641f0d1b1f0a679a00ee3",
+  "note": "origin/main merged again (no rebase); keep-both unions in src-tauri/Cargo.lock (gchat deps) and src-tauri/src/core/mod.rs (modules); diff vs main is the branch's 30 files only"
+ },
+ "merged_tree_gates": {
+  "source": "0ea2e888f",
+  "host": "S1 container CPUs 120-127",
+  "started": "2026-10-19T14:38:47Z",
+  "finished": "2026-10-19T14:47:17Z",
+  "status": "PASS",
+  "cargo_check": "PASS (--locked)",
+  "focused": "capability_scope 2, artifact 5, webview_security 4, preview_protocol 2 PASS",
+  "make_verify": {
+   "frontend": "3998 passed / 6 skipped (355 files)",
+   "extension": "128 passed",
+   "rust": "1375 passed / 0 failed / 30 ignored",
+   "coverage_floor": "6 critical files PASS"
+  },
+  "env_note": "WHISPER_DONT_GENERATE_BINDINGS=1 as main's lanes use (image has no libclang); cargo allowed to fetch",
+  "log_sha256": "19385b13bb3e0958ad98a45de1dfd2de36cf15b02354e9b58832362dc98a5769"
+ },
+ "windows_note": "Windows native PASS is on fixture source a282a237d; the second merge adds only main's changes outside the admission files"
 }
