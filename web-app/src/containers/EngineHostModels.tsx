@@ -321,13 +321,24 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       </div>
       <p className="text-sm text-muted-foreground">Tokens are pieces of text. Context length includes your messages, earlier conversation and the reply. Concurrency limits how many replies can be generated together. Each model copy is a separate server and needs its own memory.</p>
       {snapshot.model_management?.engine_presets_available === false && <p className="text-sm text-muted-foreground">There are no tested saved settings for these models yet. Choose your own settings below. When changing a running model, it finishes its current replies before restarting.</p>}
-      <div className="flex flex-wrap gap-4">
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.vision} onChange={(e) => setOptions({ ...options, vision: e.target.checked })} />Enable Vision</label>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.structured_outputs} onChange={(e) => setOptions({ ...options, structured_outputs: e.target.checked })} />Structured outputs (JSON)</label>
-        <label className="text-sm">Speculative Decoding<ChoiceSelect aria-label="Speculative Decoding" className="ml-2" value={options.spec} onValueChange={value => setOptions({ ...options, spec: value as EngineLaunchOptions['spec'], draft_tokens: 0, draft_tp: 0 })} options={[{ value: 'none', label: 'Off' }, { value: 'auto', label: 'Automatic' }, { value: 'dflash', label: 'DFlash' }]} /></label>
-        <label className="text-sm">K/V cache format<ChoiceSelect aria-label="K/V cache format" className="ml-2" value={options.kv_dtype} onValueChange={value => setOptions({ ...options, kv_dtype: value as EngineLaunchOptions['kv_dtype'] })} options={['auto', 'bf16', 'int8', 'nvfp4'].map(value => ({ value, label: value === 'auto' ? 'Automatic' : value.toUpperCase() }))} /></label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1">
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.vision} onChange={(e) => setOptions({ ...options, vision: e.target.checked })} />Enable Vision</label>
+          <p className="text-xs text-muted-foreground">Lets the model understand pictures when the model supports it.</p>
+        </div>
+        <div className="space-y-1">
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.structured_outputs} onChange={(e) => setOptions({ ...options, structured_outputs: e.target.checked })} />Structured outputs (JSON)</label>
+          <p className="text-xs text-muted-foreground">Lets apps ask for replies in an exact format, such as JSON.</p>
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm">Speculative Decoding<ChoiceSelect aria-label="Speculative Decoding" className="ml-2" value={options.spec} onValueChange={value => setOptions({ ...options, spec: value as EngineLaunchOptions['spec'], draft_tokens: 0, draft_tp: 0 })} options={[{ value: 'none', label: 'Off' }, { value: 'auto', label: 'Automatic' }, { value: 'dflash', label: 'DFlash' }]} /></label>
+          <p className="text-xs text-muted-foreground">Drafts text ahead for the model to check, which can speed up replies; DFlash is one method.</p>
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm">K/V cache format<ChoiceSelect aria-label="K/V cache format" className="ml-2" value={options.kv_dtype} onValueChange={value => setOptions({ ...options, kv_dtype: value as EngineLaunchOptions['kv_dtype'] })} options={['auto', 'bf16', 'int8', 'nvfp4'].map(value => ({ value, label: value === 'auto' ? 'Automatic' : value.toUpperCase() }))} /></label>
+          <p className="text-xs text-muted-foreground">How the model stores the conversation in GPU memory. Smaller formats fit longer conversations.</p>
+        </div>
       </div>
-      <p className="text-sm text-muted-foreground">Vision lets the model understand pictures when the model supports it. Structured outputs (JSON) lets apps ask for replies in an exact format, such as JSON. Speculative Decoding drafts text ahead for the model to check; DFlash is one method. K/V cache format is how the model stores the conversation in GPU memory. Smaller formats fit longer conversations.</p>
       {launchError && selected && <p role="alert" className="text-sm text-destructive">{launchError}</p>}
       <details className="space-y-3"><summary className="cursor-pointer text-sm">Advanced model settings</summary>
         <p className="text-sm text-muted-foreground">These settings control how GInfer, the program running your model, uses memory and drafts replies. Leave them at their defaults unless you need to adjust them.</p>

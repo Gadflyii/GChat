@@ -1,5 +1,6 @@
 import {
   engineCommand,
+  type EngineHardwareProfile,
   type EngineLaunchOptions,
   type EngineSnapshot,
   type EngineStartupQuote,
@@ -22,6 +23,9 @@ export const DEFAULT_LAUNCH_OPTIONS: EngineLaunchOptions = {
   flash_host_ram_headroom_gib: null,
   expert_lfu: true,
 }
+
+const busy = (profile?: EngineHardwareProfile) =>
+  profile?.status === 'running' || profile?.status === 'cancelling'
 
 const LADDER = [262144, 131072, 65536, 32768, 16384, 8192]
 
@@ -69,6 +73,30 @@ export async function startWithCheckedSettings(
   if (free.length < needed)
     throw new Error('There are not enough free graphics cards for this model.')
   const gpu_uuids = free.slice(0, needed).map((gpu) => gpu.uuid)
+  const measured = snapshot.hardware_profile
+  const covered =
+    !!measured?.available && gpu_uuids.every((uuid) => measured.gpu_uuids?.includes(uuid))
+  if (!covered) {
+    // A new computer has no graphics-card measurements yet; settings cannot be checked without them.
+    report('Measuring your graphics card so GChat can pick safe settings (one time, a few minutes)…')
+    await command('hardware_profile', { host_id: hostId, body: { action: 'ensure', gpu_uuids } })
+    const measureDeadline = Date.now() + (deps.timeoutMs ?? 30 * 60 * 1000)
+    for (;;) {
+      if (deps.signal?.aborted) throw new Error('Model startup cancelled.')
+      const now = await command<EngineSnapshot>('snapshot', { host_id: hostId })
+      const profile: EngineHardwareProfile | undefined = now.hardware_profile
+      if (profile && !busy(profile)) {
+        if (profile.status === 'failed' || !profile.available)
+          throw new Error(profile.error ?? 'Measuring the graphics card did not finish.')
+        break
+      }
+      if (profile?.remaining_ms)
+        report(`Measuring your graphics card (one time): about ${Math.max(1, Math.round(profile.remaining_ms / 60000))} min left…`)
+      if (Date.now() > measureDeadline) throw new Error('Measuring the graphics card took too long.')
+      await sleep(deps.pollMs ?? 3000)
+    }
+    report('Finding settings that fit your computer…')
+  }
   let lastError = 'No settings could be checked.'
   let chosen: Record<string, unknown> | undefined
   for (const max_context of conversationLengths(model.metadata.identity.model_id)) {

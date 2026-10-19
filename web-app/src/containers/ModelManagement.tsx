@@ -123,6 +123,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const loadRef = useRef<PendingLocalLoad | null>(null)
   const inventoryRefreshRef = useRef<HTMLButtonElement>(null)
   const [loadResult, setLoadResult] = useState('')
+  const [autoStartDetail, setAutoStartDetail] = useState('')
   const [pendingLoad, setPendingLoad] = useState<PendingLocalLoad | null>(null)
   const [loadProgress, setLoadProgress] = useState<LocalModelLoadProgress | null>(null)
   const [loadStatusUnavailable, setLoadStatusUnavailable] = useState(false)
@@ -324,6 +325,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       startedAt: performance.now(), ready: false, settled: false, cancelRequested: false }
     loadRef.current = load
     setLoadResult('')
+    setAutoStartDetail('')
     setPendingLoad(load)
     setLoadProgress(null)
     setLoadElapsedSeconds(0)
@@ -354,6 +356,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
         } catch (auto) {
           if (mounted.current) setLoadResult((auto as { name?: string } | null)?.name === 'AbortError' ? 'Model startup cancelled.' : 'Model could not be loaded. Check the error below before trying again.')
           const m = localModels.find(x => x.id === modelId)
+          setAutoStartDetail(auto instanceof Error ? auto.message : String(auto))
           throw new Error(plainModelName(m?.displayName ?? modelId) + NO_SETTINGS)
         }
       }
@@ -459,7 +462,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       </div></div>
       {local && tab === 'Installed' && <p className="text-sm text-muted-foreground">Add an existing .ginfer file. The file stays in its current location.</p>}
       {error && (error.endsWith(NO_SETTINGS)
-        ? <div role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error} <Link to={route.engines.index} className="underline">Open GInfer Hosts</Link></div>
+        ? <div role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error} <Link to={route.engines.index} className="underline">Open GInfer Hosts</Link>{autoStartDetail && <details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-words">{autoStartDetail}</p></details>}</div>
         : <ModelProblem message={errorSummary} detail={error} />)}
       {downloadNeedsRefresh && <ModelProblem message={ACCEPTED_DOWNLOAD_REFRESH_FAILED} detail={downloadRefreshError} />}
       {local && modelStatusError !== null && <div className="space-y-2">
@@ -471,7 +474,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
         ? <ModelProblem message="Could not prepare GInfer to run models on this computer. Restart GChat to try again. If this keeps happening, reinstall GChat." detail={resources.error} />
         : <p role="status" className="rounded border p-3 text-sm">Preparing GInfer to run models on this computer…</p>)}
       <p role="status" aria-label="Model load status" aria-live="polite" aria-atomic="true" className={pendingLoad || loadResult ? 'rounded border p-3 text-sm font-medium' : 'sr-only'}>{pendingLoad
-        ? cancellingLoad ? 'Cancelling model startup…' : loadStatusUnavailable ? 'Cannot check progress right now. GChat is still waiting for the model to finish loading.' : loadProgress?.status === 'ready' ? 'The model is loaded. Finishing up…' : loadPhaseLabels[loadProgress?.phase ?? 'preparing']
+        ? cancellingLoad ? 'Cancelling model startup…' : loadStatusUnavailable ? 'Cannot check progress right now. GChat is still waiting for the model to finish loading.' : loadProgress?.status === 'ready' ? 'The model is loaded. Finishing up…' : loadResult && !loadProgress ? loadResult : loadPhaseLabels[loadProgress?.phase ?? 'preparing']
         : loadResult}</p>
       {pendingLoad && <div className="space-y-2 rounded border p-3 text-sm">
         {loadProgress?.detail && <details className="text-muted-foreground"><summary className="cursor-pointer">Startup details</summary><p className="mt-2 whitespace-pre-wrap break-words">{loadProgress.detail}</p></details>}
