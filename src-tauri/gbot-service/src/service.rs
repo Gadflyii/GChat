@@ -123,6 +123,10 @@ pub struct DurableState {
     pub assignments: Vec<ModelAssignment>,
     #[serde(default)]
     pub connector_accounts: Vec<BotConnectorAccounts>,
+    #[serde(default)]
+    pub site_rules: Vec<crate::sites::BotSiteRules>,
+    #[serde(default)]
+    pub memories: Vec<crate::memory::BotMemory>,
 }
 
 impl DurableState {
@@ -135,6 +139,8 @@ impl DurableState {
             controls: Vec::new(),
             assignments: Vec::new(),
             connector_accounts: Vec::new(),
+            site_rules: Vec::new(),
+            memories: Vec::new(),
         }
     }
 
@@ -159,6 +165,23 @@ impl DurableState {
                 || links.account_ids.iter().any(|id| id.trim().is_empty())
                 || links.account_ids.iter().collect::<BTreeSet<_>>().len()
                     != links.account_ids.len()
+            {
+                return Err(ServiceError::InvalidState);
+            }
+        }
+        let mut site_bots = BTreeSet::new();
+        for rules in &self.site_rules {
+            if !workspaces.contains(&rules.workspace_id) || !site_bots.insert(rules.workspace_id) {
+                return Err(ServiceError::InvalidState);
+            }
+        }
+        let mut memory_bots = BTreeSet::new();
+        for memory in &self.memories {
+            let mut ids = BTreeSet::new();
+            if !workspaces.contains(&memory.workspace_id)
+                || !memory_bots.insert(memory.workspace_id)
+                || memory.facts.len() > crate::memory::MAX_FACTS
+                || memory.facts.iter().any(|fact| !ids.insert(fact.id) || crate::memory::clean(&fact.text).is_err())
             {
                 return Err(ServiceError::InvalidState);
             }
@@ -624,6 +647,82 @@ impl Service {
         next.connector_accounts
             .retain(|saved| saved.workspace_id != links.workspace_id);
         next.connector_accounts.push(links);
+        next.validate()?;
+        drop(self.commit(state, next).await?);
+        Ok(())
+    }
+
+    pub async fn site_rules(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<crate::sites::BotSiteRules, ServiceError> {
+        let state = self.state.lock().await;
+        if !state.durable.workspaces.iter().any(|w| w.id == workspace_id) {
+            return Err(ServiceError::WorkspaceNotFound);
+        }
+        Ok(state
+            .durable
+            .site_rules
+            .iter()
+            .find(|rules| rules.workspace_id == workspace_id)
+            .cloned()
+            .unwrap_or(crate::sites::BotSiteRules { workspace_id, allowed: vec![], blocked: vec![] }))
+    }
+
+    pub async fn memory_facts(&self, workspace_id: WorkspaceId) -> Result<Vec<crate::memory::Fact>, ServiceError> {
+        let state = self.state.lock().await;
+        if !state.durable.workspaces.iter().any(|w| w.id == workspace_id) {
+            return Err(ServiceError::WorkspaceNotFound);
+        }
+        Ok(state
+            .durable
+            .memories
+            .iter()
+            .find(|memory| memory.workspace_id == workspace_id)
+            .map(|memory| memory.facts.clone())
+            .unwrap_or_default())
+    }
+
+    /// Applies one change to a bot's facts and saves it. `change` returns the new list or a plain refusal.
+    pub async fn change_memory(
+        &self,
+        workspace_id: WorkspaceId,
+        change: impl FnOnce(Vec<crate::memory::Fact>) -> Result<Vec<crate::memory::Fact>, String>,
+    ) -> Result<Result<Vec<crate::memory::Fact>, String>, ServiceError> {
+        let state = self.state.clone().lock_owned().await;
+        if !state.durable.workspaces.iter().any(|w| w.id == workspace_id) {
+            return Err(ServiceError::WorkspaceNotFound);
+        }
+        let mut next = state.durable.clone();
+        let current = next
+            .memories
+            .iter()
+            .find(|memory| memory.workspace_id == workspace_id)
+            .map(|memory| memory.facts.clone())
+            .unwrap_or_default();
+        let facts = match change(current) {
+            Ok(facts) => facts,
+            Err(refusal) => return Ok(Err(refusal)),
+        };
+        next.memories.retain(|memory| memory.workspace_id != workspace_id);
+        if !facts.is_empty() {
+            next.memories.push(crate::memory::BotMemory { workspace_id, facts: facts.clone() });
+        }
+        next.validate()?;
+        drop(self.commit(state, next).await?);
+        Ok(Ok(facts))
+    }
+
+    pub async fn save_site_rules(&self, rules: crate::sites::BotSiteRules) -> Result<(), ServiceError> {
+        let state = self.state.clone().lock_owned().await;
+        if !state.durable.workspaces.iter().any(|w| w.id == rules.workspace_id) {
+            return Err(ServiceError::WorkspaceNotFound);
+        }
+        let mut next = state.durable.clone();
+        next.site_rules.retain(|saved| saved.workspace_id != rules.workspace_id);
+        if !rules.is_empty() {
+            next.site_rules.push(rules);
+        }
         next.validate()?;
         drop(self.commit(state, next).await?);
         Ok(())

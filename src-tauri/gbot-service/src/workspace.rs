@@ -122,6 +122,8 @@ pub struct WorkspaceRuntime {
     media: Mutex<BTreeMap<WorkspaceId, MediaLease>>,
     lifecycle: Mutex<BTreeMap<WorkspaceId, Arc<Mutex<()>>>>,
     resume_observations: Mutex<BTreeMap<WorkspaceId, GuestReply>>,
+    /// Browser tabs last seen on a page the bot may not open, per bot.
+    blocked_tabs: Mutex<BTreeMap<WorkspaceId, std::collections::BTreeSet<String>>>,
     stopping: AtomicBool,
     connectors: Option<Arc<dyn ConnectorHost>>,
     inference: std::sync::OnceLock<Arc<dyn InferenceHost>>,
@@ -223,6 +225,7 @@ impl WorkspaceRuntime {
             media: Mutex::new(BTreeMap::new()),
             lifecycle: Mutex::new(BTreeMap::new()),
             resume_observations: Mutex::new(BTreeMap::new()),
+            blocked_tabs: Mutex::new(BTreeMap::new()),
             stopping: AtomicBool::new(false),
             connectors: None,
             inference: std::sync::OnceLock::new(),
@@ -398,6 +401,84 @@ impl WorkspaceRuntime {
         let workspace_id = links.workspace_id;
         self.service.save_connector_accounts(links).await?;
         self.bot_connectors(workspace_id).await
+    }
+
+    pub async fn memory_facts(&self, workspace_id: WorkspaceId) -> Result<Vec<crate::memory::Fact>, WorkspaceError> {
+        self.accepting()?;
+        Ok(self.service.memory_facts(workspace_id).await?)
+    }
+
+    /// Adds a fact (`by` says who wrote it).
+    pub async fn add_fact(
+        &self,
+        workspace_id: WorkspaceId,
+        text: &str,
+        by: crate::memory::Author,
+    ) -> Result<Vec<crate::memory::Fact>, WorkspaceError> {
+        self.accepting()?;
+        let text = crate::memory::clean(text).map_err(WorkspaceError::Connector)?;
+        self.memory_change(workspace_id, move |mut facts| {
+            if facts.iter().any(|fact| fact.text.eq_ignore_ascii_case(&text)) {
+                return Ok(facts);
+            }
+            if facts.len() >= crate::memory::MAX_FACTS {
+                return Err(format!("This bot already remembers {} things. Delete one first.", crate::memory::MAX_FACTS));
+            }
+            let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            facts.push(crate::memory::Fact { id: Uuid::new_v4(), text, by, at });
+            Ok(facts)
+        })
+        .await
+    }
+
+    pub async fn edit_fact(&self, workspace_id: WorkspaceId, id: Uuid, text: &str) -> Result<Vec<crate::memory::Fact>, WorkspaceError> {
+        self.accepting()?;
+        let text = crate::memory::clean(text).map_err(WorkspaceError::Connector)?;
+        self.memory_change(workspace_id, move |mut facts| {
+            let fact = facts.iter_mut().find(|fact| fact.id == id).ok_or("That memory no longer exists.".to_string())?;
+            fact.text = text;
+            Ok(facts)
+        })
+        .await
+    }
+
+    pub async fn delete_fact(&self, workspace_id: WorkspaceId, id: Uuid) -> Result<Vec<crate::memory::Fact>, WorkspaceError> {
+        self.accepting()?;
+        self.memory_change(workspace_id, move |mut facts| {
+            facts.retain(|fact| fact.id != id);
+            Ok(facts)
+        })
+        .await
+    }
+
+    async fn memory_change(
+        &self,
+        workspace_id: WorkspaceId,
+        change: impl FnOnce(Vec<crate::memory::Fact>) -> Result<Vec<crate::memory::Fact>, String>,
+    ) -> Result<Vec<crate::memory::Fact>, WorkspaceError> {
+        self.service
+            .change_memory(workspace_id, change)
+            .await?
+            .map_err(WorkspaceError::Connector)
+    }
+
+    pub async fn site_rules(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<crate::sites::BotSiteRules, WorkspaceError> {
+        self.accepting()?;
+        Ok(self.service.site_rules(workspace_id).await?)
+    }
+
+    pub async fn save_site_rules(
+        &self,
+        rules: crate::sites::BotSiteRules,
+    ) -> Result<crate::sites::BotSiteRules, WorkspaceError> {
+        self.accepting()?;
+        let workspace_id = rules.workspace_id;
+        let rules = rules.cleaned().map_err(WorkspaceError::Connector)?;
+        self.service.save_site_rules(rules).await?;
+        self.site_rules(workspace_id).await
     }
 
     pub async fn connector_tools(
@@ -1305,6 +1386,12 @@ impl WorkspaceRuntime {
         owner: Option<Uuid>,
     ) -> Result<GuestReply, WorkspaceError> {
         let session = self.session(request.identity).await?;
+        // Website rules limit the bot's own browser tools; a person who took over is not limited.
+        if owner.is_none() {
+            if let Some(refusal) = self.site_refusal(&request).await {
+                return Ok(refusal);
+            }
+        }
         if let Some(owner) = owner {
             self.service
                 .begin_control_observation(&request, owner)
@@ -1316,7 +1403,7 @@ impl WorkspaceRuntime {
                 .await
                 .remove(&request.identity.workspace_id);
         }
-        let reply = match session.request(request.clone()).await {
+        let mut reply = match session.request(request.clone()).await {
             Ok(reply) => reply,
             Err(error) => {
                 self.service
@@ -1325,6 +1412,9 @@ impl WorkspaceRuntime {
                 return Err(error.into());
             }
         };
+        if owner.is_none() {
+            self.site_scrub(&request, &mut reply).await;
+        }
         if matches!(
             request.operation,
             GuestOperationKind::Status { .. } | GuestOperationKind::Cancel { .. }
@@ -1366,6 +1456,111 @@ impl WorkspaceRuntime {
             .finish_operation(request.operation_id, request.identity, completion)
             .await?;
         Ok(reply)
+    }
+
+    fn site_refusal_reply(request: &GuestRequest, text: &str) -> GuestReply {
+        GuestReply {
+            identity: request.identity,
+            operation_id: request.operation_id,
+            outcome: GuestOutcome::Success {
+                result: GuestResult::Desktop {
+                    result: serde_json::json!({
+                        "isError": true,
+                        "structuredContent": {"code": "site_not_allowed", "effect": "none"},
+                        "content": [{"type": "text", "text": text}]
+                    }),
+                },
+            },
+        }
+    }
+
+    /// Refuses a browser action the bot's website rules do not allow, before the guest sees it.
+    async fn site_refusal(&self, request: &GuestRequest) -> Option<GuestReply> {
+        let GuestOperationKind::Desktop { tool, arguments } = &request.operation else {
+            return None;
+        };
+        if !tool.starts_with("browser_") {
+            return None;
+        }
+        let workspace = request.identity.workspace_id;
+        let rules = self.service.site_rules(workspace).await.ok()?;
+        if rules.is_empty() {
+            self.blocked_tabs.lock().await.remove(&workspace);
+            return None;
+        }
+        let tab = arguments.get("tab_id").and_then(serde_json::Value::as_str).map(str::to_owned);
+        if tool == "browser_navigate" {
+            let url = arguments.get("url").and_then(serde_json::Value::as_str).unwrap_or("");
+            return match rules.check(url) {
+                Ok(()) => {
+                    if let Some(tab) = tab {
+                        if let Some(set) = self.blocked_tabs.lock().await.get_mut(&workspace) {
+                            set.remove(&tab);
+                        }
+                    }
+                    None
+                }
+                Err(reason) => Some(Self::site_refusal_reply(request, &reason)),
+            };
+        }
+        let blocked = match &tab {
+            Some(tab) => self.blocked_tabs.lock().await.get(&workspace).is_some_and(|set| set.contains(tab)),
+            None => false,
+        };
+        blocked.then(|| {
+            Self::site_refusal_reply(
+                request,
+                "This tab is on a website this bot may not use. Navigate the tab to an allowed website first.",
+            )
+        })
+    }
+
+    /// Hides a page the bot may not see and remembers its tab; rules apply to what the bot reads too.
+    async fn site_scrub(&self, request: &GuestRequest, reply: &mut GuestReply) {
+        let GuestOperationKind::Desktop { tool, arguments } = &request.operation else {
+            return;
+        };
+        if tool != "get_browser_state" && !tool.starts_with("browser_") {
+            return;
+        }
+        let GuestOutcome::Success { result: GuestResult::Desktop { result } } = &reply.outcome else {
+            return;
+        };
+        let workspace = request.identity.workspace_id;
+        let Ok(rules) = self.service.site_rules(workspace).await else { return };
+        if rules.is_empty() {
+            return;
+        }
+        let pages = crate::sites::page_urls(result);
+        if pages.is_empty() {
+            return;
+        }
+        let mut refusal = None;
+        {
+            let mut blocked = self.blocked_tabs.lock().await;
+            for (tab, url) in &pages {
+                let tab = tab.clone().or_else(|| arguments.get("tab_id").and_then(serde_json::Value::as_str).map(str::to_owned));
+                match rules.check(url) {
+                    Ok(()) => {
+                        if let (Some(tab), Some(set)) = (&tab, blocked.get_mut(&workspace)) {
+                            set.remove(tab);
+                        }
+                    }
+                    Err(reason) => {
+                        if let Some(tab) = tab {
+                            blocked.entry(workspace).or_default().insert(tab);
+                        }
+                        refusal.get_or_insert(reason);
+                    }
+                }
+            }
+        }
+        if let Some(reason) = refusal {
+            *reply = Self::site_refusal_reply(
+                request,
+                &format!("{reason} The page content is hidden. Navigate this tab to an allowed website."),
+            );
+        }
     }
 
     pub async fn take_over(
@@ -1715,5 +1910,182 @@ impl WorkspaceRuntime {
             Some(error) => Err(error),
             None => Ok(()),
         }
+    }
+}
+
+#[cfg(test)]
+mod site_tests {
+    use super::*;
+    use crate::{
+        contract::{
+            BotPc, GuestRequest, OperationId, ServicePc, SessionId, SshConnection, SshEndpoint,
+            SshHostPublicKey, VaultCredentialRef, WorkspaceConfig, WorkspaceConnection,
+        },
+        sites::BotSiteRules,
+        vault::NativeVault,
+    };
+    use russh::keys::{Algorithm, PrivateKey};
+    use serde_json::json;
+
+    async fn fixture() -> (tempfile::TempDir, WorkspaceRuntime, WorkspaceId) {
+        let dir = tempfile::tempdir().unwrap();
+        let service = Arc::new(Service::open(dir.path().join("service.json")).await.unwrap());
+        let private = PrivateKey::random(&mut russh::keys::key::safe_rng(), Algorithm::Ed25519).unwrap();
+        let public = private.public_key().to_openssh().unwrap();
+        let (algorithm, public_key) = public.split_once(' ').unwrap();
+        let id = WorkspaceId::new();
+        service
+            .register_workspace(WorkspaceConfig {
+                id,
+                name: "Sites fixture".into(),
+                service_pc: ServicePc::Local,
+                bot_pc: BotPc::Lan { computer_id: Uuid::new_v4() },
+                connection: WorkspaceConnection::Ssh(SshConnection {
+                    endpoint: SshEndpoint { hostname: "127.0.0.1".into(), port: 2222, user: "fixture".into() },
+                    pinned_host_key: SshHostPublicKey { algorithm: algorithm.into(), public_key: public_key.into() },
+                    credential_ref: VaultCredentialRef::new(),
+                }),
+            })
+            .await
+            .unwrap();
+        let runtime = WorkspaceRuntime::new(service, Arc::new(NativeVault));
+        (dir, runtime, id)
+    }
+
+    fn browser(id: WorkspaceId, tool: &str, arguments: serde_json::Value) -> GuestRequest {
+        GuestRequest {
+            identity: SessionIdentity { workspace_id: id, session_id: SessionId::new() },
+            operation_id: OperationId::new(),
+            operation: GuestOperationKind::Desktop { tool: tool.into(), arguments },
+        }
+    }
+
+    fn text_of(reply: &GuestReply) -> String {
+        match &reply.outcome {
+            GuestOutcome::Success { result: GuestResult::Desktop { result } } => {
+                assert_eq!(result["isError"], true);
+                result["content"][0]["text"].as_str().unwrap().to_owned()
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn rules_are_saved_cleaned_per_bot_and_cleared_when_emptied() {
+        let (_dir, runtime, id) = fixture().await;
+        assert!(runtime.site_rules(id).await.unwrap().is_empty());
+        let saved = runtime
+            .save_site_rules(BotSiteRules { workspace_id: id, allowed: vec!["https://Docs.Example.com/x".into(), " ".into()], blocked: vec!["bank.com".into()] })
+            .await
+            .unwrap();
+        assert_eq!((saved.allowed.as_slice(), saved.blocked.as_slice()), (&["docs.example.com".to_owned()][..], &["bank.com".to_owned()][..]));
+        assert!(runtime
+            .save_site_rules(BotSiteRules { workspace_id: id, allowed: vec!["nope nope".into()], blocked: vec![] })
+            .await
+            .is_err());
+        assert_eq!(runtime.site_rules(id).await.unwrap(), saved, "a refused save changes nothing");
+        runtime.save_site_rules(BotSiteRules { workspace_id: id, allowed: vec![], blocked: vec![] }).await.unwrap();
+        assert!(runtime.site_rules(id).await.unwrap().is_empty());
+        assert!(runtime.site_rules(WorkspaceId::new()).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn navigation_to_a_blocked_or_unlisted_site_is_refused_before_the_guest_and_other_tools_are_untouched() {
+        let (_dir, runtime, id) = fixture().await;
+        let navigate = |url: &str| browser(id, "browser_navigate", json!({"tab_id": "t1", "url": url}));
+        assert!(runtime.site_refusal(&navigate("https://bank.com")).await.is_none(), "no rules, no limits");
+        runtime
+            .save_site_rules(BotSiteRules { workspace_id: id, allowed: vec!["docs.example.com".into()], blocked: vec!["private.docs.example.com".into()] })
+            .await
+            .unwrap();
+        assert!(runtime.site_refusal(&navigate("https://docs.example.com/a")).await.is_none());
+        let unlisted = runtime.site_refusal(&navigate("https://other.com")).await.unwrap();
+        assert!(text_of(&unlisted).contains("Allowed websites: docs.example.com"));
+        assert!(text_of(&runtime.site_refusal(&navigate("https://private.docs.example.com")).await.unwrap()).contains("blocked"));
+        assert!(runtime.site_refusal(&browser(id, "get_window_state", json!({"pid": 1}))).await.is_none());
+        let exec = GuestRequest {
+            identity: SessionIdentity { workspace_id: id, session_id: SessionId::new() },
+            operation_id: OperationId::new(),
+            operation: GuestOperationKind::Status { operation_id: OperationId::new() },
+        };
+        assert!(runtime.site_refusal(&exec).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_blocked_page_is_hidden_and_its_tab_stays_unusable_until_it_moves_to_an_allowed_site() {
+        let (_dir, runtime, id) = fixture().await;
+        runtime
+            .save_site_rules(BotSiteRules { workspace_id: id, allowed: vec![], blocked: vec!["bank.com".into()] })
+            .await
+            .unwrap();
+        let state_request = browser(id, "get_browser_state", json!({"tab_id": "t1", "target_id": "x"}));
+        let mut reply = GuestReply {
+            identity: state_request.identity,
+            operation_id: state_request.operation_id,
+            outcome: GuestOutcome::Success {
+                result: GuestResult::Desktop {
+                    result: json!({"isError": false, "structuredContent": {"tab_id": "t1", "url": "https://www.bank.com/account", "outline": [{"name": "Balance"}]}}),
+                },
+            },
+        };
+        runtime.site_scrub(&state_request, &mut reply).await;
+        let hidden = text_of(&reply);
+        assert!(hidden.contains("blocked") && hidden.contains("hidden") && !hidden.contains("Balance"));
+        let click = browser(id, "browser_click", json!({"tab_id": "t1", "ref": "p1:2"}));
+        assert!(text_of(&runtime.site_refusal(&click).await.unwrap()).contains("Navigate the tab"));
+        // Another tab is unaffected; navigating the blocked tab to an allowed site frees it.
+        assert!(runtime.site_refusal(&browser(id, "browser_click", json!({"tab_id": "t2", "ref": "p1:2"}))).await.is_none());
+        assert!(runtime.site_refusal(&browser(id, "browser_navigate", json!({"tab_id": "t1", "url": "https://ok.com"}))).await.is_none());
+        assert!(runtime.site_refusal(&click).await.is_none());
+        // Binding a window lists its tabs with their addresses; a refused tab hides the whole list.
+        let bind_request = browser(id, "get_browser_state", json!({"pid": 1, "window_id": 2}));
+        let mut bind = GuestReply {
+            identity: bind_request.identity,
+            operation_id: bind_request.operation_id,
+            outcome: GuestOutcome::Success {
+                result: GuestResult::Desktop {
+                    result: json!({"isError": false, "structuredContent": {"mode": "bind", "tabs": [{"tab_id": "t9", "url": "https://bank.com/", "title": "Bank"}]}}),
+                },
+            },
+        };
+        runtime.site_scrub(&bind_request, &mut bind).await;
+        assert!(text_of(&bind).contains("hidden"));
+        assert!(text_of(&runtime.site_refusal(&browser(id, "browser_click", json!({"tab_id": "t9", "ref": "p1:1"}))).await.unwrap()).contains("Navigate the tab"));
+        // An ordinary page is shown as it is.
+        let mut fine = GuestReply {
+            identity: state_request.identity,
+            operation_id: state_request.operation_id,
+            outcome: GuestOutcome::Success { result: GuestResult::Desktop { result: json!({"isError": false, "structuredContent": {"tab_id": "t1", "url": "https://ok.com"}}) } },
+        };
+        runtime.site_scrub(&state_request, &mut fine).await;
+        assert!(matches!(&fine.outcome, GuestOutcome::Success { result: GuestResult::Desktop { result } } if result["isError"] == false));
+    }
+
+    #[tokio::test]
+    async fn a_bot_remembers_facts_the_person_can_edit_delete_and_that_stay_with_that_bot() {
+        use crate::memory::{Author, MAX_FACTS};
+        let (_dir, runtime, id) = fixture().await;
+        assert!(runtime.memory_facts(id).await.unwrap().is_empty());
+        let facts = runtime.add_fact(id, "  Call me   Sam ", Author::Person).await.unwrap();
+        assert_eq!(facts.len(), 1);
+        assert_eq!((facts[0].text.as_str(), facts[0].by), ("Call me Sam", Author::Person));
+        // The same fact again (any case) is not stored twice; the bot's own are marked as its.
+        assert_eq!(runtime.add_fact(id, "call me sam", Author::Bot).await.unwrap().len(), 1);
+        let facts = runtime.add_fact(id, "I prefer metric units", Author::Bot).await.unwrap();
+        assert_eq!(facts[1].by, Author::Bot);
+        let edited = runtime.edit_fact(id, facts[0].id, "Call me Samantha").await.unwrap();
+        assert_eq!(edited[0].text, "Call me Samantha");
+        assert!(runtime.edit_fact(id, Uuid::new_v4(), "x").await.is_err());
+        assert!(runtime.add_fact(id, "   ", Author::Person).await.is_err());
+        let after_delete = runtime.delete_fact(id, facts[0].id).await.unwrap();
+        assert_eq!(after_delete.len(), 1);
+        assert_eq!(runtime.memory_facts(id).await.unwrap(), after_delete);
+        assert!(runtime.memory_facts(WorkspaceId::new()).await.is_err());
+        // The list is bounded.
+        for n in 0..MAX_FACTS {
+            let _ = runtime.add_fact(id, &format!("fact {n}"), Author::Person).await;
+        }
+        assert_eq!(runtime.memory_facts(id).await.unwrap().len(), MAX_FACTS);
+        assert!(runtime.add_fact(id, "one too many", Author::Person).await.unwrap_err().to_string().contains("Delete one first"));
     }
 }

@@ -4227,3 +4227,41 @@ task's last reply.
 - **Not covered**: a physical microphone and speakers (the guest has none; recognition accuracy and audible
   playback on real hardware, and Windows SAPI playback, are untested), and a Windows run of GChat itself
   (only the dependency build was proven).
+
+## Website rules and memory for each bot
+
+`GBOT-SITE-RULES` and `GBOT-MEMORY` add two per-bot cards beside Linked accounts. Both are kept in the
+Gbot service's own state (`sites`/`memories` per bot) and are shipped together on one branch.
+
+**Websites.** "Allowed websites" and "Blocked websites", one per line (`example.com`, `https://www.example.com/x` or
+`*.example.com` all mean that site and its sub-sites). Nothing is restricted until a rule exists. Blocked wins;
+if any site is allowed the bot may open only those; `about:blank` is always fine; other address kinds
+(`file:`, `javascript:`) are refused while rules exist. Enforcement is in the service where the bot's browser tools pass
+(`WorkspaceRuntime`): `browser_navigate` to a refused address is turned away before the guest sees it, a
+`get_browser_state` for a tab that is on a refused page is hidden from the bot and its tab is refused for
+further browser actions until it navigates to an allowed site, and the bot is told in plain words which sites are allowed.
+Credentials in an address (`https://allowed.com@blocked.com`) never count as the host. A person who has taken over is
+not limited. Limits to know: it covers the page-aware browser tools only, so the bot using another program, the
+terminal or native keyboard input on its own computer is not stopped; it is a guardrail against a browsing bot
+wandering or being steered, not a sandbox. The page address is read only from the driver's own fields, captured live in a Debian guest: `page.url` in a
+`get_browser_state` snapshot, `url` in a `browser_navigate` result and `tabs[].url` when a window is bound, never from
+links or text on the page; the same check runs on the result of every browser action, so a redirect or a click that
+lands on a refused site hides that page too.
+
+Live check (Debian 13 guest, Chromium driven by the Cua driver, rules: blocked `example.com`; page served at
+`http://10.0.2.2:8000/` with a link to example.com): `browser_navigate` to example.com came back "example.com is a blocked
+website for this bot" without reaching the guest; navigating to the allowed page worked and its snapshot was readable;
+clicking its link landed the tab on example.com and the next `get_browser_state` came back "The page content is
+hidden. Navigate this tab to an allowed website". A fresh bind afterwards still reported the tab's title and address
+(`tabs[]`); that gap is closed by reading `tabs[].url` as above.
+
+**Memory.** Short facts the bot remembers about the person (up to 100, 400 characters each). The person sees, adds,
+edits and deletes them under Memory. Every new or resumed task starts with the list as a system note that says it
+informs but never overrides the task or grants permission, and the bot has a `remember_fact` tool; saving a fact is an
+action the person approves ("Remember this about you"), and facts it saved are labelled "Added by the bot, approved by
+you". Duplicates (ignoring case) are not stored twice. Live check in the Debian guest: a fact added in the Memory card reached the task as the system note and the bot answered "4417" to "What is my favourite number?" without tools (the bot-written `remember_fact` approval path is covered by tests, not run live). This is separate from GChat's own Memory library
+(`docs/memory.md`), which the bot does not read.
+
+Checks: Rust cases cover address parsing and spoofing (`@` credentials, look-alike hosts), allowed/blocked
+precedence, the blocked-tab lifecycle, rule and memory persistence and bounds; web cases cover both cards and the new
+approval wording.

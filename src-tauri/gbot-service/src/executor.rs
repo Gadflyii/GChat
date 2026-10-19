@@ -101,6 +101,8 @@ pub enum ToolBinding {
     Dispatch,
     /// Copies a finished file from the bot's computer into the task's files.
     HandBack,
+    /// Saves a fact to the bot's memory after the person approves it.
+    Remember,
 }
 
 impl FunctionTool {
@@ -144,7 +146,8 @@ impl FunctionTool {
             | ToolBinding::AskHuman
             | ToolBinding::Connector { .. }
             | ToolBinding::Dispatch
-            | ToolBinding::HandBack => return Err(ExecutorError::InvalidMessage),
+            | ToolBinding::HandBack
+            | ToolBinding::Remember => return Err(ExecutorError::InvalidMessage),
             ToolBinding::WriteFile => GuestOperationKind::Write {
                 path: GuestPath(text("path")?),
                 offset: 0,
@@ -934,6 +937,9 @@ impl CuaTask {
         if matches!(tool.binding, ToolBinding::HandBack) {
             return self.hand_back(runtime, approval, &call_id, &args).await;
         }
+        if matches!(tool.binding, ToolBinding::Remember) {
+            return self.remember(runtime, approval, &call_id, &args).await;
+        }
         if let ToolBinding::Connector {
             name: provider_name,
         } = &tool.binding
@@ -1000,6 +1006,53 @@ impl CuaTask {
         if uncertain(&reply) {
             return Err(ExecutorError::NeedsReview);
         }
+        Ok(result)
+    }
+
+    /// Saves one fact to the bot's memory after the person approves it. The person can edit or delete it later.
+    async fn remember(
+        &mut self,
+        runtime: &WorkspaceRuntime,
+        approval: &dyn ToolApproval,
+        call_id: &str,
+        args: &Value,
+    ) -> Result<Value> {
+        let outcome = |status: &str, reason: Option<String>| {
+            let mut value = json!({"status": status, "effect": if status == "remembered" { "saved" } else { "none" }});
+            if let Some(reason) = reason {
+                value["reason"] = reason.into();
+            }
+            value
+        };
+        let text = args.get("text").and_then(Value::as_str).unwrap_or("");
+        let result = match crate::memory::clean(text) {
+            Err(reason) => outcome("not_remembered", Some(reason)),
+            Ok(text) => {
+                let request = ConnectorRequest {
+                    identity: self.record.identity,
+                    operation: crate::connectors::PreparedConnector {
+                        name: crate::memory::TOOL.into(),
+                        account_id: "memory".into(),
+                        arguments: json!({"text": text, "account_id": "memory"}),
+                        write: true,
+                    },
+                };
+                if !approval.approve_connector(self.record.id, &request).await {
+                    return Err(ExecutorError::Denied);
+                }
+                match runtime
+                    .add_fact(self.record.identity.workspace_id, &text, crate::memory::Author::Bot)
+                    .await
+                {
+                    Ok(_) => outcome("remembered", None),
+                    Err(WorkspaceError::State(error)) => return Err(ExecutorError::State(error)),
+                    Err(WorkspaceError::ShuttingDown) => return Err(ExecutorError::Cancelled),
+                    Err(other) => outcome("not_remembered", Some(other.to_string())),
+                }
+            }
+        };
+        self.record_tool_message(call_id, &result);
+        self.save().await?;
         Ok(result)
     }
 
