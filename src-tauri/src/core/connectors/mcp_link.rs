@@ -6,7 +6,10 @@ use std::{collections::BTreeMap, path::PathBuf, process::Stdio, time::Duration};
 
 use gbot_service::connectors::{ConnectorAccount, ConnectorTool, PreparedConnector};
 use rmcp::{
-    model::{CallToolRequestParam, InitializeRequestParam},
+    model::{
+        CallToolRequestParam, ClientCapabilities, ClientInfo, Implementation,
+        InitializeRequestParam,
+    },
     service::RunningService,
     transport::TokioChildProcess,
     RoleClient, ServiceExt,
@@ -129,10 +132,22 @@ impl McpLinks {
                 .stderr(Stdio::null())
                 .spawn()
                 .map_err(|error| format!("Could not start the tool server: {error}"))?;
-            timeout(handshake, ().serve(process))
-                .await
-                .map_err(|_| "The tool server did not answer in time".to_string())?
-                .map_err(|error| format!("The tool server did not start: {error}"))
+            let info = ClientInfo {
+                protocol_version: Default::default(),
+                capabilities: ClientCapabilities::default(),
+                client_info: Implementation {
+                    name: "GChat MCP Client".to_string(),
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                    title: Some("GChat".to_string()),
+                    website_url: None,
+                    icons: None,
+                },
+            };
+            match timeout(handshake, info.serve(process)).await {
+                Ok(Ok(client)) => Ok(client),
+                Ok(Err(error)) => Err(format!("The tool server did not start: {error}")),
+                Err(_) => Err("The tool server did not answer in time".to_string()),
+            }
         };
         result.map_err(|error| redact_mcp_config_values(&error, config))
     }
@@ -140,7 +155,7 @@ impl McpLinks {
     /// Connects (or reuses the connection) and returns the server's tools.
     async fn tools_of(&self, name: &str, config: &Value) -> Result<Vec<rmcp::model::Tool>, String> {
         let mut live = self.live.lock().await;
-        if live.get(name).is_some_and(|entry| &entry.config != config || entry.client.is_closed()) {
+        if live.get(name).is_some_and(|entry| &entry.config != config || entry.client.peer().is_transport_closed()) {
             if let Some(old) = live.remove(name) {
                 let _ = old.client.cancel().await;
             }
@@ -220,7 +235,7 @@ impl McpLinks {
             .account_id
             .strip_prefix(ACCOUNT_PREFIX)
             .ok_or("Not a tool server link")?;
-        let mut live = self.live.lock().await;
+        let live = self.live.lock().await;
         let entry = live.get(server).ok_or("The tool server is not connected; try the task again")?;
         let tool = entry
             .tools

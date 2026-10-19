@@ -4186,3 +4186,9 @@ server lists, named `mcp__<server>__<tool>`.
   GChat's MCP configuration parser, remote connection and redaction. Two Rust cases run a stdio
   fixture server; one web case covers the Linked accounts wording and saving a link.
 - No new dependency: `rmcp` and `json5` are already in the app.
+
+Live check (Debian 13 guest, fixture stdio server `office-notes` added in Settings → MCP Servers):
+the server appeared under Linked accounts as a Tool server, was linked and saved, and the
+brain was offered `mcp__office-notes__lookup_vault_code`. The task showed an approval titled
+"Use a tool server on the Gbot service computer"; after Allow the bot answered with the
+fixture's code. No account or sign-in was involved.

@@ -33,6 +33,12 @@ function describeAction(operation: unknown): { summary: string; target?: string 
       typeof action.account_id === 'string' &&
       action.write === true
     ) {
+      if (action.account_id.startsWith('mcp:')) {
+        return {
+          summary: 'Use a tool server on the Gbot service computer',
+          target: `${action.name} · Tool server: ${action.account_id.slice(4)}`,
+        }
+      }
       return {
         summary: 'Change data in a connected account',
         target: `${action.name} · Account: ${action.account_id}`,
