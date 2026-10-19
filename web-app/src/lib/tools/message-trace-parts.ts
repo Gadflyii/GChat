@@ -2,6 +2,11 @@ import type { UIMessage } from 'ai'
 import type { AgentRunSummary } from '@/types/agent'
 import { TraceBlock } from './types'
 import { presentTool } from './registry'
+import {
+  displaySubAgentBriefs,
+  savedSubAgentResults,
+  SUBAGENT_DISPATCH_TOOL,
+} from '@/lib/sub-agents'
 
 export function buildTraceBlocks(
   message: UIMessage,
@@ -18,6 +23,8 @@ export function buildTraceBlocks(
   let reasoningIndex = -1
   let reasoningState: 'streaming' | 'done' | undefined
   let answeredAfterReasoning = false
+  // Sub-agent cards show their own live status while the dispatch runs.
+  let dispatchRunning = false
   let activityIndex =
     agentRuns.length > 0 ||
     metadata?.activityDurationMs !== undefined ||
@@ -83,7 +90,6 @@ export function buildTraceBlocks(
     if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
       const toolName = part.type.slice('tool-'.length)
       if (toolName === 'reply' || toolName === 'finish') continue
-      if (activityIndex < 0) activityIndex = blocks.length
       const state = 'state' in part ? part.state : 'output-available'
       const input = 'input' in part ? part.input : undefined
       const output = 'output' in part ? part.output : undefined
@@ -93,6 +99,23 @@ export function buildTraceBlocks(
           : 'error' in part
             ? String(part.error)
             : undefined
+
+      if (toolName === SUBAGENT_DISPATCH_TOOL) {
+        if (state === 'input-streaming' || state === 'input-available') {
+          dispatchRunning = true
+        }
+        blocks.push({
+          kind: 'subagents',
+          key: `${message.id}-${i}`,
+          dispatchId: 'toolCallId' in part ? String(part.toolCallId) : `${message.id}-${i}`,
+          state,
+          briefs: displaySubAgentBriefs(input),
+          results: savedSubAgentResults(output),
+          ...(errorText ? { errorText } : {}),
+        })
+        continue
+      }
+      if (activityIndex < 0) activityIndex = blocks.length
 
       tools.push({
         key: `${message.id}-${i}`,
@@ -123,7 +146,8 @@ export function buildTraceBlocks(
     agentRuns.length === 0 &&
     metadata?.activityDurationMs === undefined
   const showActivity =
-    activityIndex >= 0 && !(activityIsPlaceholder && reasoningStreaming)
+    activityIndex >= 0 &&
+    !(activityIsPlaceholder && (reasoningStreaming || dispatchRunning))
 
   if (showActivity) {
     const activities: Extract<TraceBlock, { kind: 'activity' }>[] = []

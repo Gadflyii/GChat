@@ -2,6 +2,7 @@ import type { UIMessage } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithToolCalls } from 'ai'
 import { useChatSessions } from '@/stores/chat-session-store'
 import { CAPABILITY_DISCOVERY_TOOL_NAMES } from './custom-chat-transport-helpers'
+import { SUBAGENT_DISPATCH_TOOL } from './sub-agents'
 
 export type ChatToolCall = {
   toolCallId: string
@@ -43,6 +44,7 @@ type ExecuteChatToolCallsOptions = {
   callCapability: (args: {
     toolName: string
     arguments: object
+    toolCallId?: string
   }) => Promise<ToolResult>
   getProjectId: () => string | undefined
   processOutput: (content: unknown) => Promise<unknown>
@@ -91,10 +93,15 @@ export async function executeChatToolCalls({
           projectId,
           scope: projectId ? 'project' : 'thread',
         })
-      } else if (capabilityToolNames.has(toolCall.toolName) || CAPABILITY_DISCOVERY_TOOL_NAMES.has(toolCall.toolName)) {
+      } else if (
+        capabilityToolNames.has(toolCall.toolName) ||
+        CAPABILITY_DISCOVERY_TOOL_NAMES.has(toolCall.toolName) ||
+        toolCall.toolName === SUBAGENT_DISPATCH_TOOL
+      ) {
         result = await callCapability({
           toolName: toolCall.toolName,
           arguments: toolCall.input,
+          toolCallId: toolCall.toolCallId,
         })
       } else {
         result = {

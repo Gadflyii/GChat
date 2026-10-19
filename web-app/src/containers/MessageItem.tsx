@@ -52,6 +52,7 @@ import {
   aggregateAgentMetrics,
   formatTokensPerSecond,
 } from '@/lib/agent-metrics'
+import { SubAgentCards } from './SubAgentCards'
 
 const CHAT_STATUS = {
   STREAMING: 'streaming',
@@ -622,6 +623,15 @@ export const MessageItem = memo(
               return renderReasoningBlock(block)
             case 'activity':
               return renderActivityBlock(block)
+            case 'subagents':
+              return (
+                <SubAgentCards
+                  key={block.key}
+                  block={block}
+                  requestActive={Boolean(isRequestActive)}
+                  onStop={onCancelAgentRun}
+                />
+              )
             default:
               return null
           }
