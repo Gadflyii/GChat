@@ -1,0 +1,246 @@
+﻿{
+    "credentialManager":  false,
+    "events":  [
+                   {
+                       "cancelled":  false,
+                       "kind":  "navigation",
+                       "mainFrame":  true,
+                       "uri":  "http://tauri.localhost/"
+                   },
+                   {
+                       "cancelled":  false,
+                       "kind":  "navigation",
+                       "mainFrame":  false,
+                       "uri":  "http://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  200,
+                       "uri":  "http://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183"
+                   },
+                   {
+                       "channel":  "frame",
+                       "cmd":  "join_path",
+                       "kind":  "foreign-message",
+                       "source":  "http://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183"
+                   },
+                   {
+                       "channel":  "frame",
+                       "cmd":  "plugin:os|locale",
+                       "kind":  "foreign-message",
+                       "source":  "http://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  404,
+                       "uri":  "https://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  404,
+                       "uri":  "http://gchat-preview.localhost:43121/windows-native-100ab1683efc4f3bb430a30f7660d183"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  404,
+                       "uri":  "http://gchat-preview.localhost/missing"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  404,
+                       "uri":  "http://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183?query=1"
+                   },
+                   {
+                       "cancelled":  true,
+                       "kind":  "navigation",
+                       "mainFrame":  false,
+                       "uri":  "blob:http://tauri.localhost/db79340f-3b4c-407c-ae25-133afe70c7bb"
+                   },
+                   {
+                       "cancelled":  true,
+                       "kind":  "navigation",
+                       "mainFrame":  true,
+                       "uri":  "http://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  404,
+                       "uri":  "http://gchat-preview.localhost/%2Foutside"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  200,
+                       "uri":  "http://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183"
+                   },
+                   {
+                       "cancelled":  true,
+                       "kind":  "navigation",
+                       "mainFrame":  true,
+                       "uri":  "https://example.invalid/gchat-native-admission"
+                   },
+                   {
+                       "kind":  "message",
+                       "source":  "http://tauri.localhost/",
+                       "value":  {
+                                     "child":  {
+                                                   "app":  {
+                                                               "kind":  "timeout"
+                                                           },
+                                                   "asset":  {
+                                                                 "error":  "TypeError: Failed to fetch",
+                                                                 "kind":  "rejected"
+                                                             },
+                                                   "bridge":  "function",
+                                                   "channels":  {
+                                                                    "ipc":  "function",
+                                                                    "webview":  "function"
+                                                                },
+                                                   "eventOrigin":  "null",
+                                                   "href":  "http://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183",
+                                                   "parentAccess":  "SecurityError: Failed to read a named property \u0027document\u0027 from \u0027Window\u0027: Blocked a frame with origin \"null\" from accessing a cross-origin frame.",
+                                                   "plugin":  {
+                                                                  "kind":  "timeout"
+                                                              },
+                                                   "violations":  [
+                                                                      {
+                                                                          "blocked":  "http://ipc.localhost/join_path",
+                                                                          "directive":  "connect-src"
+                                                                      },
+                                                                      {
+                                                                          "blocked":  "http://ipc.localhost/plugin%3Aos%7Clocale",
+                                                                          "directive":  "connect-src"
+                                                                      },
+                                                                      {
+                                                                          "blocked":  "http://asset.localhost/C%3A%5CUsers%5CRon%5Cgchat-app-command-admission-fixture-20261019%5Ca282a237%5Cfixture-inputs%5Cgchat-native-admission-u6PYKh%5Casset-marker.txt",
+                                                                          "directive":  "connect-src"
+                                                                      }
+                                                                  ]
+                                               },
+                                     "fixture":  "100ab1683efc4f3bb430a30f7660d183",
+                                     "foreign":  [
+
+                                                 ],
+                                     "mainApp":  {
+                                                     "kind":  "success",
+                                                     "value":  "\\\\?\\C:\\Users\\Ron\\gchat-app-command-admission-fixture-20261019\\a282a237\\fixture-inputs\\gchat-native-admission-u6PYKh\\joined.txt"
+                                                 },
+                                     "mainAsset":  {
+                                                       "kind":  "success",
+                                                       "value":  "gchat-private-asset-marker"
+                                                   },
+                                     "mainPlugin":  {
+                                                        "kind":  "success",
+                                                        "value":  "en-US"
+                                                    },
+                                     "type":  "result"
+                                 }
+                   },
+                   {
+                       "handled":  true,
+                       "kind":  "popup",
+                       "uri":  "gchat-preview://localhost/windows-native-100ab1683efc4f3bb430a30f7660d183"
+                   },
+                   {
+                       "cancelled":  false,
+                       "kind":  "navigation",
+                       "mainFrame":  true,
+                       "uri":  "http://tauri.localhost/logs"
+                   },
+                   {
+                       "kind":  "message",
+                       "source":  "http://tauri.localhost/logs",
+                       "value":  {
+                                     "fixture":  "100ab1683efc4f3bb430a30f7660d183",
+                                     "href":  "http://tauri.localhost/logs",
+                                     "type":  "app-route"
+                                 }
+                   }
+               ],
+    "exit":  0,
+    "metadata":  {
+                     "asset":  "http://asset.localhost/C%3A%5CUsers%5CRon%5Cgchat-app-command-admission-fixture-20261019%5Ca282a237%5Cfixture-inputs%5Cgchat-native-admission-u6PYKh%5Casset-marker.txt",
+                     "directory":  "C:\\Users\\Ron\\gchat-app-command-admission-fixture-20261019\\a282a237\\fixture-inputs\\gchat-native-admission-u6PYKh",
+                     "expectedJoin":  "C:\\Users\\Ron\\gchat-app-command-admission-fixture-20261019\\a282a237\\fixture-inputs\\gchat-native-admission-u6PYKh\\joined.txt",
+                     "fixture":  "100ab1683efc4f3bb430a30f7660d183",
+                     "id":  "windows-native-100ab1683efc4f3bb430a30f7660d183",
+                     "invalidResources":  [
+                                              "https://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183",
+                                              "http://gchat-preview.localhost:43121/windows-native-100ab1683efc4f3bb430a30f7660d183",
+                                              "http://gchat-preview.localhost/missing",
+                                              "http://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183?query=1",
+                                              "http://gchat-preview.localhost/%2Foutside"
+                                          ],
+                     "marker":  "gchat-private-asset-marker",
+                     "preview":  "http://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183"
+                 },
+    "productSetup":  false,
+    "result":  {
+                   "child":  {
+                                 "app":  {
+                                             "kind":  "timeout"
+                                         },
+                                 "asset":  {
+                                               "error":  "TypeError: Failed to fetch",
+                                               "kind":  "rejected"
+                                           },
+                                 "bridge":  "function",
+                                 "channels":  {
+                                                  "ipc":  "function",
+                                                  "webview":  "function"
+                                              },
+                                 "eventOrigin":  "null",
+                                 "href":  "http://gchat-preview.localhost/windows-native-100ab1683efc4f3bb430a30f7660d183",
+                                 "parentAccess":  "SecurityError: Failed to read a named property \u0027document\u0027 from \u0027Window\u0027: Blocked a frame with origin \"null\" from accessing a cross-origin frame.",
+                                 "plugin":  {
+                                                "kind":  "timeout"
+                                            },
+                                 "violations":  [
+                                                    {
+                                                        "blocked":  "http://ipc.localhost/join_path",
+                                                        "directive":  "connect-src"
+                                                    },
+                                                    {
+                                                        "blocked":  "http://ipc.localhost/plugin%3Aos%7Clocale",
+                                                        "directive":  "connect-src"
+                                                    },
+                                                    {
+                                                        "blocked":  "http://asset.localhost/C%3A%5CUsers%5CRon%5Cgchat-app-command-admission-fixture-20261019%5Ca282a237%5Cfixture-inputs%5Cgchat-native-admission-u6PYKh%5Casset-marker.txt",
+                                                        "directive":  "connect-src"
+                                                    }
+                                                ]
+                             },
+                   "fixture":  "100ab1683efc4f3bb430a30f7660d183",
+                   "foreign":  [
+
+                               ],
+                   "mainApp":  {
+                                   "kind":  "success",
+                                   "value":  "\\\\?\\C:\\Users\\Ron\\gchat-app-command-admission-fixture-20261019\\a282a237\\fixture-inputs\\gchat-native-admission-u6PYKh\\joined.txt"
+                               },
+                   "mainAsset":  {
+                                     "kind":  "success",
+                                     "value":  "gchat-private-asset-marker"
+                                 },
+                   "mainPlugin":  {
+                                      "kind":  "success",
+                                      "value":  "en-US"
+                                  },
+                   "type":  "result"
+               },
+    "validation":  null,
+    "watchdog":  false
+}

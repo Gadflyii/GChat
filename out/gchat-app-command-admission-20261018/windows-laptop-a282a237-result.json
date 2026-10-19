@@ -1,0 +1,25 @@
+﻿{
+    "status":  "PASS",
+    "finished_at":  "2026-10-19T14:34:27.5793713Z",
+    "host":  "RON-X17R2",
+    "executable":  "C:\\Users\\Ron\\gchat-app-command-admission-fixture-20261019\\a282a237\\bin\\app_lib-309382f012c7e6f8.exe",
+    "executable_sha256":  "32b642417a4572335ca872160d9f55fc9a74c49e12055feec3c6a4e56b9356b1",
+    "exit_code":  0,
+    "timed_out":  false,
+    "reports":  1,
+    "validation_error":  null,
+    "cleanup":  {
+                    "inputs":  null,
+                    "paths":  [
+                                  "C:\\Users\\Ron\\AppData\\Local\\app.gchat.windows-native-admission.100ab1683efc4f3bb430a30f7660d183"
+                              ],
+                    "privateData":  null
+                },
+    "browser_dirs_remaining":  [
+
+                               ],
+    "input_children_remaining":  0,
+    "job_leftover_after_exit":  0,
+    "job_empty":  true,
+    "scope":  "Approved windows_native_admission: one hidden unfocused window, UUID WebView2 data; no product setup, credentials, model or settings change"
+}
