@@ -353,9 +353,13 @@ mod windows_native_admission {
         sync::{mpsc, Arc, Mutex},
         time::{Duration, Instant},
     };
+    use std::{cell::RefCell, rc::Rc};
     use tauri::utils::assets::{AssetKey, AssetsIter, CspHash};
     use webview2_com::{
-        take_pwstr, Microsoft::Web::WebView2::Win32::ICoreWebView2_2,
+        take_pwstr,
+        Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2NewWindowRequestedEventArgs, ICoreWebView2_2,
+        },
         NavigationStartingEventHandler, NewWindowRequestedEventHandler,
         WebMessageReceivedEventHandler, WebResourceResponseReceivedEventHandler,
     };
@@ -449,6 +453,8 @@ mod windows_native_admission {
 
     /// These paths did not exist before this fixture and have a UUID identifier
     /// as their final component. Never call any product data-folder resolver.
+    /// The parent removes them after the fixture process exits: WebView2 keeps
+    /// its user-data folder open until its host process is gone.
     struct PrivateData {
         paths: Vec<PathBuf>,
         identifier: String,
@@ -456,6 +462,23 @@ mod windows_native_admission {
 
     impl PrivateData {
         fn new(identifier: &str) -> Result<Self, String> {
+            let data = Self::owned(identifier)?;
+            for path in &data.paths {
+                if path.exists() {
+                    return Err(format!(
+                        "Refusing existing fixture data: {}",
+                        path.display()
+                    ));
+                }
+            }
+            Ok(data)
+        }
+
+        fn owned(identifier: &str) -> Result<Self, String> {
+            identifier
+                .strip_prefix("app.gchat.windows-native-admission.")
+                .filter(|uuid| uuid.len() == 32 && uuid.bytes().all(|b| b.is_ascii_hexdigit()))
+                .ok_or("Invalid private fixture identifier")?;
             let mut paths = vec![
                 dirs::data_local_dir()
                     .ok_or("No Windows local data directory")?
@@ -466,14 +489,6 @@ mod windows_native_admission {
             ];
             paths.sort();
             paths.dedup();
-            for path in &paths {
-                if path.exists() {
-                    return Err(format!(
-                        "Refusing existing fixture data: {}",
-                        path.display()
-                    ));
-                }
-            }
             Ok(Self {
                 paths,
                 identifier: identifier.into(),
@@ -481,7 +496,7 @@ mod windows_native_admission {
         }
 
         fn cleanup(&self) -> Result<(), String> {
-            let deadline = Instant::now() + Duration::from_secs(10);
+            let deadline = Instant::now() + Duration::from_secs(30);
             loop {
                 let mut errors = Vec::new();
                 for path in &self.paths {
@@ -502,12 +517,6 @@ mod windows_native_admission {
                 }
                 std::thread::sleep(Duration::from_millis(100));
             }
-        }
-    }
-
-    impl Drop for PrivateData {
-        fn drop(&mut self) {
-            let _ = self.cleanup();
         }
     }
 
@@ -591,7 +600,8 @@ async function invoke(command, payload) {
     fn main_script(metadata: &Value) -> Vec<u8> {
         r#"
 const m = __METADATA__;
-const send = data => window.chrome.webview.postMessage({fixture:m.fixture,...data});
+// A string body keeps Wry's own IPC listener from failing ahead of the observer.
+const send = data => window.chrome.webview.postMessage(JSON.stringify({fixture:m.fixture,...data}));
 if (location.pathname === '/logs') {
   send({type:'app-route',href:location.href});
 } else {
@@ -640,18 +650,30 @@ if (location.pathname === '/logs') {
                 let view = native.controller().CoreWebView2()?;
                 let mut token = 0;
                 let messages = state.clone();
+                // Wry completes its popup decision asynchronously through a
+                // deferral; read each final Handled value on this UI thread
+                // when the main document reports its result.
+                let popup_requests: Rc<RefCell<Vec<(String, ICoreWebView2NewWindowRequestedEventArgs)>>> = Rc::default();
+                let pending_popups = popup_requests.clone();
                 view.add_WebMessageReceived(&WebMessageReceivedEventHandler::create(Box::new(move |_, args| {
                     let Some(args) = args else { return Ok(()) };
                     let mut source=PWSTR::null(); args.Source(&mut source)?;
                     let source=take_pwstr(source);
-                    let mut text=PWSTR::null(); args.WebMessageAsJson(&mut text)?;
+                    let mut text=PWSTR::null();
+                    if args.TryGetWebMessageAsString(&mut text).is_err() { return Ok(()) }
                     let text=take_pwstr(text);
                     let Ok(value)=serde_json::from_str::<Value>(&text) else { return Ok(()) };
                     if value["fixture"] != fixture || !source.starts_with("http://tauri.localhost/") { return Ok(()) }
                     let done = {
                         let mut state=messages.lock().unwrap();
                         state.events.push(json!({"kind":"message","source":source,"value":value}));
-                        if value["type"] == "result" { state.result=Some(value); }
+                        if value["type"] == "result" {
+                            for (uri, request) in pending_popups.borrow_mut().drain(..) {
+                                let mut handled=BOOL::default(); request.Handled(&mut handled)?;
+                                state.events.push(json!({"kind":"popup","uri":uri,"handled":handled.as_bool()}));
+                            }
+                            state.result=Some(value);
+                        }
                         else if value["type"] == "app-route" { state.app_route=true; }
                         state.result.is_some() && state.app_route
                     };
@@ -670,12 +692,10 @@ if (location.pathname === '/logs') {
                     if main_frame { view.add_NavigationStarting(&handler,&mut token)?; }
                     else { view.add_FrameNavigationStarting(&handler,&mut token)?; }
                 }
-                let popups=state.clone();
                 view.add_NewWindowRequested(&NewWindowRequestedEventHandler::create(Box::new(move |_,args| {
                     if let Some(args)=args {
                         let mut uri=PWSTR::null(); args.Uri(&mut uri)?;
-                        let mut handled=BOOL::default(); args.Handled(&mut handled)?;
-                        observe(&popups,json!({"kind":"popup","uri":take_pwstr(uri),"handled":handled.as_bool()}));
+                        popup_requests.borrow_mut().push((take_pwstr(uri), args));
                     }
                     Ok(())
                 })),&mut token)?;
@@ -824,7 +844,13 @@ if (location.pathname === '/logs') {
         log::set_max_level(log::LevelFilter::Warn);
         let uuid = uuid::Uuid::new_v4().simple().to_string();
         let identifier = format!("app.gchat.windows-native-admission.{uuid}");
-        let private = PrivateData::new(&identifier)?;
+        PrivateData::new(&identifier)?;
+        // Name the browser data before WebView2 creates it, so the parent can
+        // remove it even if this process stops early.
+        if let Some(receipt) = std::env::var_os(CHILD_RECEIPT) {
+            std::fs::write(receipt, json!({"identifier":identifier}).to_string())
+                .map_err(|e| format!("Could not write fixture receipt: {e}"))?;
+        }
         let root = fixture_root()?;
         let temp = tempfile::Builder::new()
             .prefix("gchat-native-admission-")
@@ -849,7 +875,7 @@ if (location.pathname === '/logs') {
             "http://gchat-preview.localhost/%2Foutside"
         ]});
         let mut context: tauri::Context<tauri::Wry> = tauri::generate_context!();
-        context.config_mut().identifier = identifier;
+        context.config_mut().identifier = identifier.clone();
         context.config_mut().app.windows.clear();
         context.config_mut().build.dev_url = None;
         context.config_mut().build.frontend_dist = None;
@@ -899,29 +925,36 @@ if (location.pathname === '/logs') {
             drop(window);
             let (finished, wait) = mpsc::channel();
             let watchdog_app = app.handle().clone();
+            let timed_out = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let watchdog_fired = timed_out.clone();
             let watchdog = std::thread::spawn(move || {
                 if wait.recv_timeout(Duration::from_secs(40)).is_err() {
+                    watchdog_fired.store(true, std::sync::atomic::Ordering::Release);
                     watchdog_app.exit(124);
                 }
             });
             let exit = app.run_return(|_, _| {});
             let _ = finished.send(());
             let _ = watchdog.join();
+            // The event loop can report 0 after a requested exit; a watchdog
+            // stop is never a completed run.
+            let watchdog = timed_out.load(std::sync::atomic::Ordering::Acquire);
+            let exit = if watchdog { 124 } else { exit };
             let state = state.lock().unwrap();
             let result = validate(&state, &metadata, exit);
             println!(
                 "GCHAT_WINDOWS_NATIVE_ADMISSION {}",
-                json!({"metadata":metadata,"exit":exit,"events":state.events,"result":state.result,"validation":result.as_ref().err(),"productSetup":false,"credentialManager":false})
+                json!({"metadata":metadata,"exit":exit,"watchdog":watchdog,"events":state.events,"result":state.result,"validation":result.as_ref().err(),"productSetup":false,"credentialManager":false})
             );
             result
         })();
-        // Cleanup is mandatory even for failed evidence. The browser/cache
-        // UUID children are separate from the explicit owned input root.
-        let data_cleanup = private.cleanup();
+        // Cleanup is mandatory even for failed evidence. The explicit owned
+        // input root is removed here; the parent removes the browser/cache
+        // UUID children once this process and its WebView2 processes exit.
         let input_cleanup = temp.close().map_err(|e| e.to_string());
         Ok(FixtureOutcome {
-            cleanup: json!({"privateData":data_cleanup.as_ref().err(),"inputs":input_cleanup.as_ref().err(),"paths":private.paths}),
-            result: run_result.and(data_cleanup).and(input_cleanup),
+            cleanup: json!({"identifier":identifier,"inputs":input_cleanup.as_ref().err()}),
+            result: run_result.and(input_cleanup),
         })
     }
 
@@ -1012,17 +1045,14 @@ if (location.pathname === '/logs') {
     #[test]
     #[ignore = "Requires an explicitly booked Windows host; creates a private Win32 desktop and removes UUID browser data"]
     fn windows_private_desktop_enforces_frame_and_command_admission() {
-        let missing = || json!({"privateData":"fixture exited before cleanup receipt","inputs":"fixture exited before cleanup receipt","paths":[]});
         if let Some(receipt) = std::env::var_os(CHILD_RECEIPT) {
             // Child: this process, and the WebView2 processes it starts, run
-            // on the private desktop the parent created.
-            let (result, cleanup) = match run_fixture() {
-                Ok(outcome) => (outcome.result, outcome.cleanup),
-                Err(error) => (Err(error), missing()),
-            };
-            std::fs::write(receipt, cleanup.to_string())
+            // on the private desktop the parent created. An early failure
+            // keeps the identifier-only receipt for the parent's cleanup.
+            let outcome = run_fixture().unwrap_or_else(|error| panic!("{error}"));
+            std::fs::write(receipt, outcome.cleanup.to_string())
                 .expect("Could not write private-desktop cleanup receipt");
-            assert!(result.is_ok(), "{}", result.unwrap_err());
+            assert!(outcome.result.is_ok(), "{}", outcome.result.unwrap_err());
             return;
         }
         let root = fixture_root().expect("Invalid fixture root");
@@ -1034,14 +1064,27 @@ if (location.pathname === '/logs') {
             PrivateDesktop::create(&name).expect("Could not create private fixture desktop");
         let child = run_on_private_desktop(&name, &receipt);
         let desktop_cleanup = desktop.close();
-        let mut cleanup = std::fs::read_to_string(&receipt)
+        let receipt_value = std::fs::read_to_string(&receipt)
             .ok()
-            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-            .unwrap_or_else(missing);
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok());
         let receipt_cleanup = match std::fs::remove_file(&receipt) {
             Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error.to_string()),
             _ => Ok(()),
         };
+        let private = receipt_value
+            .as_ref()
+            .and_then(|value| value["identifier"].as_str())
+            .ok_or_else(|| "Fixture process exited before naming its browser data".to_string())
+            .and_then(PrivateData::owned);
+        let data_cleanup = private
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(PrivateData::cleanup);
+        let inputs = match receipt_value {
+            Some(value) if value.get("inputs").is_some() => value["inputs"].clone(),
+            _ => json!("fixture exited before cleanup receipt"),
+        };
+        let mut cleanup = json!({"privateData":data_cleanup.as_ref().err(),"inputs":inputs,"paths":private.as_ref().map(|p| p.paths.clone()).unwrap_or_default()});
         cleanup["desktop"] = json!(desktop_cleanup.as_ref().err());
         println!("GCHAT_WINDOWS_NATIVE_ADMISSION_CLEANUP {cleanup}");
         let result = child
@@ -1051,6 +1094,7 @@ if (location.pathname === '/logs') {
                     "Private-desktop fixture process failed with exit {exit}"
                 )),
             })
+            .and(data_cleanup)
             .and(desktop_cleanup)
             .and(receipt_cleanup);
         assert!(result.is_ok(), "{}", result.unwrap_err());
