@@ -313,6 +313,7 @@ pub fn supported_route(path: &str) -> bool {
             | "/v1/tasks/start"
             | "/v1/tasks/resume"
             | "/v1/tasks/cancel"
+            | "/v1/tasks/file"
             | "/v1/tasks/approvals"
             | "/v1/tasks/approval"
             | "/v1/schedules"
