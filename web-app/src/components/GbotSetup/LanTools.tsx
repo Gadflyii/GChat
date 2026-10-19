@@ -2,6 +2,13 @@ import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { gbot, type LanPreparation } from '@/services/gbot'
 
+const toolInstructions = new Set([
+  'This setup supports a dedicated Debian 13 computer. Use an already prepared computer for another OS.',
+  'A person may be using this desktop. Sign out of graphical sessions before preparing the bot computer.',
+  'Gbot tools are not fully installed. For a dedicated Debian 13 computer, authorize installation and choose Prepare tools in GChat. Follow its installation instructions, including running the administrator command if shown, then choose Check tools.',
+  'The bot desktop or media service is stopped. Re-run the installer and check again.',
+])
+
 export default function LanTools({
   workspaceId,
   ready,
@@ -43,13 +50,11 @@ export default function LanTools({
         { workspace_id: workspaceId, ...(prepare ? { consent } : {}) }
       )
       setCommand(result.command ?? '')
-      if (result.issue) {
+      if (result.issue != null) {
         setIssue({
           message: result.issue,
           action: prepare ? 'prepare' : 'check',
-          diagnostic: /^Guest (archive|installer) upload failed:/.test(
-            result.issue
-          ),
+          diagnostic: !toolInstructions.has(result.issue),
         })
       }
       setInstalled(result.installed)
@@ -140,12 +145,14 @@ export default function LanTools({
                   ? 'GChat could not finish preparing the tools. Check the computer’s connection and available disk space, then choose Prepare tools to try again. If you already ran the installation command, choose Check tools first.'
                   : 'GChat could not check the tools. Check the computer’s connection, then choose Check tools to try again.'}
               </p>
-              <details>
-                <summary className="cursor-pointer">Details</summary>
-                <p className="whitespace-pre-wrap break-words">
-                  {issue.message}
-                </p>
-              </details>
+              {issue.message && (
+                <details>
+                  <summary className="cursor-pointer">Details</summary>
+                  <p className="whitespace-pre-wrap break-words">
+                    {issue.message}
+                  </p>
+                </details>
+              )}
             </>
           ) : (
             <p className="whitespace-pre-wrap break-words">{issue.message}</p>

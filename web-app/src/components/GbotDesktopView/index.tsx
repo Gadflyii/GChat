@@ -33,6 +33,8 @@ const GbotDesktopView = forwardRef<
   const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState<MediaStatus>('connecting')
   const [error, setError] = useState('')
+  const openView = useRef<HTMLButtonElement>(null)
+  const previouslyOpened = useRef(false)
   const canvas = useRef<HTMLCanvasElement>(null)
   const returnKeyboard = useRef<HTMLButtonElement>(null)
   const stopMedia = useRef<(() => void) | null>(null)
@@ -41,6 +43,11 @@ const GbotDesktopView = forwardRef<
     () => ({ stopInput: () => stopMedia.current?.() }),
     []
   )
+
+  useEffect(() => {
+    if (previouslyOpened.current && !opened) openView.current?.focus()
+    previouslyOpened.current = opened
+  }, [opened])
 
   const { workspace_id, session_id } = identity
   useEffect(() => {
@@ -119,7 +126,7 @@ const GbotDesktopView = forwardRef<
 
   if (!opened)
     return (
-      <Button variant="outline" onClick={() => setOpened(true)}>
+      <Button ref={openView} variant="outline" onClick={() => setOpened(true)}>
         View bot’s desktop
       </Button>
     )

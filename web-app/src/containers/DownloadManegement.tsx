@@ -27,6 +27,10 @@ import {
 //* Полупрозрачная зелень: текст % и ГБ остаётся читаемым в светлой и тёмной теме
 const DOWNLOAD_PROGRESS_INDICATOR = 'bg-emerald-400/50 dark:bg-emerald-400/45'
 
+// Announce milestones rather than every byte-counter update.
+const announcedPercent = (progress: number) =>
+  Math.floor(Math.min(1, Math.max(0, progress)) * 10) * 10
+
 function isCancellationLikeError(error?: string): boolean {
   if (!error) return false
   return /abort|aborted|cancel|cancelled|canceled|stop|stopped|interrupt/i.test(
@@ -38,9 +42,31 @@ export function DownloadManagement() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [isPopoverOpen, setIsPopoverOpen] = useState(false)
+  const automaticallyOpened = useRef(false)
+  const closeButton = useRef<HTMLButtonElement>(null)
+  const focusedPopoverControl = useRef<HTMLElement | null>(null)
   const prevDownloadCount = useRef(0)
   const autoHidePopoverTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null
+  )
+  const clearAutoHide = useCallback(() => {
+    if (autoHidePopoverTimer.current) {
+      clearTimeout(autoHidePopoverTimer.current)
+      autoHidePopoverTimer.current = null
+    }
+  }, [])
+  const keepPopoverOpen = useCallback(() => {
+    automaticallyOpened.current = false
+    clearAutoHide()
+  }, [clearAutoHide])
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      focusedPopoverControl.current = null
+      if (open) keepPopoverOpen()
+      else clearAutoHide()
+      setIsPopoverOpen(open)
+    },
+    [keepPopoverOpen, clearAutoHide]
   )
   const serviceHub = useServiceHub()
   const {
@@ -155,31 +181,34 @@ export function DownloadManagement() {
   useEffect(() => {
     const prev = prevDownloadCount.current
     prevDownloadCount.current = downloadCount
-    if (downloadCount > 0 && prev === 0) {
+    if (downloadCount > 0 && prev === 0 && !isPopoverOpen) {
+      focusedPopoverControl.current = null
+      automaticallyOpened.current = true
       setIsPopoverOpen(true)
-      if (autoHidePopoverTimer.current) {
-        clearTimeout(autoHidePopoverTimer.current)
-      }
+      clearAutoHide()
       autoHidePopoverTimer.current = setTimeout(() => {
         setIsPopoverOpen(false)
         autoHidePopoverTimer.current = null
       }, 3500)
     } else if (downloadCount === 0 && prev > 0) {
-      if (autoHidePopoverTimer.current) {
-        clearTimeout(autoHidePopoverTimer.current)
-        autoHidePopoverTimer.current = null
-      }
-      setIsPopoverOpen(false)
+      clearAutoHide()
+      if (automaticallyOpened.current) setIsPopoverOpen(false)
     }
-  }, [downloadCount])
+  }, [downloadCount, isPopoverOpen, clearAutoHide])
+
+  useEffect(() => clearAutoHide, [clearAutoHide])
 
   useEffect(() => {
-    return () => {
-      if (autoHidePopoverTimer.current) {
-        clearTimeout(autoHidePopoverTimer.current)
-      }
+    if (
+      isPopoverOpen &&
+      !automaticallyOpened.current &&
+      focusedPopoverControl.current &&
+      !focusedPopoverControl.current.isConnected &&
+      document.activeElement === document.body
+    ) {
+      closeButton.current?.focus()
     }
-  }, [])
+  }, [downloadCount, isPopoverOpen])
 
   const overallProgress = useMemo(() => {
     const modelTotal = downloadProcesses.reduce((acc, download) => {
@@ -581,7 +610,49 @@ export function DownloadManagement() {
 
   return (
     <>
-      <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+      {/* Keep Host results mounted when completion removes the visible row or
+          the popover closes. Legacy and app-update terminal events already
+          announce their results through the existing notifications. */}
+      <div className="sr-only">
+        {managedJobs.map((job) => (
+          <p
+            key={job.id}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            aria-label={`${job.release.name} download status`}
+          >
+            {job.release.name}: {downloadStatusLabel(job.status)}
+            {job.status === 'downloading' && `, ${announcedPercent(job.received / Math.max(job.release.bytes, 1))}%`}
+          </p>
+        ))}
+        {appUpdateState.isDownloading && (
+          <p
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            aria-label="App update download status"
+          >
+            App update: Downloading, {announcedPercent(appUpdateState.downloadProgress)}%
+          </p>
+        )}
+        {downloadProcesses.map((download) => (
+          <p
+            key={download.id}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            aria-label={`${download.name} download status`}
+          >
+            {download.name}: {pausedDownloads.has(download.id)
+              ? 'Download paused'
+              : download.total > 0
+                ? `Downloading, ${announcedPercent(download.progress)}%`
+                : 'Preparing download'}
+          </p>
+        ))}
+      </div>
+      <Popover open={isPopoverOpen} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
           <Button
             variant="ghost"
@@ -590,9 +661,10 @@ export function DownloadManagement() {
             aria-label={t('common:downloads')}
             title={t('common:downloads')}
           >
-            <DownloadIcon className="text-muted-foreground size-4" />
+            <DownloadIcon className="text-muted-foreground size-4" aria-hidden="true" />
             {downloadCount > 0 && (
               <svg
+                aria-hidden="true"
                 className="absolute inset-0 size-7 -rotate-90"
                 viewBox="0 0 36 36"
               >
@@ -618,19 +690,42 @@ export function DownloadManagement() {
         </PopoverTrigger>
 
         <PopoverContent
+          aria-label={t('common:downloads')}
           side="bottom"
           align="start"
           className="p-0 overflow-hidden text-sm select-none rounded-2xl"
           sideOffset={6}
           collisionPadding={8}
-          onOpenAutoFocus={(e) => e.preventDefault()}
+          onOpenAutoFocus={(event) => {
+            if (automaticallyOpened.current) event.preventDefault()
+          }}
+          onCloseAutoFocus={(event) => {
+            focusedPopoverControl.current = null
+            // A background notification must not move the user's focus.
+            if (automaticallyOpened.current) event.preventDefault()
+          }}
+          onFocusCapture={(event) => {
+            focusedPopoverControl.current = event.target as HTMLElement
+            keepPopoverOpen()
+          }}
+          onPointerDownCapture={keepPopoverOpen}
+          onKeyDownCapture={keepPopoverOpen}
         >
           <div className="flex flex-col">
+            <div className="px-3 pt-2 flex items-center justify-between">
+              <p>{t('common:downloads')}</p>
+              <Button
+                ref={closeButton}
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`${t('common:close')} ${t('common:downloads')}`}
+                onClick={() => handleOpenChange(false)}
+              >
+                <IconX size={16} aria-hidden="true" />
+              </Button>
+            </div>
             {appUpdateState.isDownloading || downloadProcesses.length > 0 || managedTransfers.length > 0 ? (
               <>
-                <div className="px-3 pt-2 flex items-center justify-between">
-                  <p>{t('common:downloads')}</p>
-                </div>
                 <div className="p-2 max-h-[300px] overflow-y-auto space-y-2">
                   {appUpdateState.isDownloading && (
                     <div className="rounded-lg p-2 bg-secondary">
@@ -639,6 +734,7 @@ export function DownloadManagement() {
                       </div>
                       <div className="relative z-40 my-2 h-6">
                         <Progress
+                          aria-label="App update download"
                           value={appUpdateState.downloadProgress * 100}
                           indicatorClassName={DOWNLOAD_PROGRESS_INDICATOR}
                           className="absolute inset-0 h-full bg-muted-foreground/15 dark:bg-muted-foreground/20 rounded-md"
@@ -662,23 +758,21 @@ export function DownloadManagement() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          aria-label={`Manage ${job.release.name} download`}
                           onClick={() => {
-                            setIsPopoverOpen(false)
+                            handleOpenChange(false)
                             navigate({ to: route.hub.index, search: { tab: 'Downloads' } })
                           }}
                         >
                           Manage
                         </Button>
                       </div>
-                      <p
-                        role="status"
-                        aria-label={`${job.release.name} download status`}
-                        className="mt-1 text-xs text-muted-foreground"
-                      >
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {downloadStatusLabel(job.status)}
                       </p>
                       <div className="relative z-40 my-2 h-6">
                         <Progress
+                          aria-label={`${job.release.name} download`}
                           value={(job.received / Math.max(job.release.bytes, 1)) * 100}
                           indicatorClassName={DOWNLOAD_PROGRESS_INDICATOR}
                           className="absolute inset-0 h-full bg-muted-foreground/15 dark:bg-muted-foreground/20 rounded-md"
@@ -706,30 +800,33 @@ export function DownloadManagement() {
                             <Button
                               variant="secondary"
                               size="icon-xs"
+                              aria-label={`${t('common:resumeDownload')} ${download.name}`}
                               onClick={() => handleResumeDownload(download)}
                             >
                               <IconPlayerPlay
                                 size={16}
                                 className="text-muted-foreground cursor-pointer"
-                                title={t('resumeDownload')}
+                                aria-hidden="true"
                               />
                             </Button>
                           ) : (
                             <Button
                               variant="secondary"
                               size="icon-xs"
+                              aria-label={`${t('common:pauseDownload')} ${download.name}`}
                               onClick={() => handlePauseDownload(download)}
                             >
                               <IconPlayerPause
                                 size={16}
                                 className="text-muted-foreground cursor-pointer"
-                                title={t('pauseDownload')}
+                                aria-hidden="true"
                               />
                             </Button>
                           )}
                           <Button
                             variant="secondary"
                             size="icon-xs"
+                            aria-label={`${t('common:cancelDownload')} ${download.name}`}
                             onClick={() => {
                               markDownloadCancellationRequested(download.name)
                               markResumableDownload(download.name)
@@ -742,20 +839,21 @@ export function DownloadManagement() {
                                 clearResumeParams(download.id)
                               }
                               serviceHub.models().abortDownload(download.name)
-                              setIsPopoverOpen(false)
+                              handleOpenChange(false)
                             }}
                           >
                             <IconX
                               size={16}
                               className="text-muted-foreground cursor-pointer"
-                              title={t('cancelDownload')}
+                              aria-hidden="true"
                             />
                           </Button>
                         </div>
                       </div>
                       <div className="relative z-40 my-2 h-6">
                         <Progress
-                          value={download.progress * 100}
+                          aria-label={`${download.name} download`}
+                          value={download.total > 0 ? download.progress * 100 : undefined}
                           indicatorClassName={DOWNLOAD_PROGRESS_INDICATOR}
                           className="absolute inset-0 h-full bg-muted-foreground/15 dark:bg-muted-foreground/20 rounded-md"
                         />
@@ -778,7 +876,7 @@ export function DownloadManagement() {
               </>
             ) : (
               <div className="px-3 py-8 flex flex-col items-center justify-center text-center space-y-2">
-                <DownloadIcon className="text-muted-foreground/50 size-6" />
+                <DownloadIcon className="text-muted-foreground/50 size-6" aria-hidden="true" />
                 <p className="text-muted-foreground leading-normal">
                   Your download progress <br /> will appear here
                 </p>

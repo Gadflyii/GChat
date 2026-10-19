@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import userEvent from '@testing-library/user-event'
 import {
   act,
   cleanup,
@@ -52,10 +53,12 @@ function Setup({
   },
   configured,
   save,
+  busy = false,
 }: {
   initial?: Assignment
   configured?: SavedAssignment
   save: (value: Assignment) => Promise<void>
+  busy?: boolean
 }) {
   const [value, setValue] = useState(initial)
   return (
@@ -63,7 +66,7 @@ function Setup({
       value={value}
       saved={configured}
       computerReady
-      busy={false}
+      busy={busy}
       onChange={setValue}
       onCancel={() => {
         if (configured)
@@ -80,7 +83,14 @@ function Setup({
 
 it('offers the next setup step and saves only a complete model assignment', async () => {
   const save = vi.fn().mockResolvedValue(undefined)
-  render(<Setup save={save} />)
+  render(
+    <>
+      <input aria-label="Another setting" autoFocus />
+      <Setup save={save} />
+    </>
+  )
+  const other = screen.getByRole('textbox', { name: 'Another setting' })
+  expect(other).toHaveFocus()
   expect(screen.getByRole('form', { name: 'Set up bot brain' })).toBeVisible()
   expect(screen.getByText('Next: choose a brain')).toBeVisible()
   expect(
@@ -109,6 +119,7 @@ it('offers the next setup step and saves only a complete model assignment', asyn
       context_tokens: 262144,
     })
   )
+  expect(other).toHaveFocus()
 })
 
 it('keeps the saved key when editing and removes it only by explicit choice', async () => {
@@ -132,6 +143,143 @@ it('keeps the saved key when editing and removes it only by explicit choice', as
   expect(screen.getByLabelText('API key')).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: 'Save brain settings' }))
   await waitFor(() => expect(save.mock.calls[1][0].api_key).toBe(''))
+})
+
+it('returns brain edit keyboard focus after Cancel without saving a draft or key', async () => {
+  const user = userEvent.setup()
+  const save = vi.fn()
+  render(
+    <>
+      <input aria-label="Another setting" autoFocus />
+      <Setup initial={saved} configured={saved} save={save} />
+    </>
+  )
+  expect(screen.getByRole('textbox', { name: 'Another setting' })).toHaveFocus()
+  await user.tab()
+  expect(screen.getByRole('button', { name: 'Edit brain' })).toHaveFocus()
+  await user.keyboard('{Enter}')
+  await user.click(screen.getByLabelText('API key'))
+  await user.keyboard('replacement-key')
+  const model = screen.getByLabelText('Model ID')
+  await user.clear(model)
+  await user.keyboard('unsaved-model')
+  await user.tab()
+  expect(screen.getByLabelText('Model context tokens')).toHaveFocus()
+  await user.tab()
+  expect(screen.getByRole('button', { name: 'Save brain settings' })).toHaveFocus()
+  await user.tab()
+  expect(screen.getByRole('button', { name: 'Cancel edits' })).toHaveFocus()
+  await user.keyboard('{Enter}')
+
+  expect(screen.queryByRole('form')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Edit brain' })).toHaveFocus()
+  expect(save).not.toHaveBeenCalled()
+  expect(call).not.toHaveBeenCalled()
+  await user.keyboard('{Enter}')
+  expect(screen.getByLabelText('Model ID')).toHaveValue(saved.model)
+  expect(screen.getByLabelText('API key')).toHaveValue('')
+  expect(screen.getByLabelText('API key')).toHaveAttribute(
+    'placeholder',
+    'Saved in secure storage'
+  )
+  expect(screen.getByLabelText('Remove saved API key')).not.toBeChecked()
+  expect(save).not.toHaveBeenCalled()
+})
+
+it.each([false, true])(
+  'settles brain edit keyboard focus after successful Save and parent refresh (focus moved: %s)',
+  async (moveFocus) => {
+    const user = userEvent.setup()
+    const pending = deferred()
+    const save = vi.fn().mockReturnValue(pending.promise)
+    const page = (busy = false, configured = saved) => (
+      <>
+        <input aria-label="Another setting" autoFocus />
+        <Setup initial={saved} configured={configured} save={save} busy={busy} />
+      </>
+    )
+    const view = render(page())
+    const other = screen.getByRole('textbox', { name: 'Another setting' })
+    expect(other).toHaveFocus()
+    await user.tab()
+    await user.keyboard('{Enter}')
+    const model = screen.getByLabelText('Model ID')
+    await user.clear(model)
+    await user.keyboard('updated-model')
+    await user.tab()
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Save brain settings' })).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(save).toHaveBeenCalledExactlyOnceWith({ ...saved, model: 'updated-model' })
+    expect(model).toBeDisabled()
+    view.rerender(page(true))
+    await act(async () => pending.resolve())
+    expect(screen.queryByRole('form')).not.toBeInTheDocument()
+    const opener = screen.getByRole('button', { name: 'Edit brain' })
+    expect(opener).toBeDisabled()
+    expect(opener).not.toHaveFocus()
+    if (moveFocus) {
+      await user.tab()
+      expect(other).toHaveFocus()
+      await user.keyboard('Continue another setting')
+    }
+
+    view.rerender(page(false, { ...saved, model: 'updated-model' }))
+    expect(opener).toBeEnabled()
+    expect(screen.getByText(/updated-model ·/)).toBeVisible()
+    expect(screen.queryByRole('form')).not.toBeInTheDocument()
+    expect(save).toHaveBeenCalledTimes(1)
+    expect(call).not.toHaveBeenCalled()
+    if (moveFocus) {
+      expect(other).toHaveFocus()
+      expect(other).toHaveValue('Continue another setting')
+    } else {
+      expect(opener).toHaveFocus()
+      await user.keyboard('{Enter}')
+      expect(screen.getByLabelText('Model ID')).toHaveValue('updated-model')
+      expect(screen.getByLabelText('API key')).toHaveValue('')
+      expect(save).toHaveBeenCalledTimes(1)
+    }
+  }
+)
+
+it('leaves brain edit keyboard focus return inactive after failed Save and retains the draft', async () => {
+  const user = userEvent.setup()
+  const pending = deferred()
+  const save = vi.fn().mockReturnValue(pending.promise)
+  render(
+    <>
+      <input aria-label="Another setting" autoFocus />
+      <Setup initial={saved} configured={saved} save={save} />
+    </>
+  )
+  await user.tab()
+  await user.keyboard('{Enter}')
+  await user.click(screen.getByLabelText('API key'))
+  await user.keyboard('draft-key')
+  const model = screen.getByLabelText('Model ID')
+  await user.clear(model)
+  await user.keyboard('draft-model')
+  await user.tab()
+  await user.tab()
+  expect(screen.getByRole('button', { name: 'Save brain settings' })).toHaveFocus()
+  await user.keyboard('{Enter}')
+  await act(async () => pending.reject(new Error('Vault unavailable')))
+
+  expect(screen.getByRole('form', { name: 'Set up bot brain' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Edit brain' })).not.toBeInTheDocument()
+  expect(model).toBeEnabled()
+  expect(model).toHaveValue('draft-model')
+  expect(screen.getByLabelText('API key')).toHaveValue('draft-key')
+  expect(screen.getByLabelText('Remove saved API key')).not.toBeChecked()
+  expect(screen.getByRole('button', { name: 'Save brain settings' })).toBeEnabled()
+  expect(screen.getByRole('alert')).toHaveTextContent(/entries are still here/i)
+  expect(save).toHaveBeenCalledExactlyOnceWith({
+    ...saved,
+    model: 'draft-model',
+    api_key: 'draft-key',
+  })
+  expect(call).not.toHaveBeenCalled()
 })
 
 it('keeps failed setup visible with its inputs for retry', async () => {

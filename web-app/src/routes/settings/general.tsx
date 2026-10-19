@@ -193,6 +193,13 @@ function General() {
       await serviceHub.window().openLogsWindow()
     } catch (error) {
       console.error('Failed to open logs window:', error)
+      toast.error(
+        t('settings:general.openLogsFailed', {
+          defaultValue:
+            'Could not open logs. Try again or open the logs folder.',
+        }),
+        { description: String(error) }
+      )
     }
   }
 
@@ -538,6 +545,13 @@ function General() {
                             console.error(
                               'Failed to reveal logs folder:',
                               error
+                            )
+                            toast.error(
+                              t('settings:general.revealLogsFailed', {
+                                defaultValue:
+                                  'Could not open the logs folder. Try again.',
+                              }),
+                              { description: String(error) }
                             )
                           }
                         }

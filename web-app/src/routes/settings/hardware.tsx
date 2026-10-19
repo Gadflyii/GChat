@@ -6,7 +6,7 @@ import { Card, CardItem } from '@/containers/Card'
 import { Progress } from '@/components/ui/progress'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { useHardware } from '@/hooks/useHardware'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { IconDeviceDesktopAnalytics } from '@tabler/icons-react'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import type { HardwareData, SystemUsage } from '@/services/hardware/types'
@@ -22,7 +22,10 @@ export const Route = createFileRoute(route.settings.hardware as any)({
 
 function HardwareContent() {
   const { t } = useTranslation()
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [hasLoaded, setHasLoaded] = useState(false)
+  const [hardwareStatus, setHardwareStatus] = useState('Loading hardware information...')
+  const refreshPending = useRef(false)
   const serviceHub = useServiceHub()
   const {
     hardwareData,
@@ -35,26 +38,25 @@ function HardwareContent() {
   // Fetch initial hardware info and system usage
   useEffect(() => {
     setIsLoading(true)
-    Promise.all([
+    Promise.allSettled([
       serviceHub
         .hardware()
         .getHardwareInfo()
         .then((data: HardwareData | null) => {
           if (data) setHardwareData(data)
-        })
-        .catch((error) => {
-          console.error('Failed to get hardware info:', error)
         }),
       serviceHub
         .hardware()
         .getSystemUsage()
         .then((data: SystemUsage | null) => {
           if (data) updateSystemUsage(data)
-        })
-        .catch((error: unknown) => {
-          console.error('Failed to get initial system usage:', error)
         }),
-    ]).finally(() => {
+    ]).then((results) => {
+      const failed = results.some(result => result.status === 'rejected')
+      setHardwareStatus(failed
+        ? 'Hardware information could not be fully loaded. Choose Refresh hardware to try again.'
+        : 'Hardware information ready.')
+      setHasLoaded(true)
       setIsLoading(false)
     })
   }, [serviceHub, setHardwareData, updateSystemUsage])
@@ -83,10 +85,14 @@ function HardwareContent() {
       await serviceHub.window().openSystemMonitorWindow()
     } catch (error) {
       console.error('Failed to open system monitor window:', error)
+      setHardwareStatus('System Monitor could not open. Try opening System Monitor again.')
     }
   }
 
   const handleRefreshHardware = async () => {
+    if (isLoading || refreshPending.current) return
+    refreshPending.current = true
+    setHardwareStatus('Refreshing hardware information…')
     try {
       setIsLoading(true)
       await serviceHub.hardware().refreshHardwareInfo()
@@ -96,9 +102,12 @@ function HardwareContent() {
       ])
       if (hardwareData) setHardwareData(hardwareData)
       if (systemUsage) updateSystemUsage(systemUsage)
+      setHardwareStatus('Hardware information refreshed.')
     } catch (error) {
       console.error('Failed to refresh hardware:', error)
+      setHardwareStatus('Hardware information could not be refreshed. Choose Refresh hardware to try again.')
     } finally {
+      refreshPending.current = false
       setIsLoading(false)
     }
   }
@@ -122,91 +131,90 @@ function HardwareContent() {
       <div className="flex h-[calc(100%-60px)]">
         <SettingsMenu />
         <div className="p-4 pt-0 w-full overflow-y-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="text-muted-foreground">
-                Loading hardware information...
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col justify-between gap-4 gap-y-3 w-full">
-              <p className="text-sm text-muted-foreground">
-                See the hardware detected on this computer. Select Refresh
-                hardware after connecting or changing a graphics card to update
-                this list.
-              </p>
-              {/* OS Information */}
-              <Card title={t('settings:hardware.os')}>
-                <CardItem
-                  title={t('settings:hardware.name')}
-                  actions={
-                    <span className="text-foreground capitalize">
-                      {hardwareData.os_type}
-                    </span>
-                  }
-                />
-                <CardItem
-                  title={t('settings:hardware.version')}
-                  actions={
-                    <span className="text-foreground">
-                      {hardwareData.os_name}
-                    </span>
-                  }
-                />
-              </Card>
-
-              {/* CPU Information */}
-              <Card title={t('settings:hardware.cpu')}>
-                <CardItem
-                  title={t('settings:hardware.model')}
-                  actions={
-                    <span className="text-foreground">
-                      {hardwareData.cpu?.name}
-                    </span>
-                  }
-                />
-                <CardItem
-                  title={t('settings:hardware.architecture')}
-                  actions={
-                    <span className="text-foreground">
-                      {hardwareData.cpu?.arch}
-                    </span>
-                  }
-                />
-                <CardItem
-                  title={t('settings:hardware.cores')}
-                  actions={
-                    <span className="text-foreground">
-                      {hardwareData.cpu?.core_count}
-                    </span>
-                  }
-                />
-                {hardwareData.cpu?.extensions?.join(', ').length > 0 && (
+          <p role="status" aria-live="polite" aria-atomic="true" className="text-sm text-muted-foreground mb-3">
+            {hardwareStatus}
+          </p>
+          <div aria-busy={isLoading}>
+            {hasLoaded && (
+              <div className="flex flex-col justify-between gap-4 gap-y-3 w-full">
+                <p className="text-sm text-muted-foreground">
+                  See the hardware detected on this computer. Select Refresh
+                  hardware after connecting or changing a graphics card to update
+                  this list.
+                </p>
+                {/* OS Information */}
+                <Card title={t('settings:hardware.os')}>
                   <CardItem
-                    title={t('settings:hardware.instructions')}
-                    column={hardwareData.cpu?.extensions.length > 6}
+                    title={t('settings:hardware.name')}
                     actions={
-                      <span className="text-foreground wrap-break-word">
-                        {hardwareData.cpu?.extensions?.join(', ')}
+                      <span className="text-foreground capitalize">
+                        {hardwareData.os_type}
                       </span>
                     }
                   />
-                )}
-                <CardItem
-                  title={t('settings:hardware.usage')}
-                  actions={
-                    <div className="flex items-center gap-2">
-                      {systemUsage.cpu > 0 && (
-                        <>
-                          <Progress
-                            value={systemUsage.cpu}
-                            className="h-2 w-10 border"
-                          />
-                          <span className="text-foreground">
-                            {systemUsage.cpu?.toFixed(2)}%
-                          </span>
-                        </>
-                      )}
+                  <CardItem
+                    title={t('settings:hardware.version')}
+                    actions={
+                      <span className="text-foreground">
+                        {hardwareData.os_name}
+                      </span>
+                    }
+                  />
+                </Card>
+
+                {/* CPU Information */}
+                <Card title={t('settings:hardware.cpu')}>
+                  <CardItem
+                    title={t('settings:hardware.model')}
+                    actions={
+                      <span className="text-foreground">
+                        {hardwareData.cpu?.name}
+                      </span>
+                    }
+                  />
+                  <CardItem
+                    title={t('settings:hardware.architecture')}
+                    actions={
+                      <span className="text-foreground">
+                        {hardwareData.cpu?.arch}
+                      </span>
+                    }
+                  />
+                  <CardItem
+                    title={t('settings:hardware.cores')}
+                    actions={
+                      <span className="text-foreground">
+                        {hardwareData.cpu?.core_count}
+                      </span>
+                    }
+                  />
+                  {hardwareData.cpu?.extensions?.join(', ').length > 0 && (
+                    <CardItem
+                      title={t('settings:hardware.instructions')}
+                      column={hardwareData.cpu?.extensions.length > 6}
+                      actions={
+                        <span className="text-foreground wrap-break-word">
+                          {hardwareData.cpu?.extensions?.join(', ')}
+                        </span>
+                      }
+                    />
+                  )}
+                  <CardItem
+                    title={t('settings:hardware.usage')}
+                    actions={
+                      <div className="flex items-center gap-2">
+                        {systemUsage.cpu > 0 && (
+                          <>
+                            <Progress
+                              aria-label="CPU usage"
+                              value={systemUsage.cpu}
+                              className="h-2 w-10 border"
+                            />
+                            <span className="text-foreground">
+                              {systemUsage.cpu?.toFixed(2)}%
+                            </span>
+                          </>
+                        )}
                     </div>
                   }
                 />
@@ -239,6 +247,7 @@ function HardwareContent() {
                       {hardwareData.total_memory > 0 && (
                         <>
                           <Progress
+                            aria-label="Memory usage"
                             value={
                               toNumber(
                                 systemUsage.used_memory /
@@ -273,7 +282,7 @@ function HardwareContent() {
                         variant="ghost"
                         size="sm"
                         onClick={handleRefreshHardware}
-                        disabled={isLoading}
+                        aria-disabled={isLoading}
                       >
                         {isLoading ? 'Refreshing…' : 'Refresh hardware'}
                       </Button>
@@ -313,6 +322,7 @@ function HardwareContent() {
               )}
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>

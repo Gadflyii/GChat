@@ -1,5 +1,33 @@
 # Gbot design
 
+## Recovered Gbot GUI batch validation — Claude, October 19
+
+Gchat 2 branches `GBOT-COMPANION-SERVICE-ERROR-GUIDANCE`,
+`GBOT-COMPANION-CONNECTION-RETRY-PROGRESS`, `GBOT-TOOLS-RESULT-ERROR-GUIDANCE`,
+`GBOT-LAN-RENAME-FOCUS-RETURN`, `GBOT-DESKTOP-VIEW-CLOSE-FOCUS` and
+`GBOT-BRAIN-EDIT-FOCUS-RETURN` are integrated in
+`fix/claude-recover-gui-batch-20261019` with the same gate as the Models batch
+(see `docs/host-ui/README.md`). The service-error and retry-progress changes both
+edit the connection alert; the merged alert keeps the plain guidance, closed
+Details, Open Gbot settings, the checking-connection status and the disabled
+Retry button. Source/rendered scope only.
+
+## Recovering a companion connection failure — Gchat 2
+
+`GBOT-COMPANION-SERVICE-ERROR-GUIDANCE`, based on main `e5d0f3c38`,
+explains a companion service failure beside Retry connection and an Open Gbot
+settings link. Resource preparation failures instead name Restart GChat.
+Diagnostics remain available in initially closed Details. Previously, these
+alerts showed the diagnostic directly without naming recovery for the service.
+
+Rendered journeys cover first load and a saved bot, both Error and native
+string diagnostics, explicit retry, and retained bot name and unsent draft.
+Opening Details sends no request. Existing resource preparation journeys also
+check restart guidance. This is source/rendered mocked-service scope, with no
+native, account, model or VM acceptance.
+
+Validation pending focused checks and ONE `make verify`.
+
 ## Companion keyboard focus with no saved bot — Gchat 2
 
 `GBOT-EMPTY-COMPANION-FOCUS-RETURN` restores keyboard focus to the sidebar
@@ -45,6 +73,35 @@ matched raw bytes and modes before and after verification with fresh tracked
 timestamps. Only this receipt was added afterward. Booking 3630 returned
 23:25Z; the private build cache was removed. Evidence:
 `/ai/gchat/out/gchat2-schedule-retry-guidance-20261018/SUMMARY.md`.
+## Recovering failed tool results — Gchat 2
+
+`GBOT-TOOLS-RESULT-ERROR-GUIDANCE`, based on main `7f626c5dc`, gives
+failed Check tools and Prepare tools results the same plain retry guidance as
+failed requests. Previously, nonzero guest commands exposed shell output as the
+main instruction, and a nonzero command with no output showed no failure.
+Optional diagnostic output now stays in initially closed Details. The service’s
+known instructions for unsupported systems, signed-in desktops, missing tools
+and stopped services stay visible.
+
+Rendered journeys cover tool-check and cloud-preparation results with shell
+output and with no output, optional disclosure and explicit successful retry.
+Preparation still requires installation consent; neither opening Details nor
+receiving a failed result repeats a request. Source/rendered mocked-service
+scope only; no guest installation, native or account acceptance.
+
+## Keyboard focus after closing the desktop — Gchat 2
+
+`GBOT-DESKTOP-VIEW-CLOSE-FOCUS`, based on main `919b569dd`, returns keyboard
+focus to View bot’s desktop after Close view removes its focused control.
+Previously, focus fell to the document body. Initial mount does not move focus.
+Closing still stops the media session and releases its lease; reopening requires
+an explicit action and opens a new view. Human control and task state remain.
+
+Rendered keyboard journeys cover view-only and human-control sessions, lease
+cleanup, preserved control and explicit reopen. This is source/rendered mocked
+transport scope, with no native, guest or desktop-input acceptance.
+
+Validation pending focused checks and ONE `make verify`.
 
 ## Saved local computer action recovery — Gchat 2
 
@@ -292,6 +349,11 @@ A successful retry reopens with the confirmed name after refresh. The rendered
 regression follows duplicate submits, delayed failure/refresh and retry/success;
 existing removal behavior is unchanged. Source/rendered scope only, with no
 service or native contract change.
+
+Closing the rename form returns keyboard focus to **Rename bot**. Successful
+saves wait until the following refresh enables that control; focusing another
+setting while waiting cancels this return so the refresh does not interrupt it.
+Initial rendering does not move focus, and cancellation sends no request.
 
 Validation: original production failed the new regression because it submitted
 twice; fixed focus passed 117 cases. Lint had zero errors and five existing
@@ -701,6 +763,11 @@ model, context size and API key draft stay intact; opening Details and refreshin
 Hosts do not save settings or start a model. Rendered regressions cover both
 connection types and initial or refreshed discovery failures. This is
 source/rendered UI scope.
+
+Closing an explicitly opened brain editor with Cancel edits or a successful Save
+returns keyboard focus to **Edit brain** once that control is enabled. Focusing
+another setting during a pending parent refresh cancels the return. Initial
+setup does not move focus, and failed saves keep the form and draft available.
 
 All four new cases failed on unchanged production. The fixed brain setup and
 wizard suites passed all 53 cases; lint passed with zero errors and five existing
@@ -1983,6 +2050,10 @@ this work continues; hiding the companion does not cancel preparation. An unread
 bot list is a loading state, not evidence that setup or saved identity is missing.
 The companion preserves already loaded bot names during a refresh of the same
 service and offers setup guidance only after a successful empty response.
+Connection retries show **Checking connection…** and disable repeated activation
+until the read finishes. A failed read restores **Retry connection**; retrying
+retains the known bot and draft, while newer service notifications can still
+refresh the connection without replaying task or desktop actions.
 
 The desktop command `bundled_resources_ready` reads the existing retained
 installation result without waiting: `false` means pending, `true` means the
