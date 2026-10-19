@@ -1077,6 +1077,8 @@ export function WorkspaceConnections() {
   const [view, setView] = useState<ConnectorAccountsView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [firstLook, setFirstLook] = useState(false)
+  const [autoTried, setAutoTried] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [flows, setFlows] = useState<ConnectorAuthFlow[]>([])
   const [authErrors, setAuthErrors] = useState<
@@ -1088,7 +1090,6 @@ export function WorkspaceConnections() {
   )
   const [revoke, setRevoke] = useState(false)
   const snapshotSequence = useRef(0)
-  const autoConnected = useRef(false)
   const flowSequence = useRef(0)
   const [saved, setSaved] = useState<ConnectorAccount[]>([])
 
@@ -1120,6 +1121,7 @@ export function WorkspaceConnections() {
       if (sequence === snapshotSequence.current) setError(String(cause))
     } finally {
       if (sequence === snapshotSequence.current) setLoading(false)
+      setFirstLook(true)
     }
   }, [receiveSnapshot])
 
@@ -1197,13 +1199,13 @@ export function WorkspaceConnections() {
   // The account service connects on its own once the first look finds it cold. Connecting does not
   // read any saved sign-in; that happens only when an account is used. A failure leaves a retry.
   useEffect(() => {
-    if (loading || view || busy !== null || autoConnected.current) return
-    autoConnected.current = true
+    if (!firstLook || loading || view || busy !== null || autoTried) return
+    setAutoTried(true)
     void perform('Connecting account service', async () =>
       acceptSnapshot(await connectorAccounts(true))
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, view, busy])
+  }, [firstLook, loading, view, busy, autoTried])
   const acceptSnapshot = (next: ConnectorAccountsView) => {
     snapshotSequence.current++
     receiveSnapshot(next)
@@ -1285,7 +1287,7 @@ export function WorkspaceConnections() {
             </p>
           )}
           {loading && !view && <p role="status">Loading accounts…</p>}
-          {!loading && !view && busy === null && autoConnected.current && (
+          {!loading && !view && busy === null && autoTried && (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
                 GChat could not connect the account service yet. Choose Try

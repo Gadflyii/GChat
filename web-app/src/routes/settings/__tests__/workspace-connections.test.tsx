@@ -209,8 +209,8 @@ describe('Workspace connections', () => {
         .mockRejectedValueOnce('Connect the account service first')
         .mockRejectedValueOnce(`${summary}\n\nDetails: ${technicalDetails}`)
       render(<WorkspaceConnections />)
-      const alert = await screen.findByRole('alert')
-      const actionableSummary = within(alert).getByText(summary)
+      const actionableSummary = await screen.findByText(summary)
+      const alert = actionableSummary.closest('[role="alert"]') as HTMLElement
       expect(actionableSummary).toBeVisible()
       const details = within(alert).getByText('Show details').closest('details')!
       expect(details).not.toHaveAttribute('open')
