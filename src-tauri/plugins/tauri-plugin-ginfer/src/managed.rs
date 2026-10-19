@@ -321,12 +321,20 @@ async fn load_on_host_inner(
             let launch: LaunchRequest = serde_json::from_value(i["profile"].clone()).ok()?;
             let id: Uuid = serde_json::from_value(i["instance_id"].clone()).ok()?;
             let settings_match = if config.use_profile_defaults {
-                automatic_launch.as_ref().is_some_and(|expected| {
-                    launch.gpu_uuids == expected.gpu_uuids
-                        && launch.max_context == expected.max_context
-                        && launch.concurrency == expected.concurrency
-                        && launch.options == expected.options
-                })
+                match automatic_launch.as_ref() {
+                    Some(expected) => {
+                        launch.gpu_uuids == expected.gpu_uuids
+                            && launch.max_context == expected.max_context
+                            && launch.concurrency == expected.concurrency
+                            && launch.options == expected.options
+                    }
+                    // No tested profile exists, so the settings the Models page checked and started with are the
+                    // only ones there can be: use the running instance of this model on the visible cards.
+                    None => launch
+                        .gpu_uuids
+                        .iter()
+                        .all(|uuid| visible.iter().any(|v| v == uuid)),
+                }
             } else {
                 matches_resident(&launch, &config, &requested, &visible)
             };
