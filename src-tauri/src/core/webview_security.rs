@@ -356,9 +356,10 @@ mod windows_native_admission {
     use std::{cell::RefCell, rc::Rc};
     use tauri::utils::assets::{AssetKey, AssetsIter, CspHash};
     use webview2_com::{
-        take_pwstr,
+        take_pwstr, FrameCreatedEventHandler, FrameWebMessageReceivedEventHandler,
         Microsoft::Web::WebView2::Win32::{
-            ICoreWebView2NewWindowRequestedEventArgs, ICoreWebView2_2,
+            ICoreWebView2Frame2, ICoreWebView2NewWindowRequestedEventArgs, ICoreWebView2_2,
+            ICoreWebView2_4,
         },
         NavigationStartingEventHandler, NewWindowRequestedEventHandler,
         WebMessageReceivedEventHandler, WebResourceResponseReceivedEventHandler,
@@ -590,7 +591,8 @@ async function invoke(command, payload) {
   const app=invoke('join_path',{args:[m.directory,'joined.txt']});
   const plugin=invoke('plugin:os|locale',{});
   const asset=bounded(fetch(m.asset).then(r=>r.text()).then(value=>({kind:'success',value}),error=>({kind:'rejected',error:String(error)})));
-  const result={app:await app,plugin:await plugin,asset:await asset,parentAccess,violations,bridge:typeof window.__TAURI_INTERNALS__?.invoke,href:location.href};
+  const channels={webview:typeof window.chrome?.webview?.postMessage,ipc:typeof window.ipc?.postMessage};
+  const result={app:await app,plugin:await plugin,asset:await asset,parentAccess,violations,channels,bridge:typeof window.__TAURI_INTERNALS__?.invoke,href:location.href};
   parent.postMessage({fixture:m.fixture,type:'preview',result},'*');
 })();
 "#;
@@ -607,6 +609,14 @@ if (location.pathname === '/logs') {
 } else {
   const bounded = p => Promise.race([p,new Promise(r=>setTimeout(()=>r({kind:'timeout'}),6500))]);
   const call = (command,payload) => bounded(window.__TAURI_INTERNALS__.invoke(command,payload).then(value=>({kind:'success',value}),error=>({kind:'rejected',error:String(error)})));
+  // Tauri answers postMessage IPC by evaluating runCallback in this top
+  // document. Record every answer addressed to a callback this document did
+  // not register (the preview's), so a preview call that reached the host is
+  // seen with its actual rejection or result.
+  const foreign=[];
+  const callbacks=window.__TAURI_INTERNALS__.callbacks;
+  const ownCallback=Map.prototype.get;
+  Object.defineProperty(callbacks,'get',{value(id){return ownCallback.call(this,id)??(data=>{foreign.push({id,data:typeof data==='string'?data:JSON.stringify(data)});});}});
   (async () => {
     const mainApp=await call('join_path',{args:[m.directory,'joined.txt']});
     const mainPlugin=await call('plugin:os|locale',{});
@@ -630,7 +640,7 @@ if (location.pathname === '/logs') {
     await new Promise(r=>setTimeout(r,250));
     location.href='https://example.invalid/gchat-native-admission';
     await new Promise(r=>setTimeout(r,500));
-    send({type:'result',mainApp,mainPlugin,mainAsset,child});
+    send({type:'result',mainApp,mainPlugin,mainAsset,child,foreign});
     URL.revokeObjectURL(blob);
     setTimeout(()=>{location.href='/logs';},200);
   })().catch(error=>send({type:'result',fatal:String(error)}));
@@ -660,10 +670,16 @@ if (location.pathname === '/logs') {
                     let mut source=PWSTR::null(); args.Source(&mut source)?;
                     let source=take_pwstr(source);
                     let mut text=PWSTR::null();
-                    if args.TryGetWebMessageAsString(&mut text).is_err() { return Ok(()) }
-                    let text=take_pwstr(text);
+                    let text=args.TryGetWebMessageAsString(&mut text).ok().map(|()| take_pwstr(text));
+                    if !source.starts_with("http://tauri.localhost/") {
+                        // A preview IPC fallback reaching the top-level channel.
+                        let cmd=text.as_deref().and_then(|t| serde_json::from_str::<Value>(t).ok()).and_then(|v| v["cmd"].as_str().map(str::to_owned));
+                        observe(&messages,json!({"kind":"foreign-message","channel":"webview","source":source,"cmd":cmd}));
+                        return Ok(());
+                    }
+                    let Some(text)=text else { return Ok(()) };
                     let Ok(value)=serde_json::from_str::<Value>(&text) else { return Ok(()) };
-                    if value["fixture"] != fixture || !source.starts_with("http://tauri.localhost/") { return Ok(()) }
+                    if value["fixture"] != fixture { return Ok(()) }
                     let done = {
                         let mut state=messages.lock().unwrap();
                         state.events.push(json!({"kind":"message","source":source,"value":value}));
@@ -697,6 +713,25 @@ if (location.pathname === '/logs') {
                         let mut uri=PWSTR::null(); args.Uri(&mut uri)?;
                         popup_requests.borrow_mut().push((take_pwstr(uri), args));
                     }
+                    Ok(())
+                })),&mut token)?;
+                // Wry does not listen on frame channels; record any preview
+                // IPC fallback delivered there, which no handler executes.
+                let frames=state.clone();
+                view.cast::<ICoreWebView2_4>()?.add_FrameCreated(&FrameCreatedEventHandler::create(Box::new(move |_,args| {
+                    let Some(args)=args else { return Ok(()) };
+                    let frame=args.Frame()?.cast::<ICoreWebView2Frame2>()?;
+                    let observer=frames.clone();
+                    let mut frame_token=0;
+                    frame.add_WebMessageReceived(&FrameWebMessageReceivedEventHandler::create(Box::new(move |_,args| {
+                        if let Some(args)=args {
+                            let mut source=PWSTR::null(); args.Source(&mut source)?;
+                            let mut text=PWSTR::null();
+                            let cmd=args.TryGetWebMessageAsString(&mut text).ok().map(|()| take_pwstr(text)).and_then(|t| serde_json::from_str::<Value>(&t).ok()).and_then(|v| v["cmd"].as_str().map(str::to_owned));
+                            observe(&observer,json!({"kind":"foreign-message","channel":"frame","source":take_pwstr(source),"cmd":cmd}));
+                        }
+                        Ok(())
+                    })),&mut frame_token)?;
                     Ok(())
                 })),&mut token)?;
                 let responses=view.cast::<ICoreWebView2_2>()?;
@@ -759,15 +794,60 @@ if (location.pathname === '/logs') {
             child["eventOrigin"] == "null",
             "Preview did not report from its opaque sandbox",
         )?;
+        // Host answers addressed to the preview's callbacks, captured in the
+        // containing document: every one must be a rejection.
+        let rejection = |text: &str| {
+            let text = text.to_ascii_lowercase();
+            [
+                "not allowed",
+                "not permitted",
+                "denied",
+                "permission",
+                "origin header",
+            ]
+            .iter()
+            .any(|phrase| text.contains(phrase))
+        };
+        let foreign = result["foreign"]
+            .as_array()
+            .ok_or("Missing foreign callback record")?;
+        require(
+            foreign
+                .iter()
+                .all(|answer| answer["data"].as_str().is_some_and(rejection)),
+            &format!("A preview call received a non-rejection host answer: {foreign:?}"),
+        )?;
+        let reached_host = state
+            .events
+            .iter()
+            .filter(|e| e["kind"] == "foreign-message" && e["channel"] == "webview")
+            .count();
+        require(
+            foreign.len() >= reached_host,
+            "A preview call reached the host without an observed rejection",
+        )?;
+        let ipc_blocked = child["violations"].as_array().is_some_and(|v| {
+            v.iter().any(|e| {
+                e["directive"] == "connect-src"
+                    && e["blocked"]
+                        .as_str()
+                        .is_some_and(|uri| uri.starts_with("http://ipc.localhost"))
+            })
+        });
         for command in ["app", "plugin"] {
             let outcome = &child[command];
-            let blocked = outcome["kind"] == "native-acl-rejection"
+            let explicit = outcome["kind"] == "native-acl-rejection"
                 || outcome["kind"] == "invalid-null-origin"
                 || (outcome["kind"] == "missing-bridge"
                     && outcome["error"]
                         .as_str()
                         .is_some_and(|error| error.starts_with("TypeError:")));
-            require(blocked, &format!("Preview {command} lacks an observed invoke rejection; timeout/silence and unclassified errors are not denial evidence: {outcome}"))?;
+            // The preview's own promise can stay unsettled: CSP blocks the
+            // IPC protocol and Tauri answers any postMessage fallback in the
+            // containing document. That counts only with the CSP block and
+            // the host-side record above.
+            let unanswered = outcome["kind"] == "timeout" && ipc_blocked;
+            require(explicit || unanswered, &format!("Preview {command} lacks an observed invoke rejection or a CSP-blocked IPC call with no executed host answer: {outcome}"))?;
         }
         require(
             child["asset"]["kind"] == "rejected",
@@ -958,6 +1038,32 @@ if (location.pathname === '/logs') {
         })
     }
 
+    fn current_desktop() -> String {
+        use windows::Win32::{
+            Foundation::HANDLE,
+            System::StationsAndDesktops::{GetUserObjectInformationW, UOI_NAME},
+        };
+        let mut name = [0u16; 256];
+        let mut needed = 0;
+        let read = unsafe {
+            GetThreadDesktop(GetCurrentThreadId()).and_then(|desktop| {
+                GetUserObjectInformationW(
+                    HANDLE(desktop.0),
+                    UOI_NAME,
+                    Some(name.as_mut_ptr().cast()),
+                    (name.len() * 2) as u32,
+                    Some(&mut needed),
+                )
+            })
+        };
+        match read {
+            Ok(()) => String::from_utf16_lossy(
+                &name[..name.iter().position(|&c| c == 0).unwrap_or(name.len())],
+            ),
+            Err(error) => format!("unknown: {error}"),
+        }
+    }
+
     fn fixture_root() -> Result<PathBuf, String> {
         let root = std::env::var_os("GCHAT_WINDOWS_NATIVE_ADMISSION_ROOT")
             .map(PathBuf::from)
@@ -1049,6 +1155,10 @@ if (location.pathname === '/logs') {
             // Child: this process, and the WebView2 processes it starts, run
             // on the private desktop the parent created. An early failure
             // keeps the identifier-only receipt for the parent's cleanup.
+            eprintln!(
+                "GCHAT_WINDOWS_NATIVE_ADMISSION_DESKTOP {}",
+                current_desktop()
+            );
             let outcome = run_fixture().unwrap_or_else(|error| panic!("{error}"));
             std::fs::write(receipt, outcome.cleanup.to_string())
                 .expect("Could not write private-desktop cleanup receipt");
