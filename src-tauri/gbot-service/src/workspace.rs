@@ -332,6 +332,17 @@ impl WorkspaceRuntime {
             .set(runner)
             .map_err(|_| WorkspaceError::GuestSetup("The task runner is already configured".into()))
     }
+    /// The service task runner; sub-agent dispatch starts child tasks through it.
+    pub(crate) fn task_runner(&self) -> Option<Arc<crate::tasks::TaskRunner>> {
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        {
+            self.task_runner.get().and_then(std::sync::Weak::upgrade)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+        {
+            None
+        }
+    }
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub fn kvm_setup(&self) -> Option<Arc<crate::kvm_setup::KvmSetup>> {
         self.kvm_setup.get().cloned()

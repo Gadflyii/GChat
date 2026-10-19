@@ -19,6 +19,7 @@ pub mod schedules;
 pub mod service;
 pub mod ssh;
 pub mod store;
+pub mod sub_agents;
 pub mod tasks;
 pub mod vault;
 pub mod workspace;
