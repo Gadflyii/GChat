@@ -100,9 +100,9 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
     </div>
     </div>
     <label className="flex items-center gap-2 text-sm"><input type="checkbox"
-      aria-label={labelPrefix ? `${labelPrefix} follow a response format` : undefined}
+      aria-label={labelPrefix ? `${labelPrefix} structured outputs (JSON)` : undefined}
       checked={structuredOutputs} disabled={controlsDisabled || (currentSettings && !selected)}
-      onChange={e => setStructuredChoice({ instanceId, value: e.target.checked })} />Follow a response format</label>
+      onChange={e => setStructuredChoice({ instanceId, value: e.target.checked })} />Structured outputs (JSON)</label>
     <p className="text-xs text-muted-foreground">Lets apps request replies in a specific format, such as JSON.</p>
     {pending && <p role="alert" className="rounded border border-amber-500/40 bg-amber-500/10 p-3 text-sm">Applying these settings stops the current model and starts it again. Other people using it will be affected. Speed tests wait until the model is ready again.</p>}
     {changedStructured && <p className="text-sm text-muted-foreground">You changed the saved response-format choice. These settings have not been tested together.</p>}

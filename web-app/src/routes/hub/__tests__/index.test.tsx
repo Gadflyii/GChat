@@ -745,14 +745,42 @@ describe('host-scoped Models', () => {
     expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model could not be loaded. Check the error below before trying again.')
     mocks.switchModel.mockResolvedValue(undefined)
   })
-  it('directs a named model without automatic settings to start from GInfer Hosts', async () => {
+  it('checks and starts settings itself for a model without tested settings, with plain progress', async () => {
     spyConfirm().mockReturnValueOnce(true)
-    mocks.switchModel.mockRejectedValue(Object.assign(new Error('Failed to load 483343c2deadbeef: No qualified automatic profile is available for this model.'), { code: 'no_qualified_profile' }))
+    mocks.switchModel.mockRejectedValue(Object.assign(new Error('No qualified automatic profile is available for this model.'), { code: 'no_qualified_profile' }))
+    const gpu = { uuid: 'gpu-1', name: 'GPU', memory_mib: 32768 }
+    const model = { id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'qwen3.8-27b', weights_id: 'w' }, tp_size: 1 } }
+    mocks.localSnapshot = { host_id: 'local-host', gpus: [gpu], models: [model], instances: [] }
+    let launched: Record<string, unknown> | undefined
+    mocks.command.mockImplementation(async (action, args) => {
+      if (action === 'snapshot') return { host_id: 'local-host', gpus: [gpu], models: [model], instances: launched ? [{ instance_id: 'i1', status: 'ready', configuration: { gpu_uuids: ['gpu-1'] } }] : [] }
+      if (action === 'quote') {
+        if ((args!.body as { max_context: number }).max_context > 131072) throw new Error('Not enough graphics memory for this length.')
+        return { instance_count: 1 }
+      }
+      if (action === 'launch') { launched = args!.body as Record<string, unknown>; return {} }
+      return []
+    })
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model loaded and ready to use.'))
+    expect(launched).toMatchObject({ model_id: 'host-model', gpu_uuids: ['gpu-1'], max_context: 131072 })
+    expect(screen.queryByRole('link', { name: 'Open GInfer Hosts' })).toBeNull()
+    mocks.switchModel.mockResolvedValue(undefined)
+  })
+  it('shows one plain sentence and one action only when the settings check fails', async () => {
+    spyConfirm().mockReturnValueOnce(true)
+    mocks.switchModel.mockRejectedValue(Object.assign(new Error('x'), { code: 'no_qualified_profile' }))
+    mocks.localSnapshot = { host_id: 'local-host', gpus: [], models: [], instances: [] }
+    mocks.command.mockImplementation(async action => {
+      if (action === 'snapshot') return { host_id: 'local-host', gpus: [{ uuid: 'gpu-1', name: 'GPU', memory_mib: 1 }], models: [{ id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'other', weights_id: 'w' }, tp_size: 1 } }], instances: [] }
+      if (action === 'quote') throw new Error('Not enough graphics memory.')
+      return []
+    })
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('Installed locally has no tested settings for automatic loading. To start it, open GInfer Hosts, expand Model and memory settings and Choose model settings, then select Check model settings and Start model with these settings.')
-    expect(alert).not.toHaveTextContent('483343c2')
+    expect(alert).toHaveTextContent('could not be started automatically. Open GInfer Hosts to choose its settings yourself.')
     expect(screen.getByRole('link', { name: 'Open GInfer Hosts' })).toHaveAttribute('href', '/engines/')
     mocks.switchModel.mockResolvedValue(undefined)
   })

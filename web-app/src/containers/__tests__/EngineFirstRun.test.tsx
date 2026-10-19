@@ -479,7 +479,7 @@ it('blocks first-run completion and hides readiness when any quoted startup fiel
     ['simultaneous requests', '2', '4'],
     ['conversation limit in tokens', '16384', '32768'],
     ['model copies', '2', '1'],
-    ['graphics-card conversation memory in bytes', '2147483648', ''],
+    ['GPU K/V cache in bytes', '2147483648', ''],
   ]) {
     const field = screen.getByLabelText(`muse ${label}`)
     fireEvent.change(field, { target: { value: changed } })
@@ -530,7 +530,7 @@ it('finishes first-run setup only after a matching check accepts the edited star
   fireEvent.change(screen.getByLabelText('muse simultaneous requests'), { target: { value: '2' } })
   fireEvent.change(screen.getByLabelText('muse conversation limit in tokens'), { target: { value: '16384' } })
   fireEvent.change(screen.getByLabelText('muse model copies'), { target: { value: '2' } })
-  fireEvent.change(screen.getByLabelText('muse graphics-card conversation memory in bytes'), { target: { value: '2147483648' } })
+  fireEvent.change(screen.getByLabelText('muse GPU K/V cache in bytes'), { target: { value: '2147483648' } })
   expect(finish).toBeDisabled()
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' })) })
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'startup', download_id: 'download', concurrency: 2, max_context: 16384, instance_count: 2, kv_arena_bytes: 2147483648 })
