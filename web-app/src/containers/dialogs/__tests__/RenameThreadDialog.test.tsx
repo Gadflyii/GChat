@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RenameThreadDialog } from '../RenameThreadDialog'
@@ -53,6 +53,57 @@ beforeEach(() => {
 })
 
 describe('RenameThreadDialog submission', () => {
+  it('preserves typing started immediately after opening across the former focus delay', async () => {
+    vi.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      // RTL's Jest-specific timer detection does not flush its final zero-delay
+      // asyncWrapper timer under Vitest. Flush it without crossing the focus delay.
+      const finishInteraction = async (interaction: Promise<void>) => {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(0)
+          await interaction
+        })
+      }
+      render(<ThreadRename />)
+      const input = screen.getByRole<HTMLInputElement>('textbox', {
+        name: 'common:threadTitle',
+      })
+
+      expect(input).toHaveFocus()
+      expect(input).toHaveValue('Research')
+      expect(input.selectionStart).toBe(0)
+      expect(input.selectionEnd).toBe('Research'.length)
+
+      await finishInteraction(user.keyboard('Typing'))
+      expect(input).toHaveValue('Typing')
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100)
+      })
+      await finishInteraction(user.keyboard('PreservesPrefix'))
+      expect(input).toHaveValue('TypingPreservesPrefix')
+
+      await finishInteraction(user.tab())
+      const cancel = screen.getByRole('button', { name: 'common:cancel' })
+      expect(cancel).toHaveFocus()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100)
+      })
+      expect(cancel).toHaveFocus()
+
+      await finishInteraction(user.tab({ shift: true }))
+      await finishInteraction(user.keyboard('{Enter}'))
+      expect(mocks.rename).toHaveBeenCalledExactlyOnceWith(
+        'thread-1',
+        'TypingPreservesPrefix'
+      )
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    } finally {
+      cleanup()
+      vi.useRealTimers()
+    }
+  })
+
   it.each(['Research', '  Research  ', '   '])(
     'keeps the dialog open when Enter or form submission receives %j',
     async (title) => {

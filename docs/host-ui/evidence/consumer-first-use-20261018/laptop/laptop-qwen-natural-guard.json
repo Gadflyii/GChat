@@ -1,0 +1,78 @@
+{
+  "status": "COMPLETE",
+  "wsl": true,
+  "donor_path": "bench/reports/c4-ampere-prefill-ada-20261016/controls/natural.py",
+  "donor_sha256": "ee89f92a1bdffa41790c0245c8fd00fb62e6cb8f6d867ea4c2aa25d91219a52d",
+  "mode": "app_attach",
+  "native_argv": [],
+  "ram_admission_mode": "app-owned",
+  "pre_ready_floor_breaches": [],
+  "command": null,
+  "working_root": "/home/ron",
+  "base_url": "http://127.0.0.1:1337/v1",
+  "request_file": "/home/ron/tmp-c5-consumer-first-use-20261018/controls/laptop-qwen-natural-request.json",
+  "request_log": null,
+  "engine_max_concurrency": null,
+  "client_count_scope": "HTTP clients; not an override of Engine max-concurrency",
+  "phases": [
+    {
+      "name": "C1",
+      "clients": 1,
+      "seconds": 600,
+      "status": "COMPLETE",
+      "waves": 24,
+      "begin_utc": "2026-10-18T23:07:28.526361+00:00",
+      "begin_monotonic": 85963.669767165,
+      "end_utc": "2026-10-18T23:17:53.814852+00:00",
+      "active_loop_seconds": 625.2885006809956
+    },
+    {
+      "name": "C4",
+      "clients": 4,
+      "seconds": 600,
+      "status": "COMPLETE",
+      "waves": 15,
+      "begin_utc": "2026-10-18T23:17:53.818415+00:00",
+      "begin_monotonic": 86588.961820874,
+      "end_utc": "2026-10-18T23:28:15.725291+00:00",
+      "active_loop_seconds": 621.9068869159964
+    }
+  ],
+  "native_lifecycle_owner": "application",
+  "identity_status": "NOT_REQUESTED",
+  "identity_scope": "first-use HTTP acceptance; no generated-token-ID comparison",
+  "api_key_configured": true,
+  "swap": {
+    "scope": "system pswpin/pswpout delta; existing allocated swap is not new activity",
+    "initial": {
+      "pswpin": 468,
+      "pswpout": 775
+    },
+    "final": {
+      "pswpin": 468,
+      "pswpout": 775
+    }
+  },
+  "ram_admission": {
+    "MemTotal": 28732203008,
+    "MemAvailable": 22027251712,
+    "mode": "app-owned",
+    "scope": "no native launch or preload admission by this driver",
+    "ram_floor_bytes": 3221225472,
+    "end_utc": "2026-10-18T23:31:00+00:00"
+  },
+  "api_model_ids": [
+    "483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4",
+    "ginfer/ca1ee853-6a0c-481b-b203-6c54da9e022d/ab042b27-d5fe-4d73-ae84-14a036c66111"
+  ],
+  "api_ready_seconds": 0.004566669464111328,
+  "api_ready_utc": "2026-10-18T23:07:28.513931+00:00",
+  "soak_begin_utc": "2026-10-18T23:07:28.526361+00:00",
+  "soak_begin_monotonic": 85963.669767165,
+  "soak_end_utc": "2026-10-18T23:28:15.727253+00:00",
+  "soak_active_loop_seconds": 1247.2009034020011,
+  "http_status_counts": {
+    "200": 84
+  },
+  "http_request_errors": 0
+}

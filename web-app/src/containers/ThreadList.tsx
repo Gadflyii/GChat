@@ -241,6 +241,9 @@ const ThreadItem = memo(
             className="w-48"
             side={isMobile ? 'bottom' : 'right'}
             align={isMobile ? 'end' : 'start'}
+            onCloseAutoFocus={(event) => {
+              if (renameOpen) event.preventDefault()
+            }}
           >
             <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
               <Pencil className="size-4" />

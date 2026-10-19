@@ -58,10 +58,6 @@ export function RenameThreadDialog({
     if (isOpen) {
       setTitle(plainTitleForRename || t('common:newThread'))
       setError(null)
-      setTimeout(() => {
-        inputRef.current?.focus()
-        inputRef.current?.select()
-      }, 100)
     }
   }, [isOpen, plainTitleForRename, t])
 
@@ -119,6 +115,11 @@ export function RenameThreadDialog({
       )}
       <DialogContent
         showCloseButton={!isRenaming}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          inputRef.current?.focus()
+          inputRef.current?.select()
+        }}
         onCloseAutoFocus={(event) => {
           if (returnFocusRef?.current?.isConnected) {
             event.preventDefault()

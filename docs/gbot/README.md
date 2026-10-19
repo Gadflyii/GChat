@@ -1,5 +1,180 @@
 # Gbot design
 
+## Companion keyboard focus with no saved bot — Gchat 2
+
+`GBOT-EMPTY-COMPANION-FOCUS-RETURN` restores keyboard focus to the sidebar
+opener when Escape or Hide bot pane closes an empty companion. The selected
+named bot remains the preferred return target; when that bot is absent, the
+empty opener provides a fallback. Previously, the empty opener had no focus
+restoration target, leaving focus in the hidden pane or on the document.
+
+Rendered keyboard journeys cover opening and closing the empty companion and
+a named bot using Escape and Hide. This is rendered UI scope; task, desktop
+and service behavior is unchanged.
+
+Validation: original production reproduced both empty-opener focus failures;
+both named-bot controls passed. The fixed companion suite passed all 45 tests.
+Lint passed with zero errors and five existing warnings. ONE `make verify`
+(2026-10-18 23:36:17–23:42:48 UTC) passed 3,896 app tests (six skipped),
+130 extension tests, 1,323 Rust tests (28 ignored), all six coverage floors
+and lint/typecheck/quality guards. All 3,482 tracked inputs matched raw bytes
+and modes before and after verification, with fresh tracked timestamps. Only
+this receipt was added afterward. Booking 3640 returned 23:43Z; the private
+build cache and exports were removed. Evidence:
+`/ai/gchat/out/gchat2-empty-companion-focus-return-20261018/SUMMARY.md`.
+
+## Queued scheduled work shows its retry — Gchat 2
+
+`GBOT-SCHEDULE-RETRY-GUIDANCE` distinguishes a Once schedule with no later
+occurrences from its queued task waiting for an automatic connection/readiness
+retry. The saved retry time and plain keep-connected guidance remain visible
+with Occurrences closed. Disabled schedules, a stopped scheduler and work held
+for review or already dispatched/finished do not promise an automatic retry.
+An explicit list read can clear the saved retry guidance without replaying the
+task or changing the schedule. This is source/rendered UI scope; scheduling
+and retry behavior are unchanged.
+
+
+Validation: the original production component failed the new queued-retry
+journey as expected; fixed focus passed 154 tests across schedules and the
+Gbot route. Lint passed with zero errors and five existing warnings. ONE
+`make verify` (2026-10-18 23:18:39–23:24:49 UTC) passed 3,892 app tests
+(six skipped), 130 extension tests, 1,323 Rust tests (28 ignored), all six
+coverage floors and lint/typecheck/quality guards. All 3,482 tracked inputs
+matched raw bytes and modes before and after verification with fresh tracked
+timestamps. Only this receipt was added afterward. Booking 3630 returned
+23:25Z; the private build cache was removed. Evidence:
+`/ai/gchat/out/gchat2-schedule-retry-guidance-20261018/SUMMARY.md`.
+
+## Saved local computer action recovery — Gchat 2
+
+Saved local setups and connected local bots share Start/Stop error feedback.
+A failed action names Start computer, Stop computer or Resume setup for an
+explicit retry, according to the saved progress;
+technical diagnostics stay in closed Details. Once saved status confirms the
+computer is ready after Start or stopped after Stop, the old warning is hidden.
+Previously, unfinished setup cards retained the raw warning even after a
+read-only Refresh confirmed the stop completed.
+
+Rendered journeys cover Error and native-string failures, pending duplicate
+clicks, explicit retry, read-only Refresh and confirmation after a lost action
+response, plus resuming partially advanced setup. No automatic retry,
+connection or task is added. This is source and
+rendered acceptance; live Linux/Windows guest acceptance is unchanged.
+
+Validation: all six new journeys failed against original production; fixed
+focus passed 153 tests across the route and local setup. Lint passed with
+zero errors and five existing warnings. ONE `make verify` (2026-10-18
+23:03:58–23:10:04 UTC) passed 3,878 app tests (six skipped), 130 extension
+tests, 1,323 Rust tests (28 ignored), all six coverage floors and
+lint/typecheck/quality guards. All 3,481 tracked inputs matched raw bytes and
+modes before and after verification, with fresh tracked timestamps. Only this
+receipt was added afterward. Booking3625 returned23:10Z. Evidence:
+`/ai/gchat/out/gchat2-saved-local-vm-failure-recovery-20261018/SUMMARY.md`.
+
+## Refreshing accounts after Microsoft sign-in — Gchat 2
+
+`GBOT-M365-CONNECTED-ACCOUNT-REFRESH`, based on main `42759aafd`, keeps
+the connected sign-in result when the following account-list read fails. The
+message names the available Refresh Microsoft accounts action, with technical
+diagnostics in initially closed Details, instead of referring to the sign-in
+status check that is no longer shown.
+
+The rendered regression covers Error and native-string failures, explicit
+account refresh without replaying sign-in, and deliberate account selection
+before Cloud PC discovery becomes available. This is source and mocked-connector
+scope; no real sign-in, account, browser consent or native acceptance is claimed.
+
+Validation: both new journeys failed against original production; fixed focus
+passed 198 tests across three files. Lint passed with zero errors and five
+existing warnings. ONE `make verify` (2026-10-18 22:48:38–22:54:51 UTC)
+passed 3,869 app tests (six skipped), 130 extension tests, 1,323 Rust tests
+(28 ignored), all six coverage floors and lint/typecheck/quality guards. All
+3,481 tracked inputs matched raw bytes and modes before and after verification
+with fresh tracked timestamps. Only this receipt was added afterward.
+Booking3616 returned22:55Z. Evidence:
+`/ai/gchat/out/gchat2-m365-connected-account-refresh-20261018/SUMMARY.md`.
+
+## Recovering saved computer setup reads — Gchat 2
+
+`GBOT-SAVED-SETUP-READ-RECOVERY`, based on main `61e4ea300`, requires
+successful local, cloud and Microsoft saved-setup reads before automatically
+offering first-time setup. Previously, a failed cloud or Microsoft read counted
+as an empty list and could hide an unfinished setup behind a new setup form.
+
+A read failure now names the existing Refresh action with its diagnostic in
+closed Details, including when a bot is selected. Saved lists, bot selection
+and unsent task drafts remain available. Refresh discovers the saved setup;
+no setup or task starts automatically. Source/rendered mocked-service scope,
+with no provider, account, VM or native acceptance claim.
+
+Validation: all eight new journeys failed against original production; fixed
+focus passed 157 tests across two files. Lint passed with zero errors and five
+existing warnings. ONE `make verify` (2026-10-18 22:29:57–22:36:03 UTC)
+passed 3,838 app tests (six skipped), 130 extension tests, 1,323 Rust tests
+(28 ignored), all six coverage floors and lint/typecheck/quality guards.
+All 3,480 tracked inputs matched raw bytes and modes before and after
+verification with fresh tracked timestamps. Only this receipt was added
+afterward. Booking3606 returned22:36Z; private cache and both exports were
+removed by22:37:39Z. Evidence:
+`/ai/gchat/out/gchat2-saved-setup-read-recovery-20261018/SUMMARY.md`.
+
+Merged origin/main `8b25627e7` without rebasing, preserving both sides’ tests
+and documentation. Post-merge focused Gbot tests passed 181 tests across the
+route, setup wizard and schedules (2026-10-18 22:41:49–22:42:04 UTC).
+All 3,481 tracked inputs matched raw bytes and modes before and after the
+focused run. The accepted full verification above was not repeated.
+
+## Reviewing tasks after a local service restart — Gchat 2
+
+`GBOT-SERVICE-RESTART-RESUME-WORDING`, based on main `61e4ea300`, replaces
+local Quit/Stopped notices that falsely promised automatic task and schedule
+resumption. They now explain that unfinished tasks stop, name Start Gbot
+service and explicit Resume after review, and point to Scheduled tasks for
+schedules that need review. LAN disconnect notices still explain that work
+continues on the other computer.
+
+The existing rendered shutdown journey now follows restart with a saved task
+and a schedule awaiting review. Restart sends no task or schedule mutation;
+the local task requires an explicit Resume. The paired-LAN task stays running.
+Task-runner and scheduler behavior are unchanged. This is source/rendered
+mocked-service scope, with no native, VM, account or model acceptance.
+
+Validation: the local journey failed against the original production code,
+while the paired-LAN control passed. Fixed focus passed 150 tests across three
+files; lint passed with zero errors and five existing warnings. ONE
+`make verify` (2026-10-18 22:17:26–22:23:30 UTC) passed 3,831 app tests
+(six skipped), 130 extension tests, 1,323 Rust tests (28 ignored), all six
+coverage floors and lint/typecheck/quality guards. All 3,480 tracked inputs
+matched raw bytes and modes before and after verification with fresh tracked
+timestamps. Only this receipt was added afterward. Booking3600 returned22:25Z;
+private cache and both exports were removed by22:25:32Z. Evidence:
+`/ai/gchat/out/gchat2-service-restart-resume-wording-20261018/SUMMARY.md`.
+
+## Recovering a failed Microsoft sign-in result — Gchat 2
+
+`GBOT-M365-SIGNIN-RESULT-GUIDANCE`, based on main `9aeec47dc`, names
+the existing Sign in with Microsoft or Allow read-only Cloud PC access retry
+when a sign-in status response reports failure. Previously, this result bypassed
+the action-error guidance and displayed credential or token diagnostics directly.
+The diagnostic now remains in initially closed Details when supplied.
+
+Rendered journeys retain account choice and keep Cloud PC discovery unavailable
+without permission. Opening Details sends no request; recovery requires an
+explicit retry and status check. A newly connected account remains unselected.
+No sign-in, consent or account is started automatically. This is source/rendered
+mocked-connector scope, with no real account, browser consent or native acceptance.
+
+Validation: both new journeys failed against original production; fixed focus
+passed 185 tests. Lint passed with zero errors and five existing warnings. ONE
+`make verify` (2026-10-18 21:40:23–21:46:36 UTC) passed 3,830 app tests
+(six skipped), 130 extension tests, 1,319 Rust tests (28 ignored), all six
+coverage floors and lint/typecheck/quality guards. All 3,479 tracked raw bytes
+and modes matched before and after the gates, with fresh tracked timestamps.
+Only this receipt was added afterward. Booking3584 returned21:47Z; the private
+cache and exports were retired by21:47:59Z. Small evidence:
+`/ai/gchat/out/gchat2-m365-signin-result-guidance-20261018/SUMMARY.md`.
+
 ## Cloud connection completion follows its setup — Gchat 2
 
 `GBOT-CLOUD-CONNECT-REQUEST-LIFETIME`, based on main `af8d1b4dc`, keeps a
@@ -1084,6 +1259,112 @@ and OLD remain off with original
 XML and Gchat 2 custody; inert responses do not qualify live tasks or native
 Windows.
 
+
+## Recovering an interrupted task — Gchat 2
+
+`GBOT-TASK-INTERRUPTION-GUIDANCE`, based on main `a0971c3ad`, explains that
+an interrupted task stopped before completion and names explicit resume after
+checking model and computer connections. Previously, the shared Settings and
+companion notice displayed only its diagnostic, such as executor restarted,
+and displayed nothing when the reason was absent.
+
+The exact latest interruption reason stays in initially closed Details, when
+present. Disclosure never resumes a task. Rendered journeys cover restart and
+missing-reason records in both views, reopening the Settings task, explicit
+Resume for the correct task and hiding the notice after completion. Existing
+task-state, consent and action guards are unchanged; no reason strings are
+classified. This is source/rendered scope, with no native or live-task claim.
+
+Validation: all four new interrupted-task journeys failed against original
+production; fixed focus passed 178 tests. Lint passed with zero errors and five
+existing warnings. ONE `make verify` (2026-10-18 21:51:53–21:58:04 UTC) passed
+3,832 app tests (six skipped), 130 extension tests, 1,319 Rust tests (28 ignored),
+all six coverage floors and lint/typecheck/quality guards. All 3,479 tracked raw
+bytes and modes matched before and after the gates, with fresh tracked timestamps.
+Only this receipt was added afterward. Booking3592 returned21:58Z; private cache
+and exports were retired by21:59:20Z. Small evidence:
+`/ai/gchat/out/gchat2-task-interruption-guidance-20261018/SUMMARY.md`.
+
+## Recovering a saved cloud-computer issue — Gchat 2
+
+`GBOT-CLOUD-DEPLOYMENT-ISSUE-GUIDANCE`, based on main `a0971c3ad`, gives
+recovery guidance when a successful service response contains a saved provider
+failure. Previously, these results bypassed action-error guidance and displayed
+the diagnostic directly. Both setup and the saved-computer entry now name
+Check progress, with Resume setup first in the list. Details starts closed.
+
+An unconfirmed deletion warns that provider charges may continue and asks for
+a status check before another deletion attempt. Resources and existing consent
+requirements remain; only a fresh confirmed result clears the warning.
+Rendered journeys cover deletion and check-required failures, diagnostic
+disclosure without requests, duplicate checks, explicit recovery and reopening
+the saved entry. No automatic provider action was added. This is source and
+rendered mocked-service scope, with no provider, native or account acceptance.
+
+
+Validation: four new journeys failed against the original production source.
+Fixed cloud/wizard/route focus passed 180 tests; lint had zero errors and five
+existing warnings. ONE `make verify` (18 October 22:04:01–22:10:05 UTC) passed
+3,834 app tests (six skipped), 130 extension tests, 1,319 Rust tests (28 ignored,
+23 summaries), all six coverage floors and lint/typecheck/quality guards.
+All 3,479 tracked raw bytes and modes matched locally and on S1 before and
+after gates, with fresh tracked timestamps. Only this receipt was added
+subsequently. Booking3595 returned22:10Z. Evidence:
+`/ai/gchat/out/gchat2-cloud-deployment-issue-guidance-20261018/SUMMARY.md`.
+
+## Recovering a service-computer change — Gchat 2
+
+`GBOT-SERVICE-CHANGE-ERROR-GUIDANCE`, based on main `9aeec47dc`, names the
+existing Use this service retry after an unconfirmed service-computer change.
+Previously, this selector displayed only the raw technical error. The alert
+now asks the user to review the choice and retry; full diagnostics stay in
+initially closed Details.
+
+The selected service choice and both bots' task drafts remain available after
+a rejected request. Details does not send a service request. Only successful
+explicit selection clears the task drafts, as before. Existing same-tick and
+pending-selection guards remain covered. Rendered journeys exercise Error and
+native-string failures, disclosure and same-choice retry. This is source and
+rendered scope; no native service, VM or account acceptance is claimed.
+
+Validation: both new journeys failed against original production; fixed focus
+passed 131 tests (110 route and 21 schedules). Lint passed with zero errors
+and five existing warnings. ONE `make verify` (2026-10-18 21:29:04–21:35:22 UTC)
+passed 3,830 app tests (six skipped), 130 extension tests, 1,319 Rust tests
+(28 ignored), all six coverage floors and lint/typecheck/quality guards.
+All 3,479 tracked raw bytes and modes matched locally and remotely after the
+gates, with fresh tracked timestamps beforehand. Only this validation receipt
+was added afterward. Booking3577 returned21:35Z. Evidence:
+`/ai/gchat/out/gchat2-service-change-error-guidance-20261018/SUMMARY.md`.
+
+## Recovering a failed bot-list read — Gchat 2
+
+`GBOT-BOT-LIST-ERROR-GUIDANCE`, based on main `e93d19e77`, names Refresh
+after the primary bot-list read fails. If the service is stopped or disconnected,
+the message names Start Gbot service or Connect Gbot service for the selected
+service computer. Previously, this alert displayed only its technical error.
+The complete diagnostic remains in initially closed Details, with long text
+wrapping within the panel.
+
+Rendered local Error and paired-service native-string journeys retain the
+selected bot and task draft through failure, diagnostic disclosure and explicit
+Refresh recovery. Disclosure makes no request; recovery performs no service
+start, stop, selection or task/control write. Existing service-start progress
+still hides the alert. This is source/rendered scope; no service or native
+lifecycle, account or VM acceptance is claimed.
+
+Validation: original production failed both new recovery journeys; fixed focus
+passed 130 tests (109 Gbot route, 21 schedules). Lint passed with zero errors
+and five existing warnings. ONE `make verify` (2026-10-18 21:11:53–21:18:10 UTC)
+passed 3,829 app tests (six skipped), 130 extension tests, 1,319 Rust tests
+(28 ignored), all six coverage floors and lint/typecheck/quality guards. All
+3,479 tracked inputs matched raw bytes and modes before and after the gates,
+with fresh tracked timestamps. Only this receipt was added afterward.
+Booking3565 returned21:18Z; private cache and both local exports were removed
+by21:20:45Z. Small evidence:
+`/ai/gchat/out/gchat2-bot-list-error-guidance-20261018/SUMMARY.md`.
+Final gate SHA256 `76dc5a6f3ec3f44e36f68a08e95884ad722f46ac097c696b6aaa7fce9ce596ce`;
+cleanup SHA256 `af2e9002c11be44d297d451a44aded21c5484faa9af3cb642fbb7beb235d5d08`.
 
 ## Stopped scheduler recovery keeps diagnostics optional — Gchat 2
 

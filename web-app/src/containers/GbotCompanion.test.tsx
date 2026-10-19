@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
@@ -455,8 +456,12 @@ it.each(['Stop', 'Resume'] as const)(
   }
 )
 
-it('shows the saved interruption cause beside Resume and clears it after completion', async () => {
-  const reason = 'model returned no answer; resume the task to try again'
+it.each([
+  { kind: 'service restart', reason: 'executor restarted' },
+  { kind: 'missing reason', reason: '' },
+])('offers interrupted task recovery for $kind beside Resume', async ({ reason }) => {
+  const guidance =
+    'This task stopped before it finished. Check the model and computer connections, then resume the task to try again.'
   tasks = [
     {
       id: 'interrupted-atlas',
@@ -467,27 +472,50 @@ it('shows the saved interruption cause beside Resume and clears it after complet
       history: [{ state: 'interrupted', reason, at: 42 }],
     },
   ]
+  const taskWrites = () =>
+    mocks.call.mock.calls.filter(
+      ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+    )
   await mount()
-  const cause = await screen.findByText(reason)
-  const card = cause.closest('article')!
-  expect(cause).toBeVisible()
+  const message = await screen.findByText(guidance)
+  const card = message.closest('article')!
+  expect(message).toBeVisible()
   expect(within(card).getByText('Save my note')).toBeVisible()
+  if (reason) {
+    const diagnostic = within(card).getByText(reason)
+    const details = diagnostic.closest('details')!
+    expect(diagnostic).not.toBeVisible()
+    expect(details).not.toHaveAttribute('open')
+    fireEvent.click(within(card).getByText('Details', { exact: true }))
+    expect(diagnostic).toBeVisible()
+    expect(taskWrites()).toEqual([])
+    fireEvent.click(within(card).getByText('Details', { exact: true }))
+    expect(diagnostic).not.toBeVisible()
+  } else {
+    expect(within(card).queryByText('Details', { exact: true })).not.toBeInTheDocument()
+  }
+  expect(taskWrites()).toEqual([])
   const resume = within(card).getByRole('button', { name: 'Resume task' })
   expect(resume).toBeEnabled()
   fireEvent.click(resume)
   await waitFor(() => expect(resume).toBeEnabled())
-  expect(mocks.call).toHaveBeenCalledWith('tasks/resume', {
-    id: 'interrupted-atlas',
-  })
+  expect(taskWrites()).toEqual([
+    ['tasks/resume', { id: 'interrupted-atlas' }],
+  ])
   tasks = [{ ...tasks[0], state: 'completed' }]
   await act(async () => events.get('gbot-task-update')?.())
   expect(await within(card).findByText('completed')).toBeVisible()
-  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  expect(screen.queryByText(guidance)).not.toBeInTheDocument()
+  if (reason) expect(screen.queryByText(reason)).not.toBeInTheDocument()
   tasks = [{ ...tasks[0], state: 'interrupted', history: undefined }]
   await act(async () => events.get('gbot-task-update')?.())
+  expect(await within(card).findByText(guidance)).toBeVisible()
   expect(within(card).getByText('Save my note')).toBeVisible()
   expect(within(card).getByRole('button', { name: 'Resume task' })).toBeEnabled()
-  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  expect(within(card).queryByText('Details', { exact: true })).not.toBeInTheDocument()
+  expect(taskWrites()).toEqual([
+    ['tasks/resume', { id: 'interrupted-atlas' }],
+  ])
 })
 
 it.each([
@@ -951,6 +979,66 @@ it('offers setup guidance only after an authoritative empty service snapshot', a
   expect(screen.getByText(/Add a bot computer/)).toBeInTheDocument()
   expect(screen.queryByText('Loading your bots…')).not.toBeInTheDocument()
 })
+
+it.each([
+  ['empty', 'Escape'],
+  ['empty', 'Hide'],
+  ['named', 'Escape'],
+  ['named', 'Hide'],
+] as const)(
+  'returns keyboard focus to the %s opener after %s',
+  async (kind, close) => {
+    if (kind === 'empty') {
+      snapshot = {
+        workspaces: [],
+        live_sessions: [],
+        controls: [],
+        assignments: [],
+      }
+    }
+    const user = userEvent.setup()
+    render(
+      <>
+        <GbotAvatars />
+        <GbotCompanion />
+      </>
+    )
+    await waitFor(() => expect(useGbotCompanion.getState().available).toBe(true))
+    const opener = screen.getByRole('button', {
+      name: kind === 'empty' ? 'Open Gbot companion' : /Open Bramble/,
+    })
+    await user.tab()
+    if (kind === 'named') await user.tab()
+    expect(opener).toHaveFocus()
+    await user.keyboard('{Enter}')
+    const pane = screen.getByRole('complementary', { name: 'Gbot companion' })
+    expect(pane).toHaveFocus()
+    expect(opener).toHaveAttribute('aria-expanded', 'true')
+    if (kind === 'empty') {
+      expect(within(pane).getByText(/Add a bot computer/)).toBeInTheDocument()
+    } else {
+      expect(
+        within(pane).getByRole('heading', { name: 'Bramble' })
+      ).toBeInTheDocument()
+    }
+
+    if (close === 'Hide') {
+      await user.tab()
+      await user.tab()
+      expect(
+        within(pane).getByRole('button', { name: 'Hide bot pane' })
+      ).toHaveFocus()
+      await user.keyboard('{Enter}')
+    } else {
+      await user.keyboard('{Escape}')
+    }
+
+    expect(opener).toHaveFocus()
+    expect(opener).toHaveAttribute('aria-expanded', 'false')
+    expect(pane).toHaveAttribute('inert')
+    expect(pane).toHaveAttribute('aria-hidden', 'true')
+  }
+)
 
 it('shows a preparation failure without treating unknown bots as missing configuration', async () => {
   mocks.resources.ready = false

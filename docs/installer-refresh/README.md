@@ -1,5 +1,203 @@
 # GChat installer refresh
 
+Native laptop Qwen returned22:11Z with a **pre-Engine Host-admission rejection** at canonical8181/C8 Automatic KV: quoted free15782117376B, non-KV17005660672B, headroom314572800B and minimum KV276891648B. Artifact import and native artifact-scoped SM86 preparation completed, but no Engine or inference request started. Normal idle Host Stop and its guard exited0 with an empty Job; booking425 is canceled. Small rejection and guard receipts are in `out/windows-consumer-launch-profiles-20261018/laptop-qwen-command-preparation/{02-instances-rejection-body.txt,prepared-bindings.json,model-guard-result.json}`. No signed laptop Windows settings exist.
+
+Arch22:11:29 identifies the known QUOTE-ADMISSION-EXACT-VRAM defect and holds **both laptop Windows Qwen/Muse** for corrected Engine1209de849 (ac536 plus max(CUDA,NVML)) and Host e001e9ea3. No bypass or explicit-arena workaround is authorized. The first corrected native launch runs solo with Engine-delegated admission; the second uses its matching Ready receipt, also supplying the Windows acceptance for that row. C5's Linux Engine/Host staging returned22:16:58Z. C1's1209 local Qwen/Muse controls then passed with zero process gaps, completing all six Engine cells; Arch22:22 cleared C5's first-unknown/second-receipt Automatic53248 app gates. Native laptop qualification follows C5's normal return and still requires corrected native Windows Engine/Host binaries; the Linux donors do not supply them. C4 granted read-copy of the inactive Windows Engine/dependency and Cargo release caches. The corrected native SM86 Engine and e001 Host build launched22:52:35Z in the independent E:\gchat3-windows-consumer-corrected-20261018 root under a fresh local5090 GPU0/CPUs0–31 quiet booking22:52–23:22Z, with actual compiler affinity20–31; C4's installer relay returned22:51Z and Gchat1 native compile1506 returned22:44Z. Native preflight confirms90,455,228,416B available RAM above17,131,606,528B emergency floor and the expected RTX5090 UUID. Use a fresh CMake directory because copied CMake/Ninja metadata binds donor absolute paths; prepared vcpkg and Cargo caches may be reused. The old three-image6b85 package remains immutable. C5 returned22:28Z and canceled426 after its first corrected Automatic action rejected before Engine launch because the restarted Host omitted the native profiling CLI mapping. No Ready receipt or second start was produced; C5 is recovering that binding with the immutable donor preserved and no target hold. Native laptop qualification still requires the corrected Windows build and subsequent app acceptance. C4 returned Ada791 at22:41Z after the installed RC Automatic INT profiler rejected retained-buffer RAM/node floors before Engine startup; app/Host exited normally. Ada792 returned22:49Z and is canceled: the one packaged-Host SM89 Muse canonical Start failed during artifact hardware profiling before any Engine or inference request. Runtime-map validation and import passed; the4.068s profile job rejected retained GPU buffers inside actual RAM/node floors, leaving no accepted profile or instance. The idle identity-bound Host Stop completed normally; guard exit0/empty Job, minimum GPU free24872222720B and last native RAM11642417152B. Small raw failure, rejection and guard receipts are retained under `out/windows-consumer-launch-profiles-20261018/ada4090-muse-command-preparation/terminal-failure` and `terminal-failure-summary.json`. Arch22:50 authorizes exactly one unchanged-floor Ada Muse retry after C4's RC retry in Bubbs's23:00–23:30Z WSL-idle window, with native AvailableBytes at or above profiler reserve plus retained buffers before launch; no bypass or RAM reclamation. Gchat1 no-model fixture793 runs through22:59Z; C1 staged877 cannot fit before23:00Z and follows the RC/Muse window. C4's laptop installer relay returned22:51Z before the corrected local build. Gchat1 local1506 returned22:44Z. Laptop Muse receipts remain offline and held for corrected source rebinding. Arch separately cleared C4's ordinary pinned6b85 manualC1 laptop RC chat without bypass; that is not consumer-profile qualification.
+
+The source catalog handoff contains only the three Arch-signed Windows entries (RTX5090 Qwen/Muse and RTX4090 Qwen), plus the four signed72153 Linux C8 updates and laptop Muse lower-point continuation. The three remaining Windows cells are unqualified and absent. The corrected native1209/e001 SM86 build remains active; C5 first/second53248 app acceptance is running under laptop427 and must return before native laptop work. C4 returned Ada23:00Z without an RC retry:11882221568B available was below12844228608B reserve plus536870912B retained buffers. No floor change or RAM reclamation is authorized; the one Ada Muse retry remains conditional on a fresh passing preflight.
+
+The signed laptop Muse lower-point mirror from GInfer351d4d90b (C5f8b3e40ab) is prepared in the explicit GChat catalog inputs: C1/C2 at131072, C4 at61440 and C7 at16384, preserving the signed72153 C8 entry at8192. This adds four entries to the prepared14-input catalog (48→52). The focused exact-settings continuation passed22:55:26Z on independent S1 CPUs72–79: fourteen supplied inputs and fifty-two unique profiles validate, with all source bindings checked; exit0 and no live container remain. Small raw logs and the reviewed result are retained in `out/windows-consumer-launch-profiles-20261018/host-catalog-laptop-muse-delta-result.json`. Reuse the completed ONE make verify and fourteen-input/forty-eight-profile focused PASS for unchanged scope. The frozen live DEV19a1d986 service is unchanged through C5 first/second app acceptance; deployment requires its normal consumer-idle boundary.
+
+Both Windows5090 profiles and Ada Qwen are signed; do not rerun them or the accepted laptop residency probe. Ada Qwen was signed22:04Z on Windows6b85 at131072/C8 Automatic KV,screened-startup,300MiB,zero full-context requests/eight smoke requests: canonical52arrays26000IDs, profile smoke32arrays16000IDs and shortnatural21requests21219IDs match same-card Linux. Ada790 returned22:03Z and is canceled. The focused supplied-catalog regression passed22:19:27Z for fourteen explicit inputs and forty-eight unique profiles, including these three signed Windows entries and C5's four signed Linux C8 mirrors. Parent review checked the raw log and every input/source binding. The prior ONE make verify is retained; no physical qualification is inferred from this CPU test. DEV remains frozen19a1d986 until coordinated consumer clearance.
+
+Current priority (21:47Z): the driver-bound Host and ordinary actual-Start receipt marker are complete. The driver-key delta passed four focused regressions, check, clippy and standalone Host build at21:33:09Z; the marker continuation passed the same delta checks at21:44:19Z. Parent review confirms the raw Flash/Qwen/Muse sequence: unknown/0 before a matching Ready receipt, then receipt/1200 on the second actual Start. Retain the completed ONE make verify (frontend3751, extension127, six coverage floors, Rust1318) and request-log focused2/check/clippy/Host317/build. C1's accepted1209de849 implements Arch21:36's total physical startup overhead minus weight/state ledger, at most2MiB total rounding, separate cuda_graph_observed_bytes diagnostics and max(CUDA,NVML) emission. All six Engine cells passed; Arch22:22 cleared C5's first/second laptop53248 Automatic app gates; the426 attempt returned22:28Z before Engine launch and C5 owns Host mapping recovery. Native laptop acceptance remains pending the corrected Windows build and C5's return. GINFER_HOST_REQUEST_LOG_JSONL remains an absolute owned spawn-only control; no catalog graph field. Unknown or changed NVIDIA drivers prevent receipt reuse, and unknown drivers prevent saving; first solo Automatic remains available.
+
+Retained Ada canonical evidence: the single packaged-Host Qwen launch selected SM89 and matched52arrays/26000 same-card Linux IDs at8181/C8. Normal model and Host Stop exited0/emptyJob;911 GPU samples were valid, minimum316669952B above300MiB. Its later signed profile smoke/natural above is complete. Prior UNC validator and pre-Job CIM timeout evidence are preparation failures, not model retries. The laptop's RC6b85 attempt is the typed admission rejection above; superseded staging plans are closed.
+
+
+The corrected marker-enabled Linux Host is `/media/ron/SSD_RAID/ai/tmp-gchat3-windows-consumer-host-20261018/native-target/debug/ginfer-host` on S1:57183816B, SHA256 `48e9040ade587e720f2d255895a19ac0946e6f4d2f4ec09b781bf0c3f78d344a`. The earlier470196671 and driver-only binaries are preserved separately at the owned root and must not be used for physical acceptance. The final Host uses system libssl3/libcrypto3, libgcc_s, libm and libc; no private runtime library is needed. C5 may read-copy this immutable output into its normally stopped idle Host fixture. Before its next app-owned Host start, set `GINFER_HOST_REQUEST_LOG_JSONL` to an absolute owned JSONL path whose parent exists. Reusing an already-running Host does not pick up a newly set variable. Bind C1's corrected Engine donor before the first launch, then keep that Engine, NVIDIA driver, frozen catalog, model and53248 settings unchanged between the first and second launch. Ordinary host.log records each actual Start's accepted per-rank graph allowance source and bytes; retain this plus full Engine stderr and JSONL. CPU results and frozen file hashes are in `out/windows-consumer-launch-profiles-20261018/host-validation-result.json`, `host-request-log-result.json`, `host-driver-result.json` and `host-startup-marker-result.json`; physical first/second Ready acceptance remains pending C5. The completed focused signed launch-catalog delta is bound by its recorded source hash and is excluded from the Host correction commit. Booking3586 returned21:44Z and is canceled; the owned27GB source/cache/output root remains retained for C5's copy, with no running build or model.
+
+## Windows consumer launch profiles — Gchat 3, October 18
+
+Corrected native build inventory: Gchat3 owns the active `E:\gchat3-windows-consumer-corrected-20261018` root and small commands in `out/windows-consumer-launch-profiles-20261018/corrected-native-build`. The reviewed durable command builds only Release SM86 Engine1209 and standalone Release Hoste001, under ordered build/GPU locks and an owned native Job. It independently copies C4's inactive vcpkg/Cargo caches, excludes bundles, and uses a fresh CMake directory. Allocation and execution are authorized under the fresh22:52–23:22Z local quiet booking after C4 installer relay returned22:51Z; durable launch/terminal files stay in the named command folder. Native builds run only inside the identity-bound Job and ordered locks. Retain the corrected source/cache/output through laptop qualification and handoff. The signed6b85 three-image package stays immutable.
+
+Arch20:25:07Z supersedes the earlier fixed-arena instruction: Windows5090 Muse9d4ca1b2 uses **Automatic KV,131072/C8,screened-startup**, with no saved explicit arena. Its one-checkpoint requirement is8336650240B; actual Automatic startup witnessed15315501056B (selected_free15631245312 minus300MiB,2MiB alignment), leaving6978850816B above that requirement. The witnessed bytes are notes, not a pinned launch setting. The independent canonical standard uses8181/C8 with Automatic KV,prefill1024,Text/TP1/fixedDF7/INT8/300MiB and exact same-card Linux IDs. The C1/C4/C8 standard, profile-bound public resident-benchmark C8 smoke (2048 prompt,500 output,one warmup+one measured wave) and unchanged short60sC1+60sC4 natural passed. This separate profile-bound smoke records eight concurrent requests and raw same-card IDs; it is not a canonical standard score or a full-context test. Capacity-limited entries require Arch again. Qwen5090 remains signed and must not be rerun.
+
+Current execution: native Muse saved-profile smoke and short natural **PASS** at131072/C8 Automatic KV. The smoke matches32 same-card Linux arrays/16000 IDs (eight lanes, zero full-context requests); the short60sC1+60sC4 natural matches all67 requests/31550 IDs. Native driver/Engine exit0, Job empty, GPU minimum449839104B across178 samples with zero invalid samples, native available RAM minimum85822091264B. Booking1499 returned20:42Z and is canceled. Canonical packaged-Host C1/C4/C8 standard already passed52 arrays/26000 IDs; do not repeat completed gates. Arch signed Muse at20:45:18Z with these bounds. Its20:45:46Z correction withdraws the proposed catalog graph field: existing Ready receipts supply graph qualification. C4 quotes returned20:46Z; C5 live-C8 witnesses now precede Ada/laptop staging. C1 staged877 is deferred for priority quote source. No verified Windows model donor exists on either target. The laptop native residency prerequisite passed21:01Z and Arch accepted21:07Z.
+
+C5's signed Linux mirror handoff is a8baad9a1, limited by Arch20:38:59Z to four C8 entries: laptop Qwen75776 Automatic and Muse8192/1593835520B explicit; Ada Qwen131072 Automatic and Muse131072/9091153920B explicit. That initial handoff excluded laptop Muse lower points bound to eb777. The signed351d4d90b follow-up above now replaces those lower points with72153 evidence; deployment remains frozen. Preserve these four signed entries while native Windows qualification proceeds.
+
+Muse artifact-scoped Prepare passed in the short owned `m` root. The prior265-character temporary-path failure, Linux explicit15189450752B rejection and saved witnessed15315501056B rejection are retained separately; neither rejection created an instance or ran a request. Native Automatic sizing reached Ready and stopped normally, then the idle Host stopped at20:24:43Z,exit0/empty Job; booking1497 is canceled. The Host estimate allowed14935095296B despite completed Automatic allocation15315501056B. Arch resolved this conflict with Automatic KV, not a Host or Engine change. Small evidence is in `out/windows-consumer-launch-profiles-20261018/local5090-muse-wddm-admission-decision.json`.
+
+
+
+`WINDOWS-CONSUMER-LAUNCH-PROFILES` is in native qualification. Qualify Qwen 27B
+2-bit mix `483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4`
+and Muse 30B 2-bit mix
+`9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c`
+natively on RTX 5090, RTX 4090 and RTX 3080 Ti Laptop, then mirror the
+Arch-signed Windows entries into the launch catalogs. Flash remains excluded
+because of the Windows RAM hardware limit.
+
+Acceptance is GPU-selected packaged Host/runtime dispatch, admitted Windows
+bounds starting from the signed Linux bounds, C1/C4/C8 requests and a short
+natural run, exact generated IDs against the same-card Linux reference,
+300 MiB saved reserve and measured minimum free memory at least that reserve.
+Use Arch-signed evidence tiers: both Windows5090 entries are `screened-startup`; capacity-limited Windows entries require a separate Arch decision. A capacity gap is not a passing profile.
+Arch requires the Engine to include `32e950b93` and `07c62e1f4`, with its
+revision named in every entry, and Codex 1's residency probe once natively on
+the laptop before its Windows entries. Stop and report any cross-platform
+seeded-ID mismatch before signing.
+
+Owner branch: `feat/gchat3-windows-consumer-launch-profiles-20261018`,
+worktree `/ai/gchat-worktrees/gchat3-windows-consumer-launch-profiles-20261018`,
+base GChat `7bdc60bcf`. Reuse Codex 4's immutable Release Engine `6b85ecf77`
+and packaged Host after packaging booking 1489 returns. The archives are
+`E:\gchat4-windows-rc-250df804a-20261018\engine\source\out\windows\ginfer-windows-x64-sm{86,89,120a}.zip`;
+the unpacked donors are under the same root at `engine\stage-sm{86,89,120a}`.
+Packaging booking1489 returned **18:54:25Z**, and the priority quote relay
+returned **18:58:39Z**. Read-copy permission is active. The final packaged Host
+is `E:\gchat4-windows-rc-250df804a-20261018\source\src-tauri\resources\bin\ginfer-host.exe`.
+The owned private copy is allocated at
+`E:\gchat3-windows-consumer-local5090-qwen-20261018\package\resources`,
+containing the Host, launch catalog and all three runtime stages. Models stay
+at their immutable donor paths; no model copy is needed. Copy and metadata
+checks passed at **19:05:03Z**: 378 files / 1,945,578,902 bytes match the donor.
+The copy receipt is `out/windows-consumer-launch-profiles-20261018/local5090-package-copy.json`.
+Codex 4's package/hash/catalog acceptance and unsigned delivery returned
+**19:08:49Z PASS** (reported at 19:14Z). Codex 7's queued Gbot rebuild and relay returned **19:17Z**; the native model
+booking follows that returned boundary.
+
+Native hardware is confirmed as RON-9950X3D2 / RTX 5090,
+GPU UUID `GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e`, physical RAM
+137,052,852,224 bytes. The earlier RAM admission blocker is resolved:
+Codex 4 retired its owned packaging observer PID45328 at **19:07:58Z**,
+restoring **96.32 GB AvailableBytes**. No model or build was stopped.
+Fresh native admission must still exceed the 17,131,606,528-byte emergency
+floor before launch. All eight bound standard operations pass native
+PowerShell 5.1 parsing; the owned bootstrap, private packaged Host,
+all three runtime maps, model and six same-card Linux reference files are
+staged. The private guarded Host started **19:18:11Z** and its runtime inventory
+validated all three images. Artifact import and artifact-scoped profile preparation
+passed, then the selected SM120a Engine reported Ready. C1, C4 and C8 match all **52 raw same-card Linux token arrays / 26,000 IDs**,
+each directly reviewed before advancing. The standard gate completed normally
+at **19:28:37Z**: instance and Host Stop exited zero, the native Job is empty,
+621 GPU samples retain a minimum **472,907,776 bytes** free (above 300 MiB),
+and both lifecycle and telemetry qualification pass. Booking1492 is canceled. The original receipt counted
+OrderedDictionary fields instead of its `count` entry; direct raw comparison
+corrected only that accounting, preserving the original summary. The adapted
+operation now indexes the entry explicitly before C4/C8; no request is repeated.
+Codex 5 returned both laptop booking408 and Ada booking776 at 18:48Z.
+Ada's C1 gate and the laptop's corrected quotes, Qwen Download and paired
+naturals remain queued; fresh per-host clearance is required before native work.
+
+The signed Linux controls are the `72153af01` auto-arena packet in
+`/ai/kernel-agent/run_workdir/consumer/c5-auto-arena-qualification-20261018/ginfer/docs/consumer-launch-profiles/README.md`.
+At C8 the starting bounds are laptop Qwen 75,776 tokens / automatic arena,
+laptop Muse 8,192 / explicit 1,593,835,520 bytes, Ada Qwen 131,072 /
+automatic arena, and Ada Muse 131,072 / explicit 9,091,153,920 bytes.
+These are starting controls, not Windows qualification. Standard comparisons
+use the matching saved requests at context 8,181, DFlash fixed seven draft
+tokens, INT8 KV, Text, TP1 and 300 MiB headroom; read the exact per-entry
+command before execution. The retained 5090 Linux references admit 131,072 /
+C8 / INT8 / fixed seven draft tokens / 300 MiB: Qwen uses automatic arena on
+`aa1c48016` with omitted/automatic prefill; Muse uses explicit 15,189,450,752 bytes and prefill 1,024 on
+`eb777ab95`. Those older runs establish same-card Linux controls, not
+qualification of `6b85ecf77`. Their requests, standard responses and natural
+identity JSONL are read-copy granted under
+`/mnt/e/ginfer-c4-consumer-launch-profiles-20261018/results/` at the next
+quiet return. The current Linux authority is
+`/ai/ginfer-worktrees/c4-quote-capacity-result-20261018/docs/consumer-launch-profiles/rtx5090.md`.
+
+Arch approved a **short natural** of 60 seconds at C1 and 60 seconds at C4;
+it is not the 600-second-per-phase soak. Use the existing attached natural
+driver and native identity-JSONL input. The initial attempt used merged
+`3632a24ac`; its native-Windows swap-scope correction must be accepted before
+the authorized continuation. The packaged Host proves runtime dispatch and the
+standard requests. The supplemental direct native
+Engine natural run records request identity and tokens with the same admitted
+settings, under the retained private Job guard. The existing
+`--exit-on-stdin-close` route supplies normal direct Engine shutdown: hold its
+redirected stdin writer open through response drain, then close it and wait
+for normal exit and an empty Job. Complete identity capture is
+required; a short phase with insufficient repeated seeds is not itself a
+failure. Compare saved requests and IDs against the same-card Linux control;
+stop on any actual mismatch. No Host identity-logging feature is needed.
+
+The prepared operation bindings are in
+`out/windows-consumer-launch-profiles-20261018/native-binding-note.md`.
+The coordinator checked the existing API receipts and normal stdin-close route;
+effective standard commands are bound to the private package and saved controls,
+with parser results in `local5090-qwen-command-preparation/prepared-bindings.json`.
+
+Codex 7's owned cleanup returned **19:29:48Z**. The separate direct-native
+Qwen short natural is prepared at the Linux starting bound **131,072 / C8**,
+using the existing owned Windows profile (SHA256 `7a53f33dfe112cc518082d63a844c9f59df9558cc4d3d63e860617941d8826b1`).
+The removed temporary driver checkout is recovered byte-for-byte from accepted
+commit `3632a24ac`, with only its three imported helper files, under the owned
+`qualification/natural/accepted-driver` directory. The exact saved Linux request
+matches the retained Codex4 source (`ab0372652ae07f581e2b2b456d9bebf9633e6089a3c332d66b94711ffd4cf56f`).
+Fresh native preflight at **19:34:21Z** confirms the expected host/GPU/RAM,
+97,096,773,632 bytes available, no native Engine/Host, unused private port19663,
+and both bound receipts parse with zero PowerShell5.1 errors. Booking1493
+ran the short natural at131072/C8 from **19:35:00Z to19:35:41Z** and is canceled.
+The attempt is **INCOMPLETE**, not a qualified profile: the accepted attached
+driver aborted after system-wide WSL `pswpin` increased238668→238669
+(`pswpout` unchanged792579). One C1 request completed; all879 generated IDs
+match the same-card Linux request exactly. The next request was canceled when
+the driver closed its HTTP socket; C4 never started. The bootstrap retained
+stdin through Ready and driver return, then closed EOF normally: Engine exit0,
+empty owned Job. The outer guard reports FAIL because the driver scope was not
+completed, while native telemetry passes:43 GPU samples, minimum467664896bytes
+free (above314572800), last native available RAM93530398720bytes (above the
+17131606528-byte floor), no invalid sample or cleanup error.
+
+The failure is in the attached driver's unconditional WSL system-swap gate;
+it does not establish paging by the native Windows Engine. At **19:38:43Z**,
+Arch approved WSL `pswpin` as diagnostic for a native Windows Engine; native
+process RAM/commit, GPU free memory and Engine health remain acceptance gates.
+Arch authorized **one corrected 60-second C1 plus 60-second C4 run**, after the
+harness fix is accepted. Driver correction `dfc8480e3` passed 19 focused regressions and Python3.11
+compilation, and Bubbs accepted it in `eb43d27fa`. The corrected fixture is
+prepared separately under owned `qualification/natural-corrected`, with the
+accepted driver/helper closure and explicit
+`GINFER_NATURAL_ATTACH_PLATFORM=native-windows`. Booking1494 ran the one
+corrected natural from **19:48Z to19:51:11Z** and is canceled. Both60-second
+phases completed:11 C1 requests and12 C4 requests, **23 arrays /24,360 IDs**,
+all exactly equal to the same-card Linux controls by phase/lane/64-bit seed
+and every logged request field except the local request ID. Complete identity
+capture and repeated-seed comparison both pass. The native Engine admitted
+effective context131072/C8, automatic KV, fixedDF7 and300MiB reserve.
+Native Engine/driver exits0, normal stdin EOF and empty Job pass;157 valid GPU
+samples have minimum373293056bytes free, above314572800. Last native available
+RAM85760954368bytes exceeds the17131606528-byte floor. WSL pswpin rose7 pages
+and pswpout remained unchanged; these are recorded diagnostics under Arch's
+accepted native-Windows scope. Do not repeat either retained natural attempt.
+
+The concise attempt result is
+`out/windows-consumer-launch-profiles-20261018/local5090-qwen-natural-attempt-result.json`;
+raw driver, native request-ID/token capture and lifecycle receipts remain in
+the owned E: `qualification/natural` directory. Standard lifecycle evidence is
+`local5090-qwen-standard-guard-result.json`, with terminal launch accounting in
+`local5090-native-launch.json`, under the same local evidence root. The standard
+52-array/26,000-ID PASS is retained and must not be repeated. Corrected natural
+evidence is `local5090-qwen-natural-corrected-result.json`; its raw capture and
+native lifecycle remain under the separate E: `qualification/natural-corrected`.
+**RTX5090 Qwen is Arch-signed at19:52:44Z:** Windows131072/C8,
+`screened-startup`,300MiB reserve,zero full-context requests and eight smoke
+requests, bound to Engine`6b85ecf77`. The configured context is witnessed at
+Ready; max-request130560 reflects the standard512-token reserve. Its catalog
+mirror remains pending. Muse and Ada/laptop gates remain pending. The next action is Arch's decision on Muse's rejected explicit Linux arena, then the unrun standard with Windows-admitted arena and context. Its artifact-scoped Prepare completed in the shorter `m` state; raw rejection and normal Stop are retained above. The earlier `qualification/muse` path failure remains preserved. C5's laptop
+Qwen app Download began19:39Z, followed by paired Ada/laptop naturals; neither
+target may receive new native work before its direct returned boundary.
+The immutable Muse donor stays retained at
+`E:\ai\tmp-c6-muse-int-batch-invariance-20261018\artifacts\muse_glimmer_30b_smol_df2.ginfer`.
+Fresh per-host clearance is required for Ada/laptop.
+Native installs on Ada/laptop are authorized; this PC uses
+an owned private folder and never Ron's installed app. No signing, publishing,
+Windows settings, elevation, Engine changes or new runner is authorized.
+
+
 ## Current Linux RC refresh — Codex 3, October 18
 
 `GCHAT-LINUX-RC-PACKAGES` is **PASS**, transferred from Gchat 3 by

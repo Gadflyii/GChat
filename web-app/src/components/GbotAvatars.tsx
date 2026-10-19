@@ -44,6 +44,7 @@ export default function GbotAvatars() {
           aria-label="Open Gbot companion"
           aria-controls="gbot-companion"
           aria-expanded={state.mode !== 'hidden'}
+          data-gbot-avatar=""
           onClick={() => state.open()}
           className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-sidebar-foreground/10"
         >

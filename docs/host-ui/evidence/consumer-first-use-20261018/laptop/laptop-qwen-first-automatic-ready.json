@@ -1,0 +1,60 @@
+{
+  "utc": "2026-10-18T22:59:26.046253+00:00",
+  "status": "READY",
+  "ui": "Qwen Running; Local model loaded; Load disabled; Stop enabled",
+  "selected_profile_id": "rtx3080ti-laptop-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-52k-int8-screened",
+  "derived_profile_id": "rtx3080ti-laptop-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-52k-int8-screened",
+  "selection": "Automatic",
+  "graph_allowance_source": "unknown",
+  "graph_allowance_bytes": 0,
+  "saved_graph_receipts": {
+    "bb64375aac86166021978256f877b5e7b96522115496b5e7b498f541e023a629": 723662336
+  },
+  "max_context": 53248,
+  "max_concurrency": 8,
+  "engine_model_loaded_seconds": 24.6306,
+  "engine_listening_utc": "2026-10-18T22:53:15.758Z",
+  "click_utc": "2026-10-18T22:52:22.099034+00:00",
+  "click_to_engine_listening_seconds": 53.658966,
+  "server_instance_id": "serve-264041-1792363971023276",
+  "vmstat": {
+    "pswpin": 468,
+    "pswpout": 775
+  },
+  "request_log": "/home/ron/tmp-c5-consumer-first-use-20261018/evidence/laptop-qwen-corrected/requests.jsonl",
+  "host_log": "/home/ron/tmp-c5-consumer-first-use-20261018/evidence/laptop-qwen-corrected/host.log",
+  "actual_start_marker": "Engine startup quote instance_id=72b8ec45-af0c-42bb-aaa2-53826d19481a model_id=qwen3.8-27b/smol-q2g64-mix-dflash2-q4 rank=0 graph_allowance_source=unknown graph_allowance_bytes=0",
+  "qualification_id_note": "The Host instance profile publishes this catalog ID; Automatic uses AUTO KV.",
+  "selected_profile_id_source": "normal Host snapshot instance.profile.qualified_profile_id",
+  "selected_profile_observed_utc": "2026-10-18T23:05:45.430062+00:00",
+  "application_instance_id": "72b8ec45-af0c-42bb-aaa2-53826d19481a",
+  "effective_configuration": {
+    "artifact": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4/model.ginfer",
+    "artifact_set": false,
+    "concurrency": 8,
+    "draft_policy": "fixed",
+    "draft_tokens": 7,
+    "draft_tp": 1,
+    "expert_lfu": true,
+    "flash_host_ram_headroom_gib": null,
+    "gpu_uuids": [
+      "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+    ],
+    "host_kv_cache_bytes": null,
+    "instance_id": "72b8ec45-af0c-42bb-aaa2-53826d19481a",
+    "kv_arena_bytes": null,
+    "kv_arena_headroom_bytes": 314572800,
+    "kv_dtype": "int8",
+    "max_context": 53248,
+    "model_id": "qwen3.8-27b/smol-q2g64-mix-dflash2-q4",
+    "no_cuda_graph": false,
+    "port": 45459,
+    "prefill_chunk": 0,
+    "progressive_ready": false,
+    "spec": "dflash",
+    "structured_outputs": false,
+    "tp": 1,
+    "vision": false,
+    "vram_budget_bytes": null
+  }
+}
