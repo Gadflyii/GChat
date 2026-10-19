@@ -389,6 +389,29 @@ describe('host-scoped Models', () => {
     expect(screen.queryByRole('button', { name: /Download to/ })).not.toBeInTheDocument()
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
   })
+  it('announces download status and ten-percent progress without announcing changing speed or estimates', async () => {
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    await waitFor(() => expect(useLocalModelDownloads.getState().loaded).toBe(true))
+    const job: ModelDownload = { id: 'accessible-download', release, status: 'downloading', received: 1024, bytes_per_second: 1024, error: null, path: null }
+    act(() => useLocalModelDownloads.setState({ jobs: [job] }))
+    const row = screen.getByRole('heading', { name: 'Blackwell model' }).closest('section')!
+    const status = within(row).getByRole('status')
+    expect(status).toHaveAttribute('aria-live', 'polite')
+    expect(status).toHaveAttribute('aria-atomic', 'true')
+    expect(status).toHaveTextContent('Blackwell model:')
+    expect(status).toHaveTextContent('20%')
+    const firstAnnouncement = status.textContent
+    act(() => useLocalModelDownloads.setState({ jobs: [{ ...job, received: 1100, bytes_per_second: 2048 }] }))
+    expect(status.textContent).toBe(firstAnnouncement)
+    expect(within(row).getByRole('progressbar', { name: 'Blackwell model download' })).toHaveAttribute('value', '1100')
+    act(() => useLocalModelDownloads.setState({ jobs: [{ ...job, received: 2048 }] }))
+    expect(status).toHaveTextContent('50%')
+    expect(status).not.toHaveTextContent(/MiB\/s|seconds left/)
+    act(() => useLocalModelDownloads.setState({ jobs: [{ ...job, received: 4096, status: 'installed' }] }))
+    expect(status).toHaveTextContent('Download complete')
+    expect(status).not.toHaveTextContent('%')
+  })
   it('keeps the host selector clear of the window edge', () => {
     render(<ModelManagement />)
     const header = screen.getByRole('heading', { name: 'Models' }).parentElement
