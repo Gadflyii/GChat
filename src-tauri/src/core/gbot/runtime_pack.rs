@@ -206,4 +206,20 @@ mod tests {
         let ready = ensure(&dir.path().join("again/install"), &data2, "2.0.42").unwrap();
         assert!(ready.join("resources/gbot/runtime.json").is_file() && !leftover.exists());
     }
+
+    /// Opt-in proof with the real installed zip: `GCHAT_RUNTIME_ZIP_RESOURCES=<install resource dir>
+    /// cargo test ... real_runtime_zip -- --ignored --nocapture` (the directory holding `resources/gbot/runtime.zip`
+    /// and `bun.exe`). Unpacks into a temporary data folder and checks that the Gbot service accepts the result.
+    #[test]
+    #[ignore]
+    fn real_runtime_zip_unpacks_and_is_accepted_by_the_service() {
+        let resources = PathBuf::from(std::env::var("GCHAT_RUNTIME_ZIP_RESOURCES").expect("GCHAT_RUNTIME_ZIP_RESOURCES"));
+        let data = tempfile::tempdir().unwrap();
+        let started = std::time::Instant::now();
+        let ready = ensure(&resources, data.path(), "real-zip-check").unwrap();
+        println!("unpacked in {:?} to {}", started.elapsed(), ready.display());
+        let processes = gbot_service::executor::ExecutorProcesses::packaged(&ready).unwrap();
+        assert!(processes.is_some(), "the service must accept the unpacked runtime");
+        assert_eq!(ensure(&resources, data.path(), "real-zip-check").unwrap(), ready);
+    }
 }
