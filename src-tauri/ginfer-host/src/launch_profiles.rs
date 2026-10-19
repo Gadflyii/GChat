@@ -469,72 +469,165 @@ mod tests {
             .map(|(_, id, ..)| *id)
             .collect();
         let mut consumer_ids = BTreeSet::new();
+        struct MuseSetting {
+            file: &'static str,
+            id: &'static str,
+            platform: &'static str,
+            gpu: &'static str,
+            cc: &'static str,
+            tier: u32,
+            memory: u64,
+            context: u32,
+            concurrency: u32,
+            vision: bool,
+            /// Saved explicit arena; `None` is Automatic KV.
+            arena: Option<u64>,
+            /// Final arena witnessed by the calculated startup smoke.
+            available: Option<u64>,
+            prefill: u32,
+            free: u64,
+            required: Option<u64>,
+            engine: &'static str,
+        }
         let consumer_muse_settings = [
-            (
-                "linux-rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4.json",
-                "rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
-                "linux", "NVIDIA GeForce RTX 5090", "12.0", 32, 32606, 131072, 8,
-                Some(15189450752), 1024, 328204288, Some(8336650240),
-                "eb777ab9570fad1c8301635617f0923f2b820424",
-            ),
-            (
-                "linux-rtx4090-muse-smol-q2g64-mix-dflash-q4.json",
-                "rtx4090-muse-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
-                "linux", "NVIDIA GeForce RTX 4090", "8.9", 24, 24564, 131072, 8,
-                Some(9091153920), 1024, 316669952, Some(8643358720),
-                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
-            ),
-            (
-                "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
-                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c8-8k-int8-calculated",
-                "linux", "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 8192, 8,
-                Some(1593835520), 1024, 316669952, Some(1582880768),
-                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
-            ),
-            (
-                "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
-                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c1-128k-int8-calculated",
-                "linux", "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 131072, 1,
-                Some(2965372928), 1024, 316669952, Some(1042081280),
-                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
-            ),
-            (
-                "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
-                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c2-128k-int8-calculated",
-                "linux", "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 131072, 2,
-                Some(2715811840), 1024, 316669952, Some(2084162560),
-                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
-            ),
-            (
-                "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
-                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c4-60k-int8-calculated",
-                "linux", "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 61440, 4,
-                Some(2260729856), 1024, 316669952, Some(2254770176),
-                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
-            ),
-            (
-                "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
-                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c7-16k-int8-calculated",
-                "linux", "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 16384, 7,
-                Some(1797259264), 1024, 316669952, Some(1779305472),
-                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
-            ),
-            (
-                "windows-rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4.json",
-                "rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-windows-screened",
-                "windows", "NVIDIA GeForce RTX 5090", "12.0", 32, 32606, 131072, 8,
-                None, 1024, 449839104, None,
-                "6b85ecf77da129fe332818b8bcaec9467b56bdaa",
-            ),
+            MuseSetting {
+                file: "linux-rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
+                platform: "linux", gpu: "NVIDIA GeForce RTX 5090", cc: "12.0", tier: 32, memory: 32606,
+                context: 131072, concurrency: 8, vision: false, arena: Some(15189450752), available: Some(15189450752),
+                prefill: 1024, free: 328204288, required: Some(8336650240),
+                engine: "eb777ab9570fad1c8301635617f0923f2b820424",
+            },
+            MuseSetting {
+                file: "linux-rtx4090-muse-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx4090-muse-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
+                platform: "linux", gpu: "NVIDIA GeForce RTX 4090", cc: "8.9", tier: 24, memory: 24564,
+                context: 131072, concurrency: 8, vision: false, arena: Some(9091153920), available: Some(9091153920),
+                prefill: 1024, free: 316669952, required: Some(8643358720),
+                engine: "72153af017f4e3d864b47e5df6d62dc7a83357bf",
+            },
+            MuseSetting {
+                file: "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c8-8k-int8-calculated",
+                platform: "linux", gpu: "NVIDIA GeForce RTX 3080 Ti Laptop GPU", cc: "8.6", tier: 16, memory: 16384,
+                context: 8192, concurrency: 8, vision: false, arena: Some(1593835520), available: Some(1593835520),
+                prefill: 1024, free: 316669952, required: Some(1582880768),
+                engine: "72153af017f4e3d864b47e5df6d62dc7a83357bf",
+            },
+            MuseSetting {
+                file: "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c1-128k-int8-calculated",
+                platform: "linux", gpu: "NVIDIA GeForce RTX 3080 Ti Laptop GPU", cc: "8.6", tier: 16, memory: 16384,
+                context: 131072, concurrency: 1, vision: false, arena: Some(2965372928), available: Some(2965372928),
+                prefill: 1024, free: 316669952, required: Some(1042081280),
+                engine: "72153af017f4e3d864b47e5df6d62dc7a83357bf",
+            },
+            MuseSetting {
+                file: "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c2-128k-int8-calculated",
+                platform: "linux", gpu: "NVIDIA GeForce RTX 3080 Ti Laptop GPU", cc: "8.6", tier: 16, memory: 16384,
+                context: 131072, concurrency: 2, vision: false, arena: Some(2715811840), available: Some(2715811840),
+                prefill: 1024, free: 316669952, required: Some(2084162560),
+                engine: "72153af017f4e3d864b47e5df6d62dc7a83357bf",
+            },
+            MuseSetting {
+                file: "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c4-60k-int8-calculated",
+                platform: "linux", gpu: "NVIDIA GeForce RTX 3080 Ti Laptop GPU", cc: "8.6", tier: 16, memory: 16384,
+                context: 61440, concurrency: 4, vision: false, arena: Some(2260729856), available: Some(2260729856),
+                prefill: 1024, free: 316669952, required: Some(2254770176),
+                engine: "72153af017f4e3d864b47e5df6d62dc7a83357bf",
+            },
+            MuseSetting {
+                file: "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c7-16k-int8-calculated",
+                platform: "linux", gpu: "NVIDIA GeForce RTX 3080 Ti Laptop GPU", cc: "8.6", tier: 16, memory: 16384,
+                context: 16384, concurrency: 7, vision: false, arena: Some(1797259264), available: Some(1797259264),
+                prefill: 1024, free: 316669952, required: Some(1779305472),
+                engine: "72153af017f4e3d864b47e5df6d62dc7a83357bf",
+            },
+            MuseSetting {
+                file: "windows-rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-windows-screened",
+                platform: "windows", gpu: "NVIDIA GeForce RTX 5090", cc: "12.0", tier: 32, memory: 32606,
+                context: 131072, concurrency: 8, vision: false, arena: None, available: None,
+                prefill: 1024, free: 449839104, required: None,
+                engine: "6b85ecf77da129fe332818b8bcaec9467b56bdaa",
+            },
+            MuseSetting {
+                file: "linux-rtx-pro6000-muse-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
+                platform: "linux", gpu: "NVIDIA RTX PRO 6000 Blackwell Workstation Edition", cc: "12.0", tier: 96, memory: 97887,
+                context: 131072, concurrency: 8, vision: false, arena: None, available: Some(86585114624),
+                prefill: 1024, free: 315621376, required: Some(8336650240),
+                engine: "c7bdb4673d3f4c3128c69d5b15ca353f85969250",
+            },
+            MuseSetting {
+                file: "linux-rtx-pro6000-muse-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-tp1-c4-128k-int8-calculated",
+                platform: "linux", gpu: "NVIDIA RTX PRO 6000 Blackwell Workstation Edition", cc: "12.0", tier: 96, memory: 97887,
+                context: 131072, concurrency: 4, vision: false, arena: None, available: Some(87090528256),
+                prefill: 1024, free: 315621376, required: Some(4168325120),
+                engine: "c7bdb4673d3f4c3128c69d5b15ca353f85969250",
+            },
+            MuseSetting {
+                file: "linux-rtx-pro6000-muse-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-tp1-c2-128k-int8-calculated",
+                platform: "linux", gpu: "NVIDIA RTX PRO 6000 Blackwell Workstation Edition", cc: "12.0", tier: 96, memory: 97887,
+                context: 131072, concurrency: 2, vision: false, arena: None, available: Some(87455432704),
+                prefill: 1024, free: 315621376, required: Some(2084162560),
+                engine: "c7bdb4673d3f4c3128c69d5b15ca353f85969250",
+            },
+            MuseSetting {
+                file: "linux-rtx-pro6000-muse-smol-q2g64-mix-dflash-q4.json",
+                id: "rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-tp1-c1-128k-int8-calculated",
+                platform: "linux", gpu: "NVIDIA RTX PRO 6000 Blackwell Workstation Edition", cc: "12.0", tier: 96, memory: 97887,
+                context: 131072, concurrency: 1, vision: false, arena: None, available: Some(87688216576),
+                prefill: 1024, free: 315621376, required: Some(1042081280),
+                engine: "c7bdb4673d3f4c3128c69d5b15ca353f85969250",
+            },
+            MuseSetting {
+                file: "linux-rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-vision.json",
+                id: "rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-vision-calculated",
+                platform: "linux", gpu: "NVIDIA RTX PRO 6000 Blackwell Workstation Edition", cc: "12.0", tier: 96, memory: 97887,
+                context: 131072, concurrency: 8, vision: true, arena: None, available: Some(84448116736),
+                prefill: 1024, free: 315621376, required: Some(8336650240),
+                engine: "c7bdb4673d3f4c3128c69d5b15ca353f85969250",
+            },
+            MuseSetting {
+                file: "linux-rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-vision.json",
+                id: "rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-tp1-c4-128k-int8-vision-calculated",
+                platform: "linux", gpu: "NVIDIA RTX PRO 6000 Blackwell Workstation Edition", cc: "12.0", tier: 96, memory: 97887,
+                context: 131072, concurrency: 4, vision: true, arena: None, available: Some(85320531968),
+                prefill: 1024, free: 315621376, required: Some(4168325120),
+                engine: "c7bdb4673d3f4c3128c69d5b15ca353f85969250",
+            },
+            MuseSetting {
+                file: "linux-rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-vision.json",
+                id: "rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-tp1-c2-128k-int8-vision-calculated",
+                platform: "linux", gpu: "NVIDIA RTX PRO 6000 Blackwell Workstation Edition", cc: "12.0", tier: 96, memory: 97887,
+                context: 131072, concurrency: 2, vision: true, arena: None, available: Some(85769322496),
+                prefill: 1024, free: 315621376, required: Some(2084162560),
+                engine: "c7bdb4673d3f4c3128c69d5b15ca353f85969250",
+            },
+            MuseSetting {
+                file: "linux-rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-vision.json",
+                id: "rtx-pro6000-muse-smol-q2g64-mix-dflash-q4-tp1-c1-128k-int8-vision-calculated",
+                platform: "linux", gpu: "NVIDIA RTX PRO 6000 Blackwell Workstation Edition", cc: "12.0", tier: 96, memory: 97887,
+                context: 131072, concurrency: 1, vision: true, arena: None, available: Some(86094381056),
+                prefill: 1024, free: 315621376, required: Some(1042081280),
+                engine: "c7bdb4673d3f4c3128c69d5b15ca353f85969250",
+            },
+            // MUSE-MIX-PROFILES (end)
         ];
         let expected_muse_ids: BTreeSet<_> = consumer_muse_settings
             .iter()
-            .filter(|(file, ..)| {
+            .filter(|s| {
                 supplied_paths
                     .iter()
-                    .any(|path| path.file_name().is_some_and(|name| name == *file))
+                    .any(|path| path.file_name().is_some_and(|name| name == s.file))
             })
-            .map(|(_, id, ..)| *id)
+            .map(|s| s.id)
             .collect();
         let mut muse_ids = BTreeSet::new();
         let mut consumer_flash_found = false;
@@ -553,8 +646,8 @@ mod tests {
             assert!(!profiles.is_empty(), "{}", path.display());
             let muse_catalog_ids: BTreeSet<_> = consumer_muse_settings
                 .iter()
-                .filter(|(file, ..)| path.file_name().is_some_and(|name| name == *file))
-                .map(|(_, id, ..)| *id)
+                .filter(|s| path.file_name().is_some_and(|name| name == s.file))
+                .map(|s| s.id)
                 .collect();
             if !muse_catalog_ids.is_empty() {
                 let actual_ids: BTreeSet<_> = profiles.iter().map(|p| p.id.as_str()).collect();
@@ -606,21 +699,18 @@ mod tests {
                     assert_eq!(p.qualification.smoke_requests, Some(8));
                     assert!(p.qualification.calculation.is_none());
                 }
-                if let Some((_, id, platform, gpu, cc, tier, memory, context, concurrency, arena, prefill, free, required, engine)) = consumer_muse_settings
-                    .iter()
-                    .find(|(_, id, ..)| p.id == *id)
-                {
-                    muse_ids.insert(*id);
-                    assert_eq!(p.platform, *platform);
+                if let Some(s) = consumer_muse_settings.iter().find(|s| p.id == s.id) {
+                    muse_ids.insert(s.id);
+                    assert_eq!(p.platform, s.platform);
                     assert_eq!(p.identity.model_id, "muse-glimmer-30b");
                     assert_eq!(p.identity.weights_id, "smol-q2g64-mix-dflash-q4");
                     assert_eq!(p.artifact_sha256, "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c");
                     assert_eq!(p.artifact_bytes, 13838508544);
-                    assert_eq!((p.tp, p.draft_tp, p.concurrency), (1, 1, *concurrency));
-                    assert_eq!((p.gpu_name.as_str(), p.compute_capability.as_str()), (*gpu, *cc));
-                    assert_eq!((p.vram_tier_gib, p.min_memory_mib_per_gpu, p.max_context), (*tier, *memory, *context));
+                    assert_eq!((p.tp, p.draft_tp, p.concurrency), (1, 1, s.concurrency));
+                    assert_eq!((p.gpu_name.as_str(), p.compute_capability.as_str()), (s.gpu, s.cc));
+                    assert_eq!((p.vram_tier_gib, p.min_memory_mib_per_gpu, p.max_context), (s.tier, s.memory, s.context));
                     assert_eq!(p.options, LaunchOptions {
-                        vision: false,
+                        vision: s.vision,
                         structured_outputs: false,
                         progressive_ready: false,
                         spec: "dflash".into(),
@@ -628,30 +718,30 @@ mod tests {
                         draft_tokens: 7,
                         draft_tp: 1,
                         kv_dtype: "int8".into(),
-                        kv_arena_bytes: *arena,
+                        kv_arena_bytes: s.arena,
                         vram_budget_bytes: None,
                         kv_arena_headroom_bytes: MIN_PROFILE_HEADROOM_BYTES,
                         host_kv_cache_bytes: None,
-                        prefill_chunk: *prefill,
+                        prefill_chunk: s.prefill,
                         no_cuda_graph: false,
                         ..LaunchOptions::default()
                     }, "{}", p.id);
-                    assert_eq!(p.qualification.engine_revision, *engine);
-                    assert_eq!(p.qualification.free_bytes_per_gpu, Some(*free));
+                    assert_eq!(p.qualification.engine_revision, s.engine);
+                    assert_eq!(p.qualification.free_bytes_per_gpu, Some(s.free));
                     assert_eq!(p.qualification.full_context_requests, 0);
-                    assert_eq!(p.qualification.smoke_requests, Some(*concurrency));
-                    if let Some(required) = required {
+                    assert_eq!(p.qualification.smoke_requests, Some(s.concurrency));
+                    if let Some(required) = s.required {
                         assert_eq!(p.qualification.tier, QualificationTier::CalculatedStartupSmoke);
                         let calculation = p.qualification.calculation.as_ref().unwrap();
-                        assert_eq!(calculation.required_kv_bytes_per_rank, *required);
-                        assert_eq!(calculation.available_kv_bytes_per_rank, *arena);
+                        assert_eq!(calculation.required_kv_bytes_per_rank, required);
+                        assert_eq!(calculation.available_kv_bytes_per_rank, s.available);
                     } else {
                         assert_eq!(p.qualification.tier, QualificationTier::ScreenedStartup);
                         assert!(p.qualification.calculation.is_none());
                     }
                 }
                 if consumer_qwen_settings.iter().any(|(_, id, ..)| p.id == *id)
-                    || consumer_muse_settings.iter().any(|(_, id, ..)| p.id == *id)
+                    || consumer_muse_settings.iter().any(|s| p.id == s.id)
                 {
                     let gpu = Gpu {
                         uuid: "GPU-consumer".into(),
