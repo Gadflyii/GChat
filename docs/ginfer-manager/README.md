@@ -289,6 +289,30 @@ The shared policy covers both platforms; native Windows acceptance remains a
 separate release gate. See the
 [verification decision](../decisions/2026-10-17-reuse-verified-model-payloads-with-file-identity.md).
 
+## Imported package identity and speculation width — October 19
+
+Imported packages, including files left in place on UNC or network paths, have
+no release record. Their package SHA-256 identity is the installed release when
+one exists, otherwise a verification record that still matches the file. The
+first load that profiles such a package without a record hashes it once, with
+the load's file-check progress, and keeps the record; a qualified Start's own
+verification supplies the same record, so it is not read twice. Hardware
+profiling then carries `package_sha256` for imported packages too. Windows
+redirectors such as `\\wsl.localhost` report volume serial 0 with a stable file
+index; the path-keyed record accepts that index, while index 0 still forces a
+full hash. A file without a stable fingerprint keeps no identity and is not
+hashed for one.
+
+The Engine rejects `--spec dflash` or `--spec mtp` without `--draft-tokens`. When
+DFlash or MTP is chosen and the width is blank or 0, Host applies the Engine's
+documented target default before both serving and hardware profiling: Qwen 27B
+and Muse DFlash K4, adaptive DFlash K15, Flash MTP 3. An explicit width is kept.
+Before this, an imported Qwen 2-bit mix on a Windows RTX 5090 failed hardware
+profiling after 28 ms with `--spec dflash requires --draft-tokens in [1,15]`.
+Launch-profile matching is unchanged (identity, TP, draft TP and byte count, then
+whole-file verification at Start); with the signed Windows RTX 5090 entry in the
+catalog, the in-place import selects it.
+
 ## Fresh startup quotes — October 15
 
 Installed and imported local models can use **Check startup settings** without
@@ -458,8 +482,9 @@ gchat-cli prepare-hardware --resource-directory /installed/GChat \
 ```
 
 Repeat `--gpu` in startup rank order for TP2/TP4. Pass the startup
-`--draft-tp` and `--draft-tokens` when explicitly selected; omitted values use
-native resolution. Host validates the local version-3 payload and GPU group,
+`--draft-tp` and `--draft-tokens` when explicitly selected; an omitted draft TP
+uses native resolution, and an omitted width with `--spec dflash` or `mtp` takes
+the documented target default (see the October 19 section above). Host validates the local version-3 payload and GPU group,
 derives its identity, and starts an asynchronous artifact-scoped Ensure. This
 local-administrator request does not create or start a model instance. Omitting
 `--artifact` retains the explicit all-format preparation command.

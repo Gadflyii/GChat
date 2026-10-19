@@ -1,0 +1,115 @@
+﻿{
+    "credentialManager":  false,
+    "events":  [
+                   {
+                       "cancelled":  false,
+                       "kind":  "navigation",
+                       "mainFrame":  true,
+                       "uri":  "http://tauri.localhost/"
+                   },
+                   {
+                       "cancelled":  false,
+                       "kind":  "navigation",
+                       "mainFrame":  false,
+                       "uri":  "http://gchat-preview.localhost/windows-native-58fc1c404c6647be9371edd16809d918"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  200,
+                       "uri":  "http://gchat-preview.localhost/windows-native-58fc1c404c6647be9371edd16809d918"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  404,
+                       "uri":  "https://gchat-preview.localhost/windows-native-58fc1c404c6647be9371edd16809d918"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  404,
+                       "uri":  "http://gchat-preview.localhost:43121/windows-native-58fc1c404c6647be9371edd16809d918"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  404,
+                       "uri":  "http://gchat-preview.localhost/missing"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  404,
+                       "uri":  "http://gchat-preview.localhost/windows-native-58fc1c404c6647be9371edd16809d918?query=1"
+                   },
+                   {
+                       "cancelled":  true,
+                       "kind":  "navigation",
+                       "mainFrame":  false,
+                       "uri":  "blob:http://tauri.localhost/698c0018-5baa-45ee-b883-d2d52a1c147f"
+                   },
+                   {
+                       "handled":  false,
+                       "kind":  "popup",
+                       "uri":  "gchat-preview://localhost/windows-native-58fc1c404c6647be9371edd16809d918"
+                   },
+                   {
+                       "cancelled":  true,
+                       "kind":  "navigation",
+                       "mainFrame":  true,
+                       "uri":  "http://gchat-preview.localhost/windows-native-58fc1c404c6647be9371edd16809d918"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  404,
+                       "uri":  "http://gchat-preview.localhost/%2Foutside"
+                   },
+                   {
+                       "csp":  "default-src \u0027none\u0027; script-src \u0027unsafe-inline\u0027 \u0027unsafe-eval\u0027; style-src \u0027unsafe-inline\u0027; img-src data: blob: https:; font-src data: https:; connect-src \u0027none\u0027; form-action \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027none\u0027",
+                       "kind":  "response",
+                       "nosniff":  "nosniff",
+                       "status":  200,
+                       "uri":  "http://gchat-preview.localhost/windows-native-58fc1c404c6647be9371edd16809d918"
+                   },
+                   {
+                       "cancelled":  true,
+                       "kind":  "navigation",
+                       "mainFrame":  true,
+                       "uri":  "https://example.invalid/gchat-native-admission"
+                   },
+                   {
+                       "cancelled":  false,
+                       "kind":  "navigation",
+                       "mainFrame":  true,
+                       "uri":  "http://tauri.localhost/logs"
+                   }
+               ],
+    "exit":  0,
+    "metadata":  {
+                     "asset":  "http://asset.localhost/E%3A%5Cgchat1-app-command-admission-20261018%5Cwindows-native-admission%5Cfixture-desktop-220bd4aa%5Cfixture-inputs%5Cgchat-native-admission-xkwA8O%5Casset-marker.txt",
+                     "directory":  "E:\\gchat1-app-command-admission-20261018\\windows-native-admission\\fixture-desktop-220bd4aa\\fixture-inputs\\gchat-native-admission-xkwA8O",
+                     "expectedJoin":  "E:\\gchat1-app-command-admission-20261018\\windows-native-admission\\fixture-desktop-220bd4aa\\fixture-inputs\\gchat-native-admission-xkwA8O\\joined.txt",
+                     "fixture":  "58fc1c404c6647be9371edd16809d918",
+                     "id":  "windows-native-58fc1c404c6647be9371edd16809d918",
+                     "invalidResources":  [
+                                              "https://gchat-preview.localhost/windows-native-58fc1c404c6647be9371edd16809d918",
+                                              "http://gchat-preview.localhost:43121/windows-native-58fc1c404c6647be9371edd16809d918",
+                                              "http://gchat-preview.localhost/missing",
+                                              "http://gchat-preview.localhost/windows-native-58fc1c404c6647be9371edd16809d918?query=1",
+                                              "http://gchat-preview.localhost/%2Foutside"
+                                          ],
+                     "marker":  "gchat-private-asset-marker",
+                     "preview":  "http://gchat-preview.localhost/windows-native-58fc1c404c6647be9371edd16809d918"
+                 },
+    "productSetup":  false,
+    "result":  null,
+    "validation":  "Allowed same-origin route did not commit"
+}

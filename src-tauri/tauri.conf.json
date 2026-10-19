@@ -34,8 +34,8 @@
         ],
         "img-src": "'self' asset: http://asset.localhost blob: data: https:",
         "media-src": "'self' asset: http://asset.localhost blob: data: mediastream:",
-        "frame-src": "'self' blob: data: artifact: http://artifact.localhost",
-        "child-src": "'self' blob: data: artifact: http://artifact.localhost",
+        "frame-src": "'self' blob: data: gchat-preview: http://gchat-preview.localhost",
+        "child-src": "'self' blob: data: gchat-preview: http://gchat-preview.localhost",
         "style-src": "'unsafe-inline' 'self' https://fonts.googleapis.com",
         "script-src": "'self' 'unsafe-eval' asset: $APPDATA/**.* http://asset.localhost"
       },

@@ -50,6 +50,16 @@ impl FileFingerprint {
 }
 
 impl PayloadVerification {
+    pub(crate) fn sha256(&self) -> &str {
+        &self.sha256
+    }
+
+    /// The recorded package digest while the same file is still at this path.
+    pub(crate) fn current_sha256(&self, path: &Path) -> Option<String> {
+        let current = fingerprint(&File::open(path).ok()?).ok()?;
+        (current.reusable() && current == self.fingerprint).then(|| self.sha256.clone())
+    }
+
     /// Retain a just-verified receipt across our own publication rename only.
     /// A rename changes the file's change timestamp, but not its content,
     /// modification timestamp or stable identity. Copies must be verified anew.
@@ -101,6 +111,33 @@ pub(crate) fn verify_controlled<'a>(
         &cancelled,
         &progress,
     )
+}
+
+/// Identify a package that has no recorded digest: hash it once, bound to the
+/// file actually read. None when the file has no stable fingerprint, because no
+/// receipt could hold that identity; nothing is read in that case.
+pub(crate) fn identify_controlled(
+    path: &Path,
+    cancelled: impl Fn() -> bool,
+    progress: impl Fn(u64, u64),
+) -> Result<Option<PayloadVerification>, String> {
+    check_cancelled(&cancelled)?;
+    let mut file = File::open(path).map_err(|e| e.to_string())?;
+    let before = fingerprint(&file)?;
+    if !before.reusable() {
+        return Ok(None);
+    }
+    progress(0, before.bytes);
+    let sha256 = hash_payload_controlled(&mut file, before.bytes, &cancelled, &progress)?;
+    if fingerprint(&file)? != before {
+        return Err("payload changed during verification".into());
+    }
+    check_current_path(path, &before)?;
+    check_cancelled(&cancelled)?;
+    Ok(Some(PayloadVerification {
+        sha256,
+        fingerprint: before,
+    }))
 }
 
 #[cfg(test)]
@@ -309,7 +346,9 @@ fn windows_fingerprint(
         bytes: (u64::from(information.size_high) << 32) | u64::from(information.size_low),
         modified: windows_timestamp(basic.last_write_time),
         changed: windows_timestamp(basic.change_time),
-        identity: (information.volume_serial != 0 && file_index != 0).then_some(
+        // Redirectors such as \\wsl.localhost report volume serial 0 with a
+        // stable file index; receipts are path-keyed, so the index suffices.
+        identity: (file_index != 0).then_some(
             FileIdentity::Windows {
                 volume_serial: information.volume_serial,
                 file_index,
@@ -366,6 +405,33 @@ mod tests {
         std::fs::write(&path, b"verified").unwrap();
         let sha256 = hex::encode(Sha256::digest(b"verified"));
         (directory, path, sha256)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn unrecorded_package_is_identified_once_and_its_receipt_tracks_the_file() {
+        let (_directory, path, sha256) = fixture();
+        let progress = RefCell::new(Vec::new());
+        let receipt = identify_controlled(&path, || false, |done, total| {
+            progress.borrow_mut().push((done, total))
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(receipt.sha256(), sha256);
+        assert_eq!(progress.into_inner(), vec![(0, 8), (8, 8)]);
+        assert_eq!(receipt.current_sha256(&path), Some(sha256.clone()));
+        // The receipt is what later verification reuses without reading again.
+        verify_with_hasher(&path, &sha256, 8, [&receipt], |_| panic!("receipt reuse must not hash"))
+            .unwrap();
+        // A replaced payload at the same path no longer carries the identity.
+        std::fs::remove_file(&path).unwrap();
+        std::fs::write(&path, b"replaced").unwrap();
+        assert_eq!(receipt.current_sha256(&path), None);
+        assert_eq!(receipt.current_sha256(&path.with_extension("absent")), None);
+        assert_eq!(
+            identify_controlled(&path, || true, |_, _| panic!("cancelled identity must not read")).unwrap_err(),
+            "payload verification cancelled"
+        );
     }
 
     #[test]
@@ -719,7 +785,12 @@ mod tests {
         basic.last_write_time += 1;
         assert!(!original.same_renamed_file(&windows_fingerprint(&information, &basic)));
         information.volume_serial = 0;
+        assert!(windows_fingerprint(&information, &basic).reusable());
+        assert_ne!(original, windows_fingerprint(&information, &basic));
+        information.index_high = 0;
+        information.index_low = 0;
         assert!(!windows_fingerprint(&information, &basic).reusable());
+        (information.index_high, information.index_low) = (2, 3);
         information.volume_serial = 77;
         basic.change_time = 0;
         assert!(!windows_fingerprint(&information, &basic).reusable());

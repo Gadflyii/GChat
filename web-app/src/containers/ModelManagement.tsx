@@ -1,3 +1,4 @@
+import { startWithCheckedSettings } from './autoModelSettings'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { confirmAction } from '@/lib/confirm'
 import { IconChevronDown } from '@tabler/icons-react'
@@ -54,7 +55,7 @@ export type ModelManagementTab = (typeof managementTabs)[number]
 const REGISTERED_MODEL_REFRESH_FAILED = 'The model was added, but the model list could not be refreshed. Choose Refresh installed models to try again.'
 const ACCEPTED_DOWNLOAD_REFRESH_FAILED = 'The download request was accepted, but its status could not be refreshed. Choose Refresh downloads to check its current state.'
 const STOPPED_MODEL_REFRESH_FAILED = 'The model stopped, but the running model list could not be refreshed. Choose Refresh model status before loading or stopping another model.'
-const NO_SETTINGS = ' has no tested settings for automatic loading. To start it, open GInfer Hosts, expand Model and memory settings and Choose model settings, then select Check model settings and Start model with these settings.'
+const NO_SETTINGS = ' could not be started automatically. Open GInfer Hosts to choose its settings yourself.'
 const capabilityLabels = (capabilities: string[] = []) => capabilities.flatMap(capability => {
   switch (capability.toLowerCase()) {
     case 'text': return ['Text chat']
@@ -338,11 +339,25 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       load.ready = true
       if (mounted.current) setLoadResult('Model loaded and ready to use.')
     } catch (e) {
-      if (mounted.current) setLoadResult((e as { name?: string } | null)?.name === 'AbortError' ? 'Model startup cancelled.' : 'Model could not be loaded. Check the error below before trying again.')
       if ((e as { code?: string } | null)?.code === 'no_qualified_profile') {
-        const m = localModels.find(x => x.id === modelId)
-        throw new Error(plainModelName(m?.displayName ?? modelId) + NO_SETTINGS)
+        // No tested settings: check settings that fit this computer and start with them, with plain progress.
+        try {
+          const target = localModels.find(x => x.id === modelId)
+          if (!localHost || !target?.path) throw new Error('GInfer is not ready on this computer.')
+          await startWithCheckedSettings(localHost.host_id, target.path, {
+            signal: load.controller.signal,
+            report: (text) => { if (mounted.current) setLoadResult(text) },
+          })
+          load.ready = true
+          if (mounted.current) setLoadResult('Model loaded and ready to use.')
+          return
+        } catch (auto) {
+          if (mounted.current) setLoadResult((auto as { name?: string } | null)?.name === 'AbortError' ? 'Model startup cancelled.' : 'Model could not be loaded. Check the error below before trying again.')
+          const m = localModels.find(x => x.id === modelId)
+          throw new Error(plainModelName(m?.displayName ?? modelId) + NO_SETTINGS)
+        }
       }
+      if (mounted.current) setLoadResult((e as { name?: string } | null)?.name === 'AbortError' ? 'Model startup cancelled.' : 'Model could not be loaded. Check the error below before trying again.')
       throw e
     } finally {
       load.settled = true

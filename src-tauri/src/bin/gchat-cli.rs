@@ -111,7 +111,8 @@ struct PrepareHardwareArgs {
     /// Startup draft TP degree; omit for native artifact resolution.
     #[arg(long, requires = "artifact")]
     draft_tp: Option<u32>,
-    /// Explicit startup speculation width; omit for the native default.
+    /// Explicit startup speculation width; omitted, Host applies the Engine's
+    /// documented target default for DFlash/MTP (Qwen/Muse K4, Flash 3).
     #[arg(long, requires = "artifact")]
     draft_tokens: Option<u32>,
 }

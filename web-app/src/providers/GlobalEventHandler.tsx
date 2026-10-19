@@ -5,12 +5,8 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { useHardware } from '@/hooks/useHardware'
 import { isPlatformTauri } from '@/lib/platform/utils'
 
-/**
- * GlobalEventHandler handles global events that should be processed across all screens
- * This provider should be mounted at the root level to ensure all screens can benefit from global event handling
- */
-export function GlobalEventHandler() {
-  const { setProviders } = useModelProvider()
+/** Hardware reads shared by the main app and the limited system monitor. */
+export function useHardwareInitialization() {
   const serviceHub = useServiceHub()
   const setHardwareData = useHardware((state) => state.setHardwareData)
 
@@ -55,6 +51,16 @@ export function GlobalEventHandler() {
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [serviceHub, setHardwareData])
+}
+
+/**
+ * GlobalEventHandler handles global events that should be processed across all screens
+ * This provider should be mounted at the root level to ensure all screens can benefit from global event handling
+ */
+export function GlobalEventHandler() {
+  const { setProviders } = useModelProvider()
+  const serviceHub = useServiceHub()
+  useHardwareInitialization()
 
   // Handle settingsChanged event globally
   useEffect(() => {

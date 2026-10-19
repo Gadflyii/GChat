@@ -63,7 +63,7 @@ it('shows checkpoint uncertainty and errors, disables offline actions and render
   expect(action).toHaveBeenCalledExactlyOnceWith('resume')
   view.rerender(<EngineHardwareProfile gpus={gpus} profile={{ ...profile('completed'), finished_unix_ms: 62000 }} offline={false} disabled={false} action={action} />)
   expect(screen.getByRole('status')).toHaveTextContent('Graphics-card settings ready · 61 seconds elapsed')
-  expect(screen.getByText(/do not guarantee that every model or conversation length will fit/)).toBeInTheDocument()
+  expect(screen.getByText(/do not guarantee that every model or context length will fit/)).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Continue setup' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('checkbox'))
   fireEvent.click(screen.getByRole('button', { name: 'Measure again' }))

@@ -10,12 +10,14 @@ import { useTranslation } from '@/i18n/react-i18next-compat'
 import { toNumber } from '@/utils/number'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { buildFallbackDevices } from '@/lib/gpuFallback'
+import { useHardwareInitialization } from '@/providers/GlobalEventHandler'
 
 export const Route = createFileRoute(route.systemMonitor as any)({
   component: SystemMonitorContent,
 })
 
 function SystemMonitorContent() {
+  useHardwareInitialization()
   const { t } = useTranslation()
   const { hardwareData, systemUsage, updateSystemUsage } = useHardware()
   const serviceHub = useServiceHub()

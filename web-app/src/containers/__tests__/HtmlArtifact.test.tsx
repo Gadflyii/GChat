@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const native = vi.hoisted(() => ({
   invoke: vi.fn(),
+  convertFileSrc: vi.fn(),
   save: vi.fn(),
   writeFile: vi.fn(),
   tauri: false,
@@ -12,7 +13,10 @@ vi.mock('@/i18n/react-i18next-compat', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }))
 
-vi.mock('@tauri-apps/api/core', () => ({ invoke: native.invoke }))
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: native.invoke,
+  convertFileSrc: native.convertFileSrc,
+}))
 
 vi.mock('@gchat/core', () => ({ fs: { writeFileSync: native.writeFile } }))
 
@@ -35,11 +39,9 @@ async function renderArtifact(code: string, streaming = false) {
   const view = render(<HtmlArtifact code={code} streaming={streaming} />)
   await act(async () => {
     await new Promise<void>((resolve) => {
-      view.container.querySelector('iframe')!.addEventListener(
-        'load',
-        () => resolve(),
-        { once: true }
-      )
+      view.container
+        .querySelector('iframe')!
+        .addEventListener('load', () => resolve(), { once: true })
     })
   })
   return view
@@ -62,8 +64,22 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-async function rejectRegistration(
-  request: ReturnType<typeof deferred<void>>,
+const previewUrl = (id: string) => `gchat-preview://localhost/${id}`
+const registrationCalls = () =>
+  native.invoke.mock.calls.filter(
+    ([command]) => command === 'set_artifact_html'
+  )
+
+function deferRegistrations(...requests: Promise<string>[]) {
+  native.invoke.mockImplementation((command: string, { id }: { id: string }) =>
+    command === 'set_artifact_html'
+      ? (requests.shift() ?? Promise.resolve(id))
+      : Promise.resolve(undefined)
+  )
+}
+
+async function rejectRegistration<T>(
+  request: ReturnType<typeof deferred<T>>,
   message: string
 ) {
   await act(async () => {
@@ -78,10 +94,19 @@ describe('HtmlArtifact', () => {
   let printDescriptor: PropertyDescriptor | undefined
 
   beforeEach(() => {
-    clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    clipboardDescriptor = Object.getOwnPropertyDescriptor(
+      navigator,
+      'clipboard'
+    )
     printDescriptor = Object.getOwnPropertyDescriptor(window, 'print')
     native.tauri = false
-    native.invoke.mockReset().mockResolvedValue(undefined)
+    native.invoke.mockReset()
+    deferRegistrations()
+    native.convertFileSrc
+      .mockReset()
+      .mockImplementation(
+        (id: string, protocol: string) => `${protocol}://localhost/${id}`
+      )
     native.save.mockReset().mockResolvedValue(null)
     native.writeFile.mockReset().mockResolvedValue(undefined)
     scrollTops = []
@@ -172,11 +197,9 @@ describe('HtmlArtifact', () => {
 
   it('keeps the source available when native preview registration fails and retries the same document', async () => {
     native.tauri = true
-    const registration = deferred<void>()
-    const retry = deferred<void>()
-    native.invoke
-      .mockReturnValueOnce(registration.promise)
-      .mockReturnValueOnce(retry.promise)
+    const registration = deferred<string>()
+    const retry = deferred<string>()
+    deferRegistrations(registration.promise, retry.promise)
     const code = '<main>My recovered preview</main>'
     render(<HtmlArtifact code={code} />)
     expect(native.invoke).toHaveBeenCalledOnce()
@@ -196,23 +219,30 @@ describe('HtmlArtifact', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Code', exact: true }))
     expect(codePane()).toBeVisible()
     expect(codePane()).toHaveTextContent(code)
-    fireEvent.click(screen.getByRole('button', { name: 'Preview', exact: true }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Preview', exact: true })
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Retry preview' }))
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(native.invoke).toHaveBeenCalledTimes(2)
-    expect(native.invoke).toHaveBeenNthCalledWith(
-      2,
-      'set_artifact_html',
-      registeredDocument
-    )
+    expect(registrationCalls()).toHaveLength(2)
+    const retryDocument = registrationCalls()[1][1]
+    expect(retryDocument.html).toBe(registeredDocument.html)
+    expect(retryDocument.id).not.toBe(registeredDocument.id)
+    expect(native.invoke).toHaveBeenCalledWith('clear_artifact_html', {
+      id: registeredDocument.id,
+    })
     await act(async () => {
-      retry.resolve(undefined)
+      retry.resolve(retryDocument.id)
       await retry.promise
     })
 
     const iframe = screen.getByTitle('HTML preview')
-    expect(iframe.getAttribute('src')).toContain(registeredDocument.id)
+    expect(native.convertFileSrc).toHaveBeenCalledExactlyOnceWith(
+      retryDocument.id,
+      'gchat-preview'
+    )
+    expect(iframe).toHaveAttribute('src', previewUrl(retryDocument.id))
     fireEvent.load(iframe)
     expect(previewPane()).toBeVisible()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -223,11 +253,11 @@ describe('HtmlArtifact', () => {
 
   it('ignores a previous document registration failure after the source changes', async () => {
     native.tauri = true
-    const previous = deferred<void>()
-    native.invoke
-      .mockReturnValueOnce(previous.promise)
-      .mockResolvedValueOnce(undefined)
-    const { rerender } = render(<HtmlArtifact code="<p>Previous document</p>" />)
+    const previous = deferred<string>()
+    deferRegistrations(previous.promise)
+    const { rerender } = render(
+      <HtmlArtifact code="<p>Previous document</p>" />
+    )
     expect(native.invoke).toHaveBeenCalledOnce()
 
     rerender(<HtmlArtifact code="<p>Current document</p>" />)
@@ -240,7 +270,7 @@ describe('HtmlArtifact', () => {
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByTitle('HTML preview')).toHaveAttribute('src', currentUrl)
-    expect(native.invoke).toHaveBeenCalledTimes(2)
+    expect(registrationCalls()).toHaveLength(2)
     fireEvent.click(screen.getByRole('button', { name: 'Code', exact: true }))
     expect(codePane()).toBeVisible()
     expect(codePane()).toHaveTextContent('<p>Current document</p>')
@@ -249,18 +279,110 @@ describe('HtmlArtifact', () => {
 
   it('clears the native document on unmount and ignores its late registration failure', async () => {
     native.tauri = true
-    const registration = deferred<void>()
-    native.invoke.mockReturnValueOnce(registration.promise)
+    const registration = deferred<string>()
+    deferRegistrations(registration.promise)
     const { unmount } = render(<HtmlArtifact code="<p>Closed document</p>" />)
     const { id } = native.invoke.mock.calls[0][1]
 
     unmount()
-    expect(native.invoke).toHaveBeenNthCalledWith(2, 'clear_artifact_html', { id })
+    expect(native.invoke).toHaveBeenNthCalledWith(2, 'clear_artifact_html', {
+      id,
+    })
     await rejectRegistration(registration, 'The preview was closed')
 
     expect(native.invoke).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByTitle('HTML preview')).not.toBeInTheDocument()
+  })
+
+  it('loads the returned opaque ID on the isolated preview scheme in a script-capable sandbox', async () => {
+    native.tauri = true
+    const registration = deferred<string>()
+    deferRegistrations(registration.promise)
+    const code =
+      '<script>document.body.textContent = "Rendered inline"</script>'
+    const { unmount } = render(<HtmlArtifact code={code} />)
+    const { id, html } = registrationCalls()[0][1]
+    expect(html).toContain(code)
+    expect(screen.getByTitle('HTML preview')).not.toHaveAttribute('src')
+
+    const previewId = 'native-preview-id'
+    await act(async () => {
+      registration.resolve(previewId)
+      await registration.promise
+    })
+
+    const iframe = screen.getByTitle('HTML preview')
+    expect(native.convertFileSrc).toHaveBeenCalledExactlyOnceWith(
+      previewId,
+      'gchat-preview'
+    )
+    expect(iframe).toHaveAttribute('src', previewUrl(previewId))
+    expect(iframe.getAttribute('sandbox')?.split(' ')).toContain(
+      'allow-scripts'
+    )
+    expect(iframe.getAttribute('sandbox')?.split(' ')).not.toContain(
+      'allow-same-origin'
+    )
+    unmount()
+    expect(native.invoke).toHaveBeenCalledWith('clear_artifact_html', { id })
+  })
+
+  it('cleans a stale deferred write without replacing the current isolated preview', async () => {
+    native.tauri = true
+    const previous = deferred<string>()
+    const current = deferred<string>()
+    deferRegistrations(previous.promise, current.promise)
+    const { rerender } = render(<HtmlArtifact code="<p>Previous</p>" />)
+    const previousId = registrationCalls()[0][1].id
+
+    rerender(<HtmlArtifact code="<p>Current</p>" />)
+    const currentId = registrationCalls()[1][1].id
+    expect(currentId).not.toBe(previousId)
+    await act(async () => {
+      current.resolve(currentId)
+      await current.promise
+    })
+    const currentUrl = screen.getByTitle('HTML preview').getAttribute('src')
+    await act(async () => {
+      previous.resolve(previousId)
+      await previous.promise
+    })
+
+    expect(screen.getByTitle('HTML preview')).toHaveAttribute('src', currentUrl)
+    expect(native.convertFileSrc).toHaveBeenCalledExactlyOnceWith(
+      currentId,
+      'gchat-preview'
+    )
+    expect(
+      native.invoke.mock.calls.filter(
+        ([command, args]) =>
+          command === 'clear_artifact_html' && args.id === previousId
+      )
+    ).toHaveLength(2)
+    expect(native.invoke).not.toHaveBeenCalledWith('clear_artifact_html', {
+      id: currentId,
+    })
+  })
+
+  it('cleans a native write that finishes after the preview unmounts', async () => {
+    native.tauri = true
+    const registration = deferred<string>()
+    deferRegistrations(registration.promise)
+    const { unmount } = render(<HtmlArtifact code="<p>Closed</p>" />)
+    const id = registrationCalls()[0][1].id
+    unmount()
+    await act(async () => {
+      registration.resolve(id)
+      await registration.promise
+    })
+
+    expect(native.convertFileSrc).not.toHaveBeenCalled()
+    expect(native.invoke.mock.calls).toEqual([
+      ['set_artifact_html', expect.objectContaining({ id })],
+      ['clear_artifact_html', { id }],
+      ['clear_artifact_html', { id }],
+    ])
   })
 
   it('shows a failed Save dialog and lets Download retry the same HTML', async () => {
@@ -582,7 +704,9 @@ describe('HtmlArtifact', () => {
       configurable: true,
       value: print,
     })
-    const { unmount } = render(<HtmlArtifact code="<p>Closed before print</p>" />)
+    const { unmount } = render(
+      <HtmlArtifact code="<p>Closed before print</p>" />
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Print HTML' }))
     expect(print).not.toHaveBeenCalled()

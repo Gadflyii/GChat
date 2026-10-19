@@ -72,7 +72,7 @@ export function EngineHardwareProfile({ profile, gpus, offline, disabled, action
     </section>)}
     {running && <progress aria-label="Graphics-card setup in progress" className="w-full" />}
     {profile.status !== 'completed' && <p className="text-sm text-muted-foreground">Allow 10 minutes to an hour or longer, depending on your graphics cards and chosen settings. You can close this window while setup continues. {profile.scope === 'complete_remaining_formats' ? 'Your selected model is ready to load. This optional work prepares other model types and pauses when you load a model. Stop setup keeps it stopped until you continue setup or prepare another model.' : 'Wait for setup to stop before starting a model.'}</p>}
-    {profile.status === 'completed' && <p className="text-sm text-muted-foreground">Your graphics-card settings are ready. Each model still needs a memory check before starting; these settings do not guarantee that every model or conversation length will fit.</p>}
+    {profile.status === 'completed' && <p className="text-sm text-muted-foreground">Your graphics-card settings are ready. Each model still needs a memory check before starting; these settings do not guarantee that every model or context length will fit.</p>}
     {resumable && <p className="text-sm text-muted-foreground">{profile.checkpoint_available
       ? 'Some progress has been saved. Select Continue setup to check whether it can be reused. Measurements that no longer match your computer may need to run again.'
       : 'Select Continue setup to try again with your saved choices. GInfer checks any saved progress before reusing it.'}</p>}
