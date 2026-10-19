@@ -68,6 +68,7 @@ export function reduceAgentRunState(
         runId: event.run_id,
         originSessionId: state.originSessionId,
         parentRunId: state.parentRunId,
+        ...(state.subAgent ? { subAgent: state.subAgent } : {}),
         startedAtMs: state.startedAtMs ?? nowMs,
         status: 'running',
         trace: {
@@ -333,7 +334,7 @@ type AgentRunStore = {
   runs: Record<string, AgentRunState>
   getRun: (threadId: string) => AgentRunState
   startRun: (threadId: string, runId: string,
-    attribution?: Pick<AgentRunState, 'originSessionId' | 'parentRunId'>
+    attribution?: Pick<AgentRunState, 'originSessionId' | 'parentRunId' | 'subAgent'>
   ) => void
   applyEvent: (threadId: string, event: AgentEvent) => void
   setApprovalResolving: (threadId: string, resolving: boolean) => void

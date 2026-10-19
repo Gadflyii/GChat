@@ -1,5 +1,6 @@
 import { ToolUIPart } from 'ai'
 import type { AgentRunSummary } from '@/types/agent'
+import type { SubAgentBrief, SubAgentResult } from '@/lib/sub-agents'
 
 export type ToolPresentation =
   | {
@@ -78,6 +79,16 @@ export type TraceBlock =
         presentation: ToolPresentation
       }>
       agentSummary?: AgentRunSummary
+    }
+  | {
+      kind: 'subagents'
+      key: string
+      /** The dispatch tool call; live worker state is keyed by it. */
+      dispatchId: string
+      state: ToolUIPart['state']
+      briefs: SubAgentBrief[]
+      results: SubAgentResult[]
+      errorText?: string
     }
 
 export type ParsedSearchItem = {

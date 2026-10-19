@@ -25,6 +25,57 @@ The [installed Unix PTY check](remaining-acceptance.md#current-unix-pty-window-g
 also passes whole-window pixel reporting, a one-pixel resize at an unchanged
 grid, and ordinary Code model-menu mouse selection on native Linux.
 
+## Chat sub-agents — October 19
+
+`GCHAT-CHAT-SUBAGENTS` (Ron, 10-19): telling Chat to dispatch agents now
+dispatches them, and each one is visible as a sub-agent in the main chat
+window. Design record:
+[ADR 2026-10-19](../decisions/2026-10-19-dispatch-chat-sub-agents-through-spawn-and-wait.md).
+
+- **Tool.** Chat offers `agent_dispatch` with 1–8 `{title, task}` briefs
+  while `agent_spawn` and `agent_wait` are enabled. One call starts every
+  brief at once as a General Agent worker through `agent_spawn`, waits for all
+  of them through `agent_wait`, and returns
+  `{agents: [{title, runId, status, result, error, note}]}` in brief order.
+  Status is `done`, `stopped`, `failed` or `not_finished`. A stopped entry
+  carries a note that the user stopped it, so the parent does not re-dispatch
+  it unprompted. No Rust, service or event change.
+- **Capacity.** Workers use the conversation's model, tools, permissions and
+  folders, and the shared native allocator: they run together up to the Host's
+  admitted concurrency and queue visibly beyond it.
+- **Cards.** The dispatching message shows "N sub-agents", then one card per
+  brief: title, task, status (Starting, Waiting for a free model slot,
+  Working · N steps done, Waiting for your approval, Waiting for folder access,
+  Done, Stopped, Failed, Did not finish), the last three steps, the result or
+  error, and **Stop** for that worker only. Chat Stop cancels every worker.
+  Workers no longer also appear as floating worker messages. Results are saved
+  in the tool output, so cards reopen with their outcome; a dispatch
+  interrupted before saving reopens as Did not finish.
+
+Native Linux check on S1 (source `c6427aee4`, Release desktop/CLI/Host,
+private HOME/XDG/keyring/D-Bus, Xvfb, Qwen 3.8 27B NVFP4 added through
+**Add local model** and started on GPU1 with 4 requests at once). The prompt
+"Dispatch 3 agents to each summarize one of these files: harbor-report.txt,
+bike-survey.txt, library-memo.txt." produced one `agent_dispatch` call and
+three cards that went Starting → Working (Read file) → Done. The three
+workers started in the same millisecond and finished after 6.2, 8.5 and 9.2
+seconds; every summary matched its file and the parent answered from all
+three. A second dispatch of three story writers was stopped on one card: that
+card showed Stopped (run record `cancelled`) while the other two finished.
+The parent then re-dispatched the stopped task once; the stopped-by-user note
+above was added after this run and is covered by focused tests, not re-run
+live. After a page reload all three dispatch groups reopened with saved
+results and no Stop buttons. Models > **Stop model** released GPU1.
+
+Gates: 98 focused tests, then 56 after the note change; lint (0 errors),
+typecheck and test-quality pass. One `make verify` on the final source
+(02:05–02:09Z) passes 3908 app tests (six skipped), 130 extension tests and
+1323 Rust tests (28 ignored), with lint, typecheck, quality and the six
+critical coverage floors. Receipts: `/ai/gchat/out/claude-gchat-subagents-20261019/`
+(`result.json`, three screenshots, `thread-messages.jsonl`,
+`worker-run-records.json`). Not covered: Windows, paired-Host workers and
+model quality.
+
 ## Unsaved agent drafts on window close — October 18
 
 A private Linux native walk found that ordinary window Close discarded an
