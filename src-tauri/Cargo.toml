@@ -212,3 +212,9 @@ split-debuginfo = "packed"
 debug-assertions = false  # No debug assertions
 incremental = false # Disable incremental compilation for release
 rpath = false       # Don't include rpath
+
+# SHA-256 hashing of whole model packages (import identity, verification). Under
+# opt-level "z" the sha2 SHA-NI path measured 426 MB/s on S1; at opt-level 3 it
+# measures 1265 MB/s (sha256sum ~1000). Only this crate is affected.
+[profile.release.package.sha2]
+opt-level = 3
