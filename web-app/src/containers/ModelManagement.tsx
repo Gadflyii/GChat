@@ -22,7 +22,7 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { useModelCatalogStore } from '@/stores/model-catalog-store'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
-import { CPU_PROBLEM_CODES as CPU_CODES, engineAlias, engineCommand, engineErrorParts, plainHostError, type DevicePreference, type EngineModel, type EngineSnapshot, type LocalModelLoadProgress } from '@/services/engines'
+import { CPU_PROBLEM_CODES as CPU_CODES, engineAlias, engineCommand, engineErrorParts, type DevicePreference, type EngineModel, type EngineSnapshot, type LocalModelLoadProgress } from '@/services/engines'
 import { controlLocalHostModel } from '@/utils/localHostModel'
 import { HostCard } from '@/containers/EngineHostModels'
 import { gpuCardName, hostModelLabel, plainModelName } from '@/lib/engine-host-labels'
@@ -126,6 +126,8 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const [loadResult, setLoadResult] = useState('')
   // The model whose Automatic load failed, so its custom settings can be offered next.
   const [failedModelId, setFailedModelId] = useState<string | null>(null)
+  /** The Host's own plain sentence when settings do not fit; other failures keep the summary. */
+  const [failedFit, setFailedFit] = useState<string | null>(null)
   const [customFor, setCustomFor] = useState<string | null>(null)
   const [customPreparing, setCustomPreparing] = useState<string | null>(null)
   /** A CPU start problem in plain words; NVFP4 packages also offer the INT or SMOL version. */
@@ -349,6 +351,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
     loadSucceeded.current = false
     setLoadResult('')
     setFailedModelId(null)
+    setFailedFit(null)
     setCpuProblem(null)
     setPendingLoad(load)
     setLoadProgress(null)
@@ -391,6 +394,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
         const cancelled = (e as { name?: string } | null)?.name === 'AbortError'
         setLoadResult(cancelled ? 'Model startup cancelled.' : 'Model could not be loaded. Check the error below before trying again.')
         if (!cancelled) setFailedModelId(modelId)
+        if (code === 'does_not_fit') setFailedFit(errorMessage(e).replace(/^Failed to load [^:]*: /, '').replace(/^\[[a-z_]+\] /, ''))
       }
       throw e
     } finally {
@@ -513,7 +517,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       {local && tab === 'Installed' && <p className="text-sm text-muted-foreground">Add an existing .ginfer file. The file stays in its current location.</p>}
       {error && (failedModelId
         ? <div className="space-y-2">
-          <ModelProblem message={plainHostError(error).replace(/^Failed to load [^:]*: /, '')} detail={error} />
+          <ModelProblem message={failedFit ?? errorSummary} detail={error} />
           {customFor !== failedModelId && <Button variant="outline" disabled={busy} onClick={() => void openCustom(failedModelId, localModels.find(x => x.id === failedModelId)?.path)}>Choose custom settings</Button>}
         </div>
         : <ModelProblem message={errorSummary} detail={error} />)}

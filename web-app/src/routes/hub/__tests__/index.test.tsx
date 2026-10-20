@@ -755,7 +755,7 @@ describe('host-scoped Models', () => {
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('Could not load this model. Check that the selected graphics cards are available and have enough memory, then try again.')
+    expect(alert).toHaveTextContent('Could not load this model. Choose Custom settings to try a shorter context or other settings, or check that the selected graphics cards are available.')
     expect(screen.getByText('Failed to load Qwen: Not enough graphics memory.')).not.toBeVisible()
     fireEvent.click(screen.getByText('Technical details'))
     expect(screen.getByText('Failed to load Qwen: Not enough graphics memory.')).toBeVisible()
