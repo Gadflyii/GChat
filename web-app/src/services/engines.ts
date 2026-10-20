@@ -42,7 +42,7 @@ export type EngineStartupQuote = {
   kv_arena_bytes: number | null
   model_identity: { model_id: string; weights_id: string }
 }
-export type BenchmarkModelClass = 'qwen27-int-dflash-q4' | 'qwen27-nvfp4-dflash-q4' | 'flash-smol-mtp' | 'flash-int-mtp'
+export type BenchmarkModelClass = 'qwen27-int-dflash-q4' | 'qwen27-nvfp4-dflash-q4' | 'flash-smol-mtp' | 'flash-int-mtp' | 'qwen36-int-cpu'
 export type BenchmarkProfileReference = {
   id: 'gbench-max-perf'; version: 1; model_class: BenchmarkModelClass
 }

@@ -1,4 +1,4 @@
-import type { BenchmarkConfiguration, BenchmarkResult, BenchmarkSessionInfo, BenchmarkV2Report, BenchmarkWave } from './tauri'
+import type { BenchmarkConfiguration, BenchmarkCpuRoutes, BenchmarkResult, BenchmarkSessionInfo, BenchmarkV2Report, BenchmarkWave } from './tauri'
 import type { BenchmarkModelClass, BenchmarkProfileReference } from '@/services/engines'
 import { invoke } from '@tauri-apps/api/core'
 import { localStorageKey } from '@/constants/localStorage'
@@ -93,11 +93,24 @@ function projectedV2Waves(report: BenchmarkV2Report, concurrency: number): [Benc
   return [report.cold_prefill.warmup[0], report.warm_generation.measured[0]]
 }
 
-const maxPerfPolicies: Record<BenchmarkModelClass, { model: string; weights: string; kv: string; spec: string; tokens: number; draftTp: number }> = {
-  'qwen27-int-dflash-q4': { model: 'qwen3.8-27b', weights: 'groupwise-int-dflash2-q4', kv: 'int8', spec: 'dflash', tokens: 7, draftTp: 1 },
-  'qwen27-nvfp4-dflash-q4': { model: 'qwen3.8-27b', weights: 'nvfp4-dflash2-q4', kv: 'nvfp4', spec: 'dflash', tokens: 7, draftTp: 1 },
-  'flash-smol-mtp': { model: 'qwen3.8-flash-next', weights: 'smol-q2g64', kv: 'int8', spec: 'mtp', tokens: 3, draftTp: 0 },
-  'flash-int-mtp': { model: 'qwen3.8-flash-next', weights: 'groupwise-int', kv: 'int8', spec: 'mtp', tokens: 3, draftTp: 0 },
+type MaxPerfPolicy = { model: string; weights: string; kv: string; spec: string; tokens: number; draftTp: number; device: 'gpu' | 'cpu' }
+const maxPerfPolicies: Record<BenchmarkModelClass, MaxPerfPolicy> = {
+  'qwen27-int-dflash-q4': { model: 'qwen3.8-27b', weights: 'groupwise-int-dflash2-q4', kv: 'int8', spec: 'dflash', tokens: 7, draftTp: 1, device: 'gpu' },
+  'qwen27-nvfp4-dflash-q4': { model: 'qwen3.8-27b', weights: 'nvfp4-dflash2-q4', kv: 'nvfp4', spec: 'dflash', tokens: 7, draftTp: 1, device: 'gpu' },
+  'flash-smol-mtp': { model: 'qwen3.8-flash-next', weights: 'smol-q2g64', kv: 'int8', spec: 'mtp', tokens: 3, draftTp: 0, device: 'gpu' },
+  'flash-int-mtp': { model: 'qwen3.8-flash-next', weights: 'groupwise-int', kv: 'int8', spec: 'mtp', tokens: 3, draftTp: 0, device: 'gpu' },
+  // CPU-only inference: no drafter, CUDA graphs or Vision.
+  'qwen36-int-cpu': { model: 'qwen3.6-35b-a3b', weights: 'groupwise-int', kv: 'int8', spec: 'none', tokens: 0, draftTp: 0, device: 'cpu' },
+}
+
+// GBench GPU types for CPU-only runs, by the highest instruction class the Engine reports it selected.
+export const CPU_GPU_TYPES: Partial<Record<BenchmarkCpuRoutes['isa_class'], string>> = { amx: 'CPU AMX', avx512: 'CPU AVX-512', avx2: 'CPU AVX2' }
+
+// The Engine's whole route mix as one public label, e.g. "dense avx-vnni-pack T1-4, amx-pack T5+; experts ...".
+export function cpuRouteLabel(routes: BenchmarkCpuRoutes): string {
+  const spans = (list: BenchmarkCpuRoutes['dense']) => list.map(span =>
+    `${span.route} T${span.first_tokens}${span.last_tokens === null ? '+' : span.last_tokens === span.first_tokens ? '' : `-${span.last_tokens}`}`).join(', ')
+  return `dense ${spans(routes.dense)}; experts ${spans(routes.experts)}${routes.packed ? '; PACK-only weights' : ''}; ${routes.table} table`
 }
 
 function maxPerfPolicy(reference?: BenchmarkProfileReference | null) {
@@ -117,7 +130,7 @@ function validateMaxPerfSession(session: BenchmarkResult['session']) {
       session.max_context !== 8181 || session.max_concurrency !== 8 || session.tp !== 1 ||
       session.kv_dtype !== policy.kv || session.spec !== policy.spec || session.draft_tokens !== policy.tokens ||
       session.draft_tp !== policy.draftTp || session.draft_policy !== 'fixed' ||
-      session.cuda_graph !== true || session.vision !== true) {
+      session.cuda_graph !== (policy.device === 'gpu') || session.vision !== (policy.device === 'gpu')) {
     throw new Error('The selected session does not match its GBench Max Perf profile. Apply the profile and refresh the ready server.')
   }
   return policy
@@ -143,7 +156,7 @@ export function buildSubmission(run: BenchmarkResult, nickname: string) {
   if (['sectile', 'ginfer', 'gchat', 'gbench'].some(brand => normalizedName.includes(brand))) throw new Error('Sectile, GInfer, GChat, and GBench names are reserved for official Sectile Labs results. Please choose another nickname.')
   if (!/^[\p{L}\p{N}_. -]{2,32}$/u.test(name)) throw new Error('Use 2–32 letters, numbers, spaces, dots, underscores or hyphens for your public nickname.')
   const h = run.hardware
-  if (!h || !h.gpus.length || !run.points.length) throw new Error('This run has no complete inference-host hardware record. Run Standard Benchmark on an updated host.')
+  if (!h || !run.points.length) throw new Error('This run has no complete inference-host hardware record. Run Standard Benchmark on an updated host.')
   const config = configuration(run.points[0].evidence.configuration)
   const corpus = run.points[0].evidence.corpus
   if (typeof config.engine_build !== 'string' || !config.engine_build.trim().length || typeof corpus !== 'string' || !corpus.trim().length) {
@@ -151,6 +164,26 @@ export function buildSubmission(run: BenchmarkResult, nickname: string) {
   }
   const policy = validateMaxPerfSession(run.session)
   if (JSON.stringify(run.points.map(p => p.concurrency)) !== JSON.stringify([1, 4, 8])) throw new Error('Standard Benchmark must complete C1, C4 and C8 in order.')
+  // The device and CPU routes come from the Engine's own reports, never from host detection.
+  const engine = run.points[0].evidence.configuration
+  const device = engine.execution_device ?? 'gpu'
+  if (run.points.some(p => (p.evidence.configuration.execution_device ?? 'gpu') !== device ||
+      JSON.stringify(p.evidence.configuration.cpu_routes ?? null) !== JSON.stringify(engine.cpu_routes ?? null))) {
+    throw new Error('The engine device or CPU routes changed between points.')
+  }
+  if (device !== policy.device) throw new Error('The engine device does not match the GBench Max Perf profile.')
+  let gpus: { model: string; vram_mib: number | null; sm: string | null }[]
+  let cpuRoutes: string | null = null
+  if (device === 'cpu') {
+    const type = engine.cpu_routes ? CPU_GPU_TYPES[engine.cpu_routes.isa_class] : undefined
+    if (!engine.cpu_routes || !type) throw new Error('This CPU-only run reports no AVX2, AVX-512 or AMX route, so G.bench has no entry for it.')
+    if (h.gpus.length) throw new Error('A CPU-only run cannot list graphics cards. Refresh the server and run the benchmark again.')
+    gpus = [{ model: type, vram_mib: null, sm: null }]
+    cpuRoutes = cpuRouteLabel(engine.cpu_routes)
+  } else {
+    if (!h.gpus.length) throw new Error('This run has no complete inference-host hardware record. Run Standard Benchmark on an updated host.')
+    gpus = h.gpus.map(g => ({ model: g.model, vram_mib: g.vram_mib, sm: g.sm }))
+  }
   if (config.model !== policy.model || config.weights !== policy.weights ||
       config.tp !== run.session.tp || config.draft_tp !== run.session.draft_tp ||
       config.max_context !== run.session.max_context || config.max_concurrency !== run.session.max_concurrency ||
@@ -164,9 +197,9 @@ export function buildSubmission(run: BenchmarkResult, nickname: string) {
     run_id: run.run_id, nickname: name,
     hardware: { cpu_model: h.cpu_model, physical_cores: h.physical_cores,
       logical_threads: h.logical_threads, ram_bytes: h.ram_bytes, ram_speed_mt_s: h.ram_speed_mt_s,
-      os: h.os, os_version: h.os_version, resource_scope: h.resource_scope,
-      gpus: h.gpus.map(g => ({ model: g.model, vram_mib: g.vram_mib, sm: g.sm })) },
-    configuration: config,
+      os: h.os, os_version: h.os_version, resource_scope: h.resource_scope, gpus },
+    // The public CPU route label is optional; a mix too long for the site stays in the local result.
+    configuration: cpuRoutes !== null && cpuRoutes.length <= 1024 ? { ...config, cpu_route_mix: cpuRoutes } : config,
     points: run.points.map(p => {
       const [warmup, measured] = p.evidence.schema === 'ginfer-resident-benchmark-v2'
         ? projectedV2Waves(p.evidence, p.concurrency)

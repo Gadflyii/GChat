@@ -67,6 +67,15 @@ export type BenchmarkConfiguration = {
   kv_dtype: string; spec: string; draft_tokens: number; draft_policy: string
   cuda_graph: boolean; vision: boolean
   prefix_reuse?: boolean
+  // GInfer 1.0+: the device that ran, and on the CPU route the CEA routes it selected.
+  execution_device?: 'gpu' | 'cpu'
+  cpu_routes?: BenchmarkCpuRoutes | null
+}
+
+export type BenchmarkCpuRouteSpan = { route: string; first_tokens: number; last_tokens: number | null }
+export type BenchmarkCpuRoutes = {
+  isa_class: 'amx' | 'avx512' | 'avx2' | 'scalar'; table: string; packed: boolean
+  dense: BenchmarkCpuRouteSpan[]; experts: BenchmarkCpuRouteSpan[]
 }
 
 export type BenchmarkWave = {
@@ -148,7 +157,8 @@ export type BenchmarkHardware = {
   os: 'Windows' | 'WSL' | 'Linux'
   os_version: string | null
   resource_scope: string
-  gpus: { model: string; vram_mib: number; sm: string | null }[]
+  // A CPU-only run's one entry is its CPU path, with no VRAM or SM.
+  gpus: { model: string; vram_mib: number | null; sm: string | null }[]
 }
 
 export type BenchmarkProgress = {

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { invoke } from '@tauri-apps/api/core'
 import { localStorageKey } from '@/constants/localStorage'
-import { buildSubmission, submitStandardBenchmark, ownedLeaderboardResults, deleteLeaderboardResult, GBENCH_PUBLISHING_ENABLED, maxPerfSessionMismatch } from './leaderboard'
-import type { BenchmarkResult, BenchmarkPoint, BenchmarkV1Report, BenchmarkV2Report, BenchmarkV2Wave } from './tauri'
+import { buildSubmission, submitStandardBenchmark, ownedLeaderboardResults, deleteLeaderboardResult, GBENCH_PUBLISHING_ENABLED, maxPerfSessionMismatch, cpuRouteLabel, CPU_GPU_TYPES } from './leaderboard'
+import type { BenchmarkResult, BenchmarkPoint, BenchmarkV1Report, BenchmarkV2Report, BenchmarkV2Wave, BenchmarkCpuRoutes } from './tauri'
 import type { BenchmarkModelClass } from '@/services/engines'
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 afterEach(() => { vi.mocked(invoke).mockReset(); localStorage.removeItem(localStorageKey.gbenchReceipts) })
@@ -70,6 +70,69 @@ function v2Fixture(modelClass: BenchmarkModelClass = 'qwen27-int-dflash-q4'): Be
     return { ...point, evidence }
   }) }
 }
+
+const amxRoutes: BenchmarkCpuRoutes = { isa_class: 'amx', table: 'static', packed: true,
+  dense: [{ route: 'avx-vnni-pack', first_tokens: 1, last_tokens: 4 }, { route: 'amx-pack', first_tokens: 5, last_tokens: null }],
+  experts: [{ route: 'avx-vnni-pack', first_tokens: 1, last_tokens: 5 }, { route: 'amx-pack', first_tokens: 6, last_tokens: null }] }
+
+// A CPU-only Host session: no GPU, no drafter, graphs or Vision; the Engine reports its routes.
+function cpuFixture(routes: BenchmarkCpuRoutes = amxRoutes) {
+  const run = v2Fixture()
+  run.hardware = { ...run.hardware!, cpu_model: 'Intel(R) Xeon(R) Platinum 8480+', gpus: [] }
+  Object.assign(run.session, { model_id: 'qwen3.6-35b-a3b/groupwise-int', spec: 'none', draft_tokens: 0, draft_tp: 0,
+    kv_dtype: 'int8', cuda_graph: false, vision: false,
+    benchmark_profile: { id: 'gbench-max-perf', version: 1, model_class: 'qwen36-int-cpu' } })
+  for (const point of run.points) {
+    Object.assign(point.evidence.configuration, { model: 'qwen3.6-35b-a3b', weights: 'groupwise-int', spec: 'none',
+      draft_tokens: 0, draft_tp: 0, kv_dtype: 'int8', cuda_graph: false, vision: false,
+      execution_device: 'cpu', cpu_routes: structuredClone(routes) })
+    point.evidence.corpus = 'qwen3.6-35b-a3b-cpu-max-perf-tail2048-v1'
+  }
+  return run
+}
+
+describe('G.bench CPU-only submission', () => {
+  it.each([['amx', 'CPU AMX'], ['avx512', 'CPU AVX-512'], ['avx2', 'CPU AVX2']] as const)('names the engine-reported %s class as the one GPU entry %s', (isaClass, type) => {
+    const run = cpuFixture({ ...amxRoutes, isa_class: isaClass })
+    expect(maxPerfSessionMismatch(run.session)).toBeNull()
+    const payload = buildSubmission(run, 'Player')
+    expect(payload.hardware.gpus).toEqual([{ model: type, vram_mib: null, sm: null }])
+    expect(payload.hardware.cpu_model).toBe('Intel(R) Xeon(R) Platinum 8480+')
+    expect(payload.configuration).toMatchObject({ model: 'qwen3.6-35b-a3b', weights: 'groupwise-int', tp: 1, draft_tp: 0,
+      spec: 'none', draft_tokens: 0, kv_dtype: 'int8', cuda_graph: false, vision: false,
+      cpu_route_mix: 'dense avx-vnni-pack T1-4, amx-pack T5+; experts avx-vnni-pack T1-5, amx-pack T6+; PACK-only weights; static table' })
+    expect(Object.keys(payload.configuration).at(-1)).toBe('cpu_route_mix')
+    expect(payload.points.map(point => point.corpus)).toEqual(Array(3).fill('qwen3.6-35b-a3b-cpu-max-perf-tail2048-v1'))
+    expect(JSON.stringify(payload)).not.toMatch(/execution_device|isa_class|private-/)
+  })
+  it('refuses a CPU run without a GBench route class, with GPUs, or with mixed reports', () => {
+    expect(() => buildSubmission(cpuFixture({ ...amxRoutes, isa_class: 'scalar' }), 'Player')).toThrow('no AVX2, AVX-512 or AMX route')
+    const noRoutes = cpuFixture(); for (const point of noRoutes.points) point.evidence.configuration.cpu_routes = null
+    expect(() => buildSubmission(noRoutes, 'Player')).toThrow('no AVX2, AVX-512 or AMX route')
+    const withGpu = cpuFixture(); withGpu.hardware!.gpus = [{ model: 'RTX 5090', vram_mib: 32768, sm: '120' }]
+    expect(() => buildSubmission(withGpu, 'Player')).toThrow('cannot list graphics cards')
+    const changed = cpuFixture(); changed.points[2].evidence.configuration.cpu_routes = { ...amxRoutes, isa_class: 'avx512' }
+    expect(() => buildSubmission(changed, 'Player')).toThrow('changed between points')
+    const gpuDevice = cpuFixture(); for (const point of gpuDevice.points) point.evidence.configuration.execution_device = 'gpu'
+    expect(() => buildSubmission(gpuDevice, 'Player')).toThrow('device does not match')
+    const cpuOnGpuPolicy = v2Fixture(); for (const point of cpuOnGpuPolicy.points) point.evidence.configuration.execution_device = 'cpu'
+    expect(() => buildSubmission(cpuOnGpuPolicy, 'Player')).toThrow('device does not match')
+    const graphs = cpuFixture(); graphs.session.cuda_graph = true
+    expect(maxPerfSessionMismatch(graphs.session)).toMatch('does not match its GBench Max Perf profile')
+  })
+  it('keeps a route mix too long for the site in the local result only', () => {
+    const many = Array.from({ length: 64 }, (_, i) => ({ route: i % 2 ? 'amx-pack' : 'avx-vnni-pack', first_tokens: i + 1, last_tokens: i === 63 ? null : i + 1 }))
+    const payload = buildSubmission(cpuFixture({ ...amxRoutes, dense: many, experts: many }), 'Player')
+    expect(payload.configuration).not.toHaveProperty('cpu_route_mix')
+    expect(payload.hardware.gpus[0].model).toBe('CPU AMX')
+  })
+  it('labels the route mix the way the importer notes it', () => {
+    expect(cpuRouteLabel({ isa_class: 'avx512', table: 'forced', packed: false,
+      dense: [{ route: 'avx512-vnni', first_tokens: 1, last_tokens: null }], experts: [{ route: 'avx512-vnni', first_tokens: 1, last_tokens: null }] }))
+      .toBe('dense avx512-vnni T1+; experts avx512-vnni T1+; forced table')
+    expect(CPU_GPU_TYPES.scalar).toBeUndefined()
+  })
+})
 
 describe('G.bench public submission', () => {
   it.each<BenchmarkModelClass>(['qwen27-int-dflash-q4', 'qwen27-nvfp4-dflash-q4', 'flash-smol-mtp', 'flash-int-mtp'])('accepts the exact %s Max Perf release policy without adding public v1 fields', modelClass => {

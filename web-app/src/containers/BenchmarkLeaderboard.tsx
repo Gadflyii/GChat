@@ -32,7 +32,7 @@ function BenchmarkSubmission({ run, onSubmitted }: { run: BenchmarkResult; onSub
       <dl className="mt-2 grid gap-2 sm:grid-cols-2">
         <div><dt>CPU</dt><dd className="font-mono text-xs">{hardware?.cpu_model || 'Not reported'} · {hardware?.physical_cores ?? '—'} cores · {hardware?.logical_threads ?? '—'} threads</dd></div>
         <div><dt>System RAM</dt><dd className="font-mono text-xs">{hardware?.ram_bytes ? `${(hardware.ram_bytes / 2 ** 30).toFixed(1)} GiB` : 'Not reported'} · {hardware?.ram_speed_mt_s ? `${hardware.ram_speed_mt_s} MT/s` : 'Speed not reported'}</dd></div>
-        <div><dt>GPU</dt><dd className="font-mono text-xs">{hardware?.gpus.map(g => `${g.model} · ${(g.vram_mib / 1024).toFixed(1)} GiB · SM ${g.sm ?? '—'}`).join('; ') || 'Not reported'}</dd></div>
+        <div><dt>GPU</dt><dd className="font-mono text-xs">{(preview?.hardware.gpus ?? hardware?.gpus ?? []).map(g => g.vram_mib === null ? `${g.model} · CPU-only, no GPU` : `${g.model} · ${(g.vram_mib / 1024).toFixed(1)} GiB · SM ${g.sm ?? '—'}`).join('; ') || 'Not reported'}</dd></div>
         <div><dt>Operating system</dt><dd className="font-mono text-xs">{hardware?.os ?? 'Not reported'} {hardware?.os_version} {hardware?.os === 'WSL' ? '(WSL-visible CPU and RAM)' : ''}</dd></div>
       </dl>
       <p className="mt-2 text-muted-foreground">Your public nickname, model and engine configuration, scores, and timing counters will be published. No hostname, account name, IP address, model path, credentials, prompts, or generated text are included in the submission. The website receives your connection IP for abuse prevention.</p>

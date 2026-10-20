@@ -23,6 +23,9 @@ pub enum MaxPerfModelClass {
     FlashSmolMtp,
     #[serde(rename = "flash-int-mtp")]
     FlashIntMtp,
+    /// CPU-only inference (GInfer `--device cpu`): no GPU, no drafter, no graphs.
+    #[serde(rename = "qwen36-int-cpu")]
+    Qwen36IntCpu,
 }
 
 impl MaxPerfModelClass {
@@ -32,6 +35,7 @@ impl MaxPerfModelClass {
             Self::Qwen27Nvfp4DflashQ4 => "qwen27-nvfp4-dflash-q4",
             Self::FlashSmolMtp => "flash-smol-mtp",
             Self::FlashIntMtp => "flash-int-mtp",
+            Self::Qwen36IntCpu => "qwen36-int-cpu",
         }
     }
 
@@ -41,6 +45,7 @@ impl MaxPerfModelClass {
             Self::Qwen27Nvfp4DflashQ4 => ("qwen3.8-27b", "nvfp4-dflash2-q4"),
             Self::FlashSmolMtp => ("qwen3.8-flash-next", "smol-q2g64"),
             Self::FlashIntMtp => ("qwen3.8-flash-next", "groupwise-int"),
+            Self::Qwen36IntCpu => ("qwen3.6-35b-a3b", "groupwise-int"),
         }
     }
 }
@@ -87,6 +92,7 @@ impl MaxPerfProfile {
             model_class,
             MaxPerfModelClass::Qwen27IntDflashQ4 | MaxPerfModelClass::Qwen27Nvfp4DflashQ4
         );
+        let cpu = model_class == MaxPerfModelClass::Qwen36IntCpu;
         Self {
             id: format!("{PROFILE_ID}-v{PROFILE_VERSION}-{}", model_class.as_str()),
             reference: MaxPerfProfileRef::new(model_class),
@@ -97,23 +103,39 @@ impl MaxPerfProfile {
                     MaxPerfModelClass::Qwen27Nvfp4DflashQ4 => "Qwen 3.8 27B NVFP4",
                     MaxPerfModelClass::FlashSmolMtp => "Qwen 3.8 Flash pure 2-bit",
                     MaxPerfModelClass::FlashIntMtp => "Qwen 3.8 Flash INT",
+                    MaxPerfModelClass::Qwen36IntCpu => "Qwen 3.6 35B A3B INT · CPU",
                 }
             ),
             max_context: 8181,
             concurrency: 8,
             tp: 1,
-            options: LaunchOptions {
-                spec: if dense { "dflash" } else { "mtp" }.into(),
-                draft_policy: "fixed".into(),
-                draft_tokens: if dense { 7 } else { 3 },
-                draft_tp: u32::from(dense),
-                kv_dtype: if model_class == MaxPerfModelClass::Qwen27Nvfp4DflashQ4 {
-                    "nvfp4"
-                } else {
-                    "int8"
+            options: if cpu {
+                // The CPU route: text only, no speculation and no CUDA graphs.
+                LaunchOptions {
+                    device: "cpu".into(),
+                    spec: "none".into(),
+                    draft_policy: "fixed".into(),
+                    draft_tokens: 0,
+                    draft_tp: 0,
+                    kv_dtype: "int8".into(),
+                    no_cuda_graph: true,
+                    vision: false,
+                    ..Default::default()
                 }
-                .into(),
-                ..Default::default()
+            } else {
+                LaunchOptions {
+                    spec: if dense { "dflash" } else { "mtp" }.into(),
+                    draft_policy: "fixed".into(),
+                    draft_tokens: if dense { 7 } else { 3 },
+                    draft_tp: u32::from(dense),
+                    kv_dtype: if model_class == MaxPerfModelClass::Qwen27Nvfp4DflashQ4 {
+                        "nvfp4"
+                    } else {
+                        "int8"
+                    }
+                    .into(),
+                    ..Default::default()
+                }
             },
         }
     }
@@ -146,6 +168,10 @@ impl MaxPerfProfile {
     }
 
     pub fn gpu_groups(&self, gpus: &[Gpu], reserved: &BTreeSet<String>) -> Vec<Vec<String>> {
+        if self.options.is_cpu() {
+            // A CPU-only run uses no GPU: its one placement is the empty GPU group.
+            return vec![vec![]];
+        }
         gpus.iter()
             .filter(|gpu| {
                 !reserved.contains(&gpu.uuid)
@@ -213,6 +239,7 @@ pub fn profile_for_identity(
         ("qwen3.8-27b", "nvfp4-dflash2-q4", 1) => MaxPerfModelClass::Qwen27Nvfp4DflashQ4,
         ("qwen3.8-flash-next", "smol-q2g64", 0) => MaxPerfModelClass::FlashSmolMtp,
         ("qwen3.8-flash-next", "groupwise-int", 0) => MaxPerfModelClass::FlashIntMtp,
+        ("qwen3.6-35b-a3b", "groupwise-int", 0) => MaxPerfModelClass::Qwen36IntCpu,
         _ => return Err(MaxPerfError::UnsupportedArtifact),
     };
     if class == MaxPerfModelClass::Qwen27Nvfp4DflashQ4 && !nvfp4_kv_available {
@@ -289,7 +316,47 @@ mod tests {
         serde_json::json!({"model":model,"weights":weights,"tp":1,"draft_tp":profile.options.draft_tp,
             "max_context":8181,"max_concurrency":8,"kv_dtype":profile.options.kv_dtype,
             "spec":profile.options.spec,"draft_tokens":profile.options.draft_tokens,"draft_policy":"fixed",
-            "cuda_graph":true,"vision":true})
+            "cuda_graph":!profile.options.no_cuda_graph,"vision":profile.options.vision})
+    }
+
+    #[test]
+    fn cpu_max_perf_class_runs_on_no_gpu_without_drafter_or_graphs() {
+        let class = MaxPerfModelClass::Qwen36IntCpu;
+        let config = configuration(class);
+        assert_eq!((config["cuda_graph"].clone(), config["vision"].clone()), (false.into(), false.into()));
+        let profile = MaxPerfProfile::for_configuration(&config).unwrap();
+        assert_eq!(profile.reference.model_class, class);
+        assert_eq!(profile.id, "gbench-max-perf-v1-qwen36-int-cpu");
+        assert_eq!(profile.name, "GBench Max Perf · Qwen 3.6 35B A3B INT · CPU");
+        assert_eq!((profile.max_context, profile.concurrency, profile.tp), (8181, 8, 1));
+        let options = &profile.options;
+        assert!(options.is_cpu() && options.no_cuda_graph && !options.vision && options.structured_outputs);
+        assert_eq!(
+            (options.spec.as_str(), options.draft_policy.as_str(), options.draft_tokens, options.draft_tp, options.kv_dtype.as_str()),
+            ("none", "fixed", 0, 0, "int8")
+        );
+        options.validate(1).unwrap();
+        let gpus = vec![Gpu {
+            uuid: "GPU-Blackwell".into(),
+            name: "Fixture Blackwell".into(),
+            display_name: None,
+            memory_mib: 98304,
+            compute_capability: Some("12.0".into()),
+        }];
+        assert_eq!(profile.gpu_groups(&gpus, &Default::default()), vec![Vec::<String>::new()]);
+        assert_eq!(profile.gpu_groups(&[], &Default::default()), vec![Vec::<String>::new()]);
+        for (field, wrong) in [("cuda_graph", Value::from(true)), ("vision", Value::from(true)),
+            ("spec", Value::from("dflash")), ("draft_tokens", Value::from(7)), ("kv_dtype", Value::from("bf16"))] {
+            let mut changed = config.clone();
+            changed[field] = wrong;
+            assert_eq!(validate_configuration(&profile.reference, &changed), Err(MaxPerfError::ConfigurationMismatch(field)));
+        }
+        for (weights, draft_tp) in [("groupwise-int", 1), ("smol-q2g64", 0)] {
+            assert_eq!(
+                profile_for_identity(&ArtifactIdentity { model_id: "qwen3.6-35b-a3b".into(), weights_id: weights.into() }, 1, draft_tp, false),
+                Err(MaxPerfError::UnsupportedArtifact)
+            );
+        }
     }
 
     #[test]

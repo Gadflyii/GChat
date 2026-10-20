@@ -185,7 +185,8 @@ fn validate_submission(value: &serde_json::Value) -> Result<(), String> {
         return Err("Only Standard Benchmark results may be submitted".into());
     }
     let configuration = &value["configuration"];
-    MaxPerfProfile::for_configuration(configuration)?;
+    let profile = MaxPerfProfile::for_configuration(configuration)?;
+    validate_cpu_entry(value, profile.options.is_cpu())?;
     if configuration["engine_build"]
         .as_str()
         .filter(|build| !build.trim().is_empty())
@@ -235,6 +236,37 @@ fn validate_submission(value: &serde_json::Value) -> Result<(), String> {
                 number("output_tokens")?,
             )?;
         }
+    }
+    Ok(())
+}
+
+/// GBench GPU types for CPU-only runs; the Engine's reported route class picks one.
+const CPU_GPU_TYPES: [&str; 3] = ["CPU AVX2", "CPU AVX-512", "CPU AMX"];
+
+/// A CPU-only run names its CPU path as its one GPU entry, with no VRAM or SM; a GPU run never does.
+fn validate_cpu_entry(value: &serde_json::Value, cpu: bool) -> Result<(), String> {
+    let empty = Vec::new();
+    let gpus = value["hardware"]["gpus"].as_array().unwrap_or(&empty);
+    let is_cpu_type = |gpu: &serde_json::Value| {
+        gpu["model"].as_str().is_some_and(|model| CPU_GPU_TYPES.contains(&model))
+    };
+    let mix = &value["configuration"]["cpu_route_mix"];
+    if cpu {
+        let [gpu] = gpus.as_slice() else {
+            return Err("A CPU-only result has exactly one CPU path entry".into());
+        };
+        if !is_cpu_type(gpu) || !gpu["vram_mib"].is_null() || !gpu["sm"].is_null() {
+            return Err("A CPU-only result names CPU AVX2, CPU AVX-512 or CPU AMX, with no VRAM or SM".into());
+        }
+        if !mix.is_null()
+            && !mix
+                .as_str()
+                .is_some_and(|label| !label.is_empty() && label.len() <= 1024)
+        {
+            return Err("Invalid CPU route mix".into());
+        }
+    } else if gpus.iter().any(is_cpu_type) || !mix.is_null() {
+        return Err("A GPU result cannot name a CPU path".into());
     }
     Ok(())
 }
@@ -319,6 +351,38 @@ mod tests {
         changed = value;
         changed["points"][1]["corpus"] = "another-corpus".into();
         assert!(validate_submission(&changed).is_err());
+    }
+
+    #[test]
+    fn cpu_only_submission_names_one_cpu_path_without_vram() {
+        let mut value = standard_submission();
+        value["configuration"] = serde_json::json!({"engine_build":"fixture-engine-build", "model":"qwen3.6-35b-a3b",
+            "weights":"groupwise-int", "tp":1,"draft_tp":0,"max_context":8181,"max_concurrency":8,
+            "kv_dtype":"int8","spec":"none","draft_tokens":0,"draft_policy":"fixed","cuda_graph":false,"vision":false,
+            "cpu_route_mix":"dense avx-vnni-pack T1-4, amx-pack T5+; experts avx-vnni-pack T1-5, amx-pack T6+; PACK-only weights; static table"});
+        value["hardware"] = serde_json::json!({"gpus":[{"model":"CPU AMX","vram_mib":null,"sm":null}]});
+        validate_submission(&value).unwrap();
+        for gpus in [
+            serde_json::json!([]),
+            serde_json::json!([{"model":"CPU AMX","vram_mib":32768,"sm":null}]),
+            serde_json::json!([{"model":"CPU AMX","vram_mib":null,"sm":"120"}]),
+            serde_json::json!([{"model":"CPU AVX10","vram_mib":null,"sm":null}]),
+            serde_json::json!([{"model":"RTX 5090","vram_mib":32768,"sm":"120"}]),
+            serde_json::json!([{"model":"CPU AMX","vram_mib":null,"sm":null},{"model":"CPU AMX","vram_mib":null,"sm":null}]),
+        ] {
+            let mut changed = value.clone();
+            changed["hardware"]["gpus"] = gpus.clone();
+            assert!(validate_submission(&changed).is_err(), "{gpus}");
+        }
+        let mut changed = value.clone();
+        changed["configuration"]["cuda_graph"] = true.into();
+        assert!(validate_submission(&changed).is_err());
+        let mut gpu = standard_submission();
+        gpu["hardware"] = serde_json::json!({"gpus":[{"model":"CPU AMX","vram_mib":null,"sm":null}]});
+        assert!(validate_submission(&gpu).is_err());
+        gpu = standard_submission();
+        gpu["configuration"]["cpu_route_mix"] = "dense amx-pack T1+".into();
+        assert!(validate_submission(&gpu).is_err());
     }
 
     #[tokio::test]

@@ -76,6 +76,35 @@ A missing, changed or mismatched profile/session cannot produce a submit-ready
 Standard result. Native signing repeats the profile/workload validation; the
 public v1 payload field set remains unchanged.
 
+## CPU-only Standard (GBENCH-CPU-ONLY, Ron 2026-10-20)
+
+GInfer runs Qwen3.6-35B-A3B on the CPU alone (`--device cpu`; AVX2/AVX-VNNI, AVX-512 VNNI
+and AMX routes chosen at startup). Max Perf class `qwen36-int-cpu` is
+`qwen3.6-35b-a3b/groupwise-int` (INT; the SMOL package has not passed its gate): TP1,
+8,181 context, capacity 8, INT8 KV, no drafter (`spec` none, K0, DTP0), no CUDA graphs,
+Vision off, `LaunchOptions.device` "cpu". Its one placement is the empty GPU group; the
+Host's CPU device work (launch argv, inventory, placement) is claude-gchat-cpu's.
+
+The public result names the CPU path as its one `hardware.gpus` entry,
+`{"model": "CPU AMX" | "CPU AVX-512" | "CPU AVX2", "vram_mib": null, "sm": null}`. GChat
+takes it from the Engine's own benchmark report, never from CPUID or Host detection:
+`configuration.execution_device` must be `cpu` at every point, and
+`configuration.cpu_routes.isa_class` (`amx`, `avx512`, `avx2`) picks the type. `scalar`
+has no G.bench entry and is refused. The routes must be identical at C1/C4/C8, the Host
+must list no GPU for the instance, and a GPU class must not report the CPU device.
+
+`isa_class` is the highest class the Engine's route table selects. On an AMX host the
+table runs AVX-VNNI over PACK below its cutover and AMX at and above it, so the result is
+CPU AMX. The whole mix travels as the optional public `configuration.cpu_route_mix`, for
+example `dense avx-vnni-pack T1-4, amx-pack T5+; experts avx-vnni-pack T1-5, amx-pack T6+;
+PACK-only weights; static table`; a label over the site's 1,024 characters stays local.
+The native submission check repeats the CPU-entry rules before signing. The preview and
+opt-in flow are unchanged; the preview's GPU row shows the CPU path.
+
+The site contract change (CPU types, `cpu_route_mix`, and the separate Flash corpus
+mapping fix) is in the website source, not uploaded. A CPU-only submission waits for Ron
+to upload it and say go; the old site rejects null VRAM.
+
 ## Current native report contract and gate
 
 GChat consumes the current Engine's `ginfer-resident-benchmark-v2` report directly.
