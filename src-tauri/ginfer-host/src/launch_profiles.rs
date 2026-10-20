@@ -962,6 +962,8 @@ mod tests {
                         no_cuda_graph: false,
                         flash_host_ram_headroom_gib: Some(10),
                         expert_lfu: true,
+                        device: "gpu".into(),
+                        cpu_ram_headroom_gib: None,
                     }, "{}", p.id);
                     assert_eq!(p.qualification.tier, QualificationTier::ScreenedStartup);
                     assert_eq!(p.qualification.engine_revision, s.engine);

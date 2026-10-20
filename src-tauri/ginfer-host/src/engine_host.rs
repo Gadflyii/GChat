@@ -353,6 +353,10 @@ pub struct LaunchOptions {
     pub host_kv_cache_bytes: Option<u64>,
     pub prefill_chunk: u32,
     pub no_cuda_graph: bool,
+    /// Execution device: "gpu" (the default when absent) or "cpu" (`--device cpu`).
+    pub device: String,
+    /// CPU device only: Host RAM left free beyond the model's plan; None uses the Engine default.
+    pub cpu_ram_headroom_gib: Option<u64>,
 }
 impl Default for LaunchOptions {
     fn default() -> Self {
@@ -373,11 +377,47 @@ impl Default for LaunchOptions {
             host_kv_cache_bytes: None,
             prefill_chunk: 0,
             no_cuda_graph: false,
+            device: "gpu".into(),
+            cpu_ram_headroom_gib: None,
         }
     }
 }
 impl LaunchOptions {
+    pub fn is_cpu(&self) -> bool {
+        self.device == "cpu"
+    }
+    /// The CPU device runs one TP1 text process on Host memory (GInfer `--device cpu`).
+    fn validate_device(&self, tp: u32) -> Result<(), String> {
+        match self.device.as_str() {
+            "gpu" if self.cpu_ram_headroom_gib.is_some() => {
+                Err("CPU RAM headroom applies only to the CPU device".into())
+            }
+            "gpu" => Ok(()),
+            "cpu" if tp != 1 => Err("The CPU device runs one process; use TP 1".into()),
+            "cpu" if self.vision => {
+                Err("Vision is not available on the CPU device yet; turn off Enable Vision".into())
+            }
+            "cpu" if !matches!(self.spec.as_str(), "auto" | "none")
+                || self.draft_tokens != 0
+                || self.draft_tp != 0 =>
+            {
+                Err("Speculative decoding is not available on the CPU device yet; turn off Enable Speculative Decoding".into())
+            }
+            "cpu" if self.kv_dtype == "nvfp4" => {
+                Err("The CPU device stores the K/V cache as INT8 or BF16; NVFP4 is a graphics-card format".into())
+            }
+            "cpu" if self.vram_budget_bytes.is_some()
+                || self.flash_host_ram_headroom_gib.is_some()
+                || self.prefill_chunk != 0 =>
+            {
+                Err("Graphics-card settings (memory budgets, prefill chunk) do not apply to the CPU device".into())
+            }
+            "cpu" => Ok(()),
+            _ => Err("device must be gpu or cpu".into()),
+        }
+    }
     pub fn validate(&self, tp: u32) -> Result<(), String> {
+        self.validate_device(tp)?;
         if self.vram_budget_bytes == Some(0) {
             return Err("Flash weight residency budget must be positive".into());
         }
@@ -486,11 +526,27 @@ impl LaunchOptions {
                     131072
                 }
             }
+            // CPU-only target (GInfer OI-145): text, TP1, no speculation, `--device cpu` required.
+            "qwen3.6-35b-a3b" => {
+                if !matches!(identity.weights_id.as_str(), "groupwise-int" | "smol-q2g64") {
+                    return Err("Qwen3.6 has no registered weights class for this artifact".into());
+                }
+                if !self.is_cpu() {
+                    return Err("This model runs only on the CPU; choose Device CPU".into());
+                }
+                if tp != 1 || draft_tp != 0 {
+                    return Err("Qwen3.6 runs one TP1 package on the CPU".into());
+                }
+                262144
+            }
             _ => return Err("model is not a registered host launch target".into()),
         };
         Ok(maximum)
     }
     pub(crate) fn args(&self) -> Vec<String> {
+        if self.is_cpu() {
+            return self.cpu_args();
+        }
         let mut args = vec![
             "--spec".into(),
             self.spec.clone(),
@@ -536,6 +592,26 @@ impl LaunchOptions {
         }
         if self.no_cuda_graph {
             args.push("--no-cuda-graph".into());
+        }
+        args
+    }
+    /// CPU argv carries only the settings the CPU route reads; speculation is always off.
+    fn cpu_args(&self) -> Vec<String> {
+        let mut args: Vec<String> = vec!["--device".into(), "cpu".into(), "--spec".into(), "none".into()];
+        if self.structured_outputs {
+            args.push("--structured-outputs".into());
+        }
+        if self.kv_dtype != "auto" {
+            args.extend(["--kv-dtype".into(), self.kv_dtype.clone()]);
+        }
+        if let Some(bytes) = self.kv_arena_bytes {
+            args.extend(["--kv-arena-bytes".into(), bytes.to_string()]);
+        }
+        if let Some(bytes) = self.host_kv_cache_bytes {
+            args.extend(["--host-kv-cache-bytes".into(), bytes.to_string()]);
+        }
+        if let Some(gib) = self.cpu_ram_headroom_gib {
+            args.extend(["--cpu-ram-headroom-gib".into(), gib.to_string()]);
         }
         args
     }
@@ -2393,5 +2469,51 @@ mod launch_options_tests {
         dflash_flash.resolve_draft_tokens(&flash);
         assert_eq!(dflash_flash.draft_tokens, 0);
         assert!(dflash_flash.validate_target(&flash, 1, 0).is_err());
+    }
+
+    #[test]
+    fn cpu_device_forwards_only_cpu_route_settings() {
+        let absent: LaunchOptions = serde_json::from_str("{}").unwrap();
+        assert_eq!(absent.device, "gpu");
+        assert!(!absent.args().iter().any(|arg| arg == "--device"));
+        let mut cpu = LaunchOptions {
+            device: "cpu".into(),
+            vision: false,
+            kv_dtype: "int8".into(),
+            kv_arena_bytes: Some(4096),
+            cpu_ram_headroom_gib: Some(6),
+            ..Default::default()
+        };
+        cpu.validate(1).unwrap();
+        assert_eq!(cpu.args(), [
+            "--device", "cpu", "--spec", "none", "--structured-outputs", "--kv-dtype", "int8",
+            "--kv-arena-bytes", "4096", "--cpu-ram-headroom-gib", "6",
+        ]);
+        assert!(cpu.validate(2).is_err());
+        for invalid in [
+            LaunchOptions { vision: true, ..cpu.clone() },
+            LaunchOptions { spec: "dflash".into(), ..cpu.clone() },
+            LaunchOptions { draft_tokens: 3, spec: "mtp".into(), ..cpu.clone() },
+            LaunchOptions { kv_dtype: "nvfp4".into(), ..cpu.clone() },
+            LaunchOptions { vram_budget_bytes: Some(1), ..cpu.clone() },
+            LaunchOptions { prefill_chunk: 512, ..cpu.clone() },
+            LaunchOptions { device: "tpu".into(), ..cpu.clone() },
+            LaunchOptions { device: "gpu".into(), ..cpu.clone() },
+        ] {
+            assert!(invalid.validate(1).is_err(), "{invalid:?}");
+        }
+        let qwen36 = crate::engine_inventory::ArtifactIdentity {
+            model_id: "qwen3.6-35b-a3b".into(),
+            weights_id: "groupwise-int".into(),
+        };
+        assert_eq!(cpu.validate_target(&qwen36, 1, 0), Ok(262144));
+        let gpu = LaunchOptions { vision: false, ..Default::default() };
+        assert!(gpu.validate_target(&qwen36, 1, 0).unwrap_err().contains("Device CPU"));
+        // GPU targets keep their own limits on the CPU device; the Engine reports whether it runs them.
+        let qwen = crate::engine_inventory::ArtifactIdentity {
+            model_id: "qwen3.8-27b".into(),
+            weights_id: "groupwise-int-dflash2-q4".into(),
+        };
+        assert_eq!(cpu.validate_target(&qwen, 1, 1), Ok(262144));
     }
 }
