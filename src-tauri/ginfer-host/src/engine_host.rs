@@ -1712,6 +1712,34 @@ mod runtime_dispatch_tests {
         std::fs::remove_file(root.join("sm89/bin/ginfer-serve.exe")).unwrap();
         assert!(crate::local_host::desktop_runtimes_for(provider, "windows").is_err());
     }
+
+    #[test]
+    fn linux_runtime_sets_may_add_the_cpu_image_for_the_cpu_device() {
+        let directory = tempfile::tempdir().unwrap();
+        let provider = directory.path();
+        let root = provider.join("linux");
+        for image in ["sm80", "sm86", "sm89", "sm120a", CPU_RUNTIME] {
+            let bin = root.join(image).join("bin");
+            std::fs::create_dir_all(&bin).unwrap();
+            std::fs::write(bin.join("ginfer-serve"), image).unwrap();
+        }
+        let mut set = serde_json::json!({"schema": "ginfer-linux-runtime-set-v1", "platform": "linux-x64",
+            "source_commit": "1111111111111111111111111111111111111111",
+            "runtimes": {"8.0": "sm80", "8.6": "sm86", "8.9": "sm89", "12.0": "sm120a"}});
+        let set_path = root.join("runtime-set.json");
+        std::fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
+        assert_eq!(crate::local_host::desktop_runtimes_for(provider, "linux").unwrap().len(), 4);
+        set["runtimes"][CPU_RUNTIME] = CPU_RUNTIME.into();
+        std::fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
+        let runtimes = crate::local_host::desktop_runtimes_for(provider, "linux").unwrap();
+        assert_eq!(runtimes.get(CPU_RUNTIME), Some(&root.join("cpu/bin/ginfer-serve")));
+        let mut host = HostProcesses::new(provider.join("unused"), BTreeSet::new(), Duration::from_secs(10)).unwrap();
+        host.configure_runtimes(runtimes, BTreeMap::new()).unwrap();
+        assert_eq!(host.capability_engine(), root.join("cpu/bin/ginfer-serve"));
+        set["runtimes"][CPU_RUNTIME] = "elsewhere".into();
+        std::fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
+        assert!(crate::local_host::desktop_runtimes_for(provider, "linux").is_err());
+    }
 }
 
 #[cfg(test)]

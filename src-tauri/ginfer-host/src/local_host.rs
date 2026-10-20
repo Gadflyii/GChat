@@ -336,9 +336,12 @@ pub(crate) fn desktop_runtimes_for(provider: &std::path::Path, platform: &str) -
         return Err(format!("Unsupported GChat {platform} engine runtime set"));
     }
     let declared = set["runtimes"].as_object().ok_or("GChat engine runtime map is missing")?;
-    if declared.len() != expected.len() { return Err("GChat engine runtime map is incomplete".into()); }
+    // Linux sets may add the CUDA-free CPU image; it serves the CPU device without a driver.
+    let cpu = platform == "linux" && declared.contains_key(crate::engine_host::CPU_RUNTIME);
+    if declared.len() != expected.len() + usize::from(cpu) { return Err("GChat engine runtime map is incomplete".into()); }
     let mut runtimes = std::collections::BTreeMap::new();
-    for &(architecture, directory) in expected {
+    let cpu_image = [(crate::engine_host::CPU_RUNTIME, crate::engine_host::CPU_RUNTIME)];
+    for &(architecture, directory) in expected.iter().chain(if cpu { &cpu_image[..] } else { &[] }) {
         if declared.get(architecture).and_then(|entry| entry.as_str()) != Some(directory) {
             return Err(format!("GChat engine runtime map has an invalid {architecture} entry"));
         }
