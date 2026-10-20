@@ -100,14 +100,14 @@ it('distinguishes calculated smoke evidence from full-context testing', async ()
   expect(screen.getByRole('button', { name: 'Start model' })).toBeEnabled()
 })
 
-it('identifies the Engine recorded by full-context evidence without claiming a newer runtime passed', async () => {
+it('identifies the Engine recorded by full-context evidence and keeps the settings offered on a newer runtime', async () => {
   const user = userEvent.setup()
   const data = snapshot()
   data.instances = []
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
   await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
   await user.click(screen.getByRole('menuitemradio', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }))
-  expect(screen.getByText(/Changed settings or another GInfer version need their own tests/)).toBeVisible()
+  expect(screen.getByText(/A newer GInfer still offers them, and every start first checks that they fit this computer/)).toBeVisible()
   const revision = screen.getByText('GInfer revision used for testing: 922e5a87')
   expect(revision).not.toBeVisible()
   fireEvent.click(screen.getByText('Saved settings technical details'))

@@ -571,7 +571,7 @@ test('manager renders local and paired status, installed model, GPU, profile and
   const pane = app.document.querySelector('[role="dialog"]')
   assert.match(pane.textContent, /RTX 5090.*Recommended · Full conversations tested · 4 replies at once · 32K tokens · Images and text/s)
   assert.match(pane.textContent, /Profile evidence applies to its recorded options, Engine 922e5a87/)
-  assert.match(pane.textContent, /A changed option or Engine needs separate validation/)
+  assert.match(pane.textContent, /A newer Engine still offers it and each start first checks fit; a changed option needs separate validation/)
   assert.equal(pane.querySelector('input[name="structured_outputs"]').checked, true)
   const changedNote = [...pane.querySelectorAll('p')].find(node => /this launch custom and unqualified/.test(node.textContent))
   assert.ok(changedNote)

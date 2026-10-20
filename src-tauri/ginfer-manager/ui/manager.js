@@ -589,7 +589,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
           changedNote.hidden = structuredInput.checked === recorded
           const screening = profile.qualification.tier === 'screened-startup'
             ? 'Screened, not full-context qualified. Startup and short requests were checked; full-context capacity is unverified. ' : ''
-          evidenceNote.textContent = `${screening}Profile evidence applies to its recorded options, Engine ${profile.qualification.engine_revision.slice(0, 8)} and workload. A changed option or Engine needs separate validation.`
+          evidenceNote.textContent = `${screening}Profile evidence applies to its recorded options, Engine ${profile.qualification.engine_revision.slice(0, 8)} and workload. A newer Engine still offers it and each start first checks fit; a changed option needs separate validation.`
         }
         profileField.addEventListener('change', () => {
           profileChoice = Number(profileField.querySelector('select').value)
