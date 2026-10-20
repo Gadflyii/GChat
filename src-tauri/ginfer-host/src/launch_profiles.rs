@@ -899,11 +899,12 @@ mod tests {
             .map(|s| s.id)
             .collect();
         let mut flash_ids = BTreeSet::new();
-        // Qwen3.6-35B-A3B INT daf27aaf CPU-device entries: one screened entry per CPU path and
-        // RAM class, smoked from its file on a host of that path (GCHAT-CPU-ONLY-LOAD).
+        // Qwen3.6-35B-A3B CPU-device entries (INT daf27aaf, SMOL c8c167eb): one screened entry per
+        // CPU path and RAM class, smoked from its file on a host of that path (GCHAT-CPU-ONLY-LOAD).
         struct CpuSetting {
             file: &'static str,
             id: &'static str,
+            weights: &'static str,
             isa: &'static str,
             min_ram_mib: u64,
             context: u32,
@@ -914,21 +915,45 @@ mod tests {
         let consumer_cpu_settings = [
             CpuSetting {
                 file: "linux-cpu-amx-qwen36-35b-a3b-groupwise-int.json",
+                weights: "groupwise-int",
                 id: "cpu-amx-qwen36-35b-a3b-groupwise-int-tp1-c8-256k-int8-screened",
                 isa: "amx", min_ram_mib: 92160, context: 262144, concurrency: 8,
                 host_free: CPU_AMX_HOST_FREE, engine: CPU_ENGINE,
             },
             CpuSetting {
                 file: "linux-cpu-avx512-qwen36-35b-a3b-groupwise-int.json",
+                weights: "groupwise-int",
                 id: "cpu-avx512-qwen36-35b-a3b-groupwise-int-tp1-c4-256k-int8-screened",
                 isa: "avx512", min_ram_mib: 61440, context: 262144, concurrency: 4,
                 host_free: 58593513472, engine: CPU_ENGINE,
             },
             CpuSetting {
                 file: "linux-cpu-avx2-qwen36-35b-a3b-groupwise-int.json",
+                weights: "groupwise-int",
                 id: "cpu-avx2-qwen36-35b-a3b-groupwise-int-tp1-c1-256k-int8-screened",
                 isa: "avx2", min_ram_mib: 40960, context: 262144, concurrency: 1,
                 host_free: CPU_AVX2_HOST_FREE, engine: CPU_ENGINE,
+            },
+            CpuSetting {
+                file: "linux-cpu-amx-qwen36-35b-a3b-smol-q2g64.json",
+                id: "cpu-amx-qwen36-35b-a3b-smol-q2g64-tp1-c1-64k-int8-screened",
+                weights: "smol-q2g64",
+                isa: "amx", min_ram_mib: 22528, context: 65536, concurrency: 1,
+                host_free: CPU_SMOL_AMX_HOST_FREE, engine: CPU_SMOL_ENGINE,
+            },
+            CpuSetting {
+                file: "linux-cpu-avx512-qwen36-35b-a3b-smol-q2g64.json",
+                id: "cpu-avx512-qwen36-35b-a3b-smol-q2g64-tp1-c1-64k-int8-screened",
+                weights: "smol-q2g64",
+                isa: "avx512", min_ram_mib: 22528, context: 65536, concurrency: 1,
+                host_free: CPU_SMOL_AVX512_HOST_FREE, engine: CPU_SMOL_ENGINE,
+            },
+            CpuSetting {
+                file: "linux-cpu-avx2-qwen36-35b-a3b-smol-q2g64.json",
+                id: "cpu-avx2-qwen36-35b-a3b-smol-q2g64-tp1-c1-64k-int8-screened",
+                weights: "smol-q2g64",
+                isa: "avx2", min_ram_mib: 22528, context: 65536, concurrency: 1,
+                host_free: CPU_SMOL_AVX2_HOST_FREE, engine: CPU_SMOL_ENGINE,
             },
         ];
         let expected_cpu_ids: BTreeSet<_> = consumer_cpu_settings
@@ -1119,9 +1144,13 @@ mod tests {
                     cpu_ids.insert(s.id);
                     assert_eq!(p.platform, "linux");
                     assert_eq!(p.identity.model_id, "qwen3.6-35b-a3b");
-                    assert_eq!(p.identity.weights_id, "groupwise-int");
-                    assert_eq!(p.artifact_sha256, "daf27aafd5f461f81de9a7fa63b8c3f1e56c3ac42b2da858842275879b90bdfa");
-                    assert_eq!(p.artifact_bytes, 20016414464);
+                    assert_eq!(p.identity.weights_id, s.weights);
+                    let (sha256, bytes) = if s.weights == "groupwise-int" {
+                        ("daf27aafd5f461f81de9a7fa63b8c3f1e56c3ac42b2da858842275879b90bdfa", 20016414464)
+                    } else {
+                        ("c8c167eb2fa6d6d35377d09ad6dc3812349f5feec9836837d159e136f3ae37f8", 14446362368)
+                    };
+                    assert_eq!((p.artifact_sha256.as_str(), p.artifact_bytes), (sha256, bytes));
                     assert_eq!((p.tp, p.draft_tp, p.concurrency, p.max_context), (1, 0, s.concurrency, s.context));
                     assert_eq!(p.cpu, Some(CpuRequirement { isa: s.isa.into(), min_ram_mib: s.min_ram_mib }));
                     assert_eq!((p.gpu_name.as_str(), p.compute_capability.as_str(), p.vram_tier_gib, p.min_memory_mib_per_gpu), ("", "", 0, 0));
@@ -1236,6 +1265,11 @@ mod tests {
     /// The CPU image (GINFER_CUDA=OFF) of the NEW-ENGINE-BUNDLE commit; host minima from each smoke.
     const CPU_ENGINE: &str = "2d54a4e318079fe0ac18c125992fb83a0f66fc24";
     const CPU_AMX_HOST_FREE: u64 = 705639821312;
+    /// SMOL c8c167eb entries use the CPU image of b66dcab22, the commit that admits its down37 map.
+    const CPU_SMOL_ENGINE: &str = "b66dcab2233b067b0ac6b92ef8185ebf94282b40";
+    const CPU_SMOL_AMX_HOST_FREE: u64 = 776355155968;
+    const CPU_SMOL_AVX512_HOST_FREE: u64 = 85359411200;
+    const CPU_SMOL_AVX2_HOST_FREE: u64 = 25587666944;
     const CPU_AVX2_HOST_FREE: u64 = 15864188928;
 
     #[test]

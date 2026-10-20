@@ -25,6 +25,14 @@ Behavior and contracts are in [GInfer Server Manager](../ginfer-manager/README.m
 | AMX | `linux-cpu-amx-qwen36-35b-a3b-groupwise-int.json` | `cpu-amx-qwen36-35b-a3b-groupwise-int-tp1-c8-256k-int8-screened` | 262144 / 8 | 96 GB | S1, Ready 47.1 s, 16,000 IDs exact |
 | AVX-512 | `linux-cpu-avx512-qwen36-35b-a3b-groupwise-int.json` | `cpu-avx512-qwen36-35b-a3b-groupwise-int-tp1-c4-256k-int8-screened` | 262144 / 4 | 64 GB | 9950X3D2, Ready 46.1 s, 8,000 IDs exact |
 | AVX2 | `linux-cpu-avx2-qwen36-35b-a3b-groupwise-int.json` | `cpu-avx2-qwen36-35b-a3b-groupwise-int-tp1-c1-256k-int8-screened` | 262144 / 1 | 40 GB | i9-14900K, Ready 72.6 s, 2,000 IDs exact |
+| AMX, SMOL | `linux-cpu-amx-qwen36-35b-a3b-smol-q2g64.json` | `cpu-amx-qwen36-35b-a3b-smol-q2g64-tp1-c1-64k-int8-screened` | 65536 / 1 | 24 GB | S1, Ready 11.3 s, 2,000 IDs exact |
+| AVX-512, SMOL | `linux-cpu-avx512-qwen36-35b-a3b-smol-q2g64.json` | `cpu-avx512-qwen36-35b-a3b-smol-q2g64-tp1-c1-64k-int8-screened` | 65536 / 1 | 24 GB | 9950X3D2, Ready 37.1 s, 2,000 IDs exact |
+| AVX2, SMOL | `linux-cpu-avx2-qwen36-35b-a3b-smol-q2g64.json` | `cpu-avx2-qwen36-35b-a3b-smol-q2g64-tp1-c1-64k-int8-screened` | 65536 / 1 | 24 GB | i9-14900K, Ready 53.6 s, 2,000 IDs exact |
+
+The INT entries (`daf27aaf`) use the CPU image of Engine `2d54a4e31`; the SMOL entries
+(`qwen36_35b_a3b_smol_autoround_down37.ginfer`, `c8c167eb`, Ron 10-20) use `b66dcab22`, the first
+Engine that admits that package. Both packages are staged in NAS `release-waves/v1` with their
+SHA256SUMS lines.
 
 Live checks (Engine CPU image `2d54a4e31`, then the NEW-ENGINE-BUNDLE `d1d542000` five-image set):
 
