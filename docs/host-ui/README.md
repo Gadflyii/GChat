@@ -1,5 +1,57 @@
 # GInfer host UI
 
+## Custom settings without tested profiles — claude-gchat-custom, October 20
+
+Row `GCHAT-CUSTOM-PROFILES` (Ron 10-20: tested profiles help novices; without one, a model must
+still load with custom settings, and people can save their own settings into the profile list).
+Decision record: [Load without tested profiles and save custom profiles](../decisions/2026-10-20-load-without-tested-profiles-and-save-custom-profiles.md).
+
+### Audit: what refused, hid or degraded without a tested profile
+
+Line numbers are GChat main `e1161b9de`.
+
+| Path | Before (what the user saw) | After |
+|---|---|---|
+| Desktop load, every Automatic start (`plugins/tauri-plugin-ginfer/src/managed.rs:368`) | `[no_qualified_profile] No tested settings are available for this model on this computer.` | Running copy, else tested profile, else saved custom profile (same package SHA-256 and cards), else the longest standard context (262,144 … 8,192) the startup check says fits. Refuses only with `[does_not_fit]` and one plain sentence |
+| Automatic and a running copy (`managed.rs:322-336`) | With a tested profile, a copy started with custom settings was not used; Load tried a second copy | Automatic uses the running copy of the model on the visible or selected cards, whatever started it (the tested one is preferred when several run) |
+| Models page Load fallback (`ModelManagement.tsx:344-361`, `autoModelSettings.ts:54-152`) | A TypeScript ladder whose "fit" was a quote that never checks context for Qwen 27B / Muse 30B, so a 16 GB card got 262,144 tokens and the Engine failed at startup; then "<Model> could not be started automatically. Open GInfer Hosts to choose its settings yourself." | Removed; Load uses the one Automatic above. A failure shows the plain reason and a Choose custom settings button that opens that model's Custom settings |
+| Models row (`ModelManagement.tsx:499`) | "Load model uses tested settings for your selected graphics cards. To choose your own settings, open GInfer Hosts." | Explains the Automatic order; each model has Custom settings |
+| Chat model picker (`DropdownModelProvider.tsx:385` → `switchModel.ts:757`) | `no_qualified_profile` returned silently: no message, Send greyed out | Loads through Automatic. A model that fits nowhere shows "The model does not fit in the free memory" with the plain sentence and "Open Models and choose Custom settings to pick other settings."; it is not retried automatically |
+| Chat auto-start, attachment pre-start, import auto-switch (`ChatInput.tsx:441`, `:1142`, `DataProvider.tsx:458`) | Same silent failure (console only) | Same as the picker |
+| Check model settings on cards not yet measured (`engine_host.rs:965`) | "This computer has no hardware profile for these graphics cards yet. On GInfer Hosts, open Advanced graphics-card setup options…" | The check measures the cards first, as Start does (with progress when it is part of a load) |
+| Startup check verdict (`service.rs:1693-1760`) | A solo Automatic quote for Qwen 27B / Muse 30B never compared the context with memory; doomed starts reached the Engine | Every quote carries `fit` (Engine verdict, or the per-rank K/V estimate); a start that does not fit is refused before any process starts; GInfer Hosts' Check shows the sentence |
+| First-run wizard (`first_run.rs:1217-1260`) | No tested profile for the chosen cards: the model's maximum context with one reply; on 16 GB the memory check failed with "GInfer could not confirm that this model can start…" | GInfer's own settings take the longest standard context that fits (an edited value is never changed); the step says "No tested settings exist for your graphics card yet, so GInfer chose the longest conversation that fits its memory." |
+| After first-run, stopped model (`EngineHostModels.tsx:278`) | "Choose a model and saved settings above to start it again." (none were offered on an untested card) | "Choose Start model above to start it again with its own settings, or choose other settings above." |
+| GInfer Hosts profile picker (`EngineProfilePicker.tsx:93, 120-123`) | Picker and Start disabled; "No saved settings fit this model on this computer yet. Use Graphics-card setup to measure the cards, or add matching saved settings…" | Saved custom settings listed under Custom beside Tested and startable; changed ones listed but disabled ("check again on the Models page"); the empty text points to Model and memory settings and Custom settings |
+| Custom settings location (`EngineHostModels.tsx` only) | Only on GInfer Hosts, with nothing to save | Models page Custom settings (normal flow) with the standard names and a one-line help each; GInfer Hosts form kept |
+| Saving settings | Not possible | Save as profile, Rename, Save changes, Delete |
+| Recommended tab (`ModelManagement.tsx:506`) | "A model is only recommended once it has been tested on your graphics card." (untrue: readiness checks the card family, memory and graphics-card count) | "No model in the list supports these graphics cards and fits their memory." Download is not gated by tested profiles (unchanged) |
+| Imported models (Add local model) | Packages other than a tested release always hit `no_qualified_profile` | Automatic fit; saved settings keyed to the package SHA-256 the Host hashes once |
+| CPU (`autoModelSettings.ts:73`) | On a computer without a GPU, "There are not enough free graphics cards for this model." fired first | The TypeScript ladder is gone; Custom settings has Device GPU/CPU; the CPU branch of Automatic belongs to claude-gchat-cpu (reported to bubbs) |
+| Release with no tested profile at all (`model-release.ts:56-60`) | Hidden; Download disabled: "The publisher still needs to provide verified download details and tested settings." | Kept: a release-completeness gate, not a per-card one |
+| GBench Max Perf (`max_perf.rs:148-221`, `BenchmarkServerSettings.tsx:90-101`) | Only the four Max Perf classes on TP1 and SM 8.0/8.6/8.9/12.0; "No Max Perf profile is available for this server's installed models and GPU…" | Kept: the Standard Benchmark is a fixed leaderboard recipe, independent of tested launch profiles. Other presets run on any ready model, including one started with custom settings |
+| Gbot brain (`BrainSetup.tsx:76`, `core/gbot/inference.rs:39-116`) | Uses any ready model; no tested-profile dependency | Kept |
+| Host terminal menu (`launcher.rs:1008`) | "No launch profiles match the installed models and available GPU groups." | Kept: the terminal menu lists tested profiles; the desktop is the custom path |
+
+### The flow
+
+Models → Installed → a model row: **Load model** (Automatic, first for novices) or **Custom settings**.
+Custom settings shows Saved settings (Tested · … and Custom · …, a "check again" suffix when a saved
+profile's package or cards changed), Device (GPU/CPU), Tensor parallel (set by the model file),
+Graphics cards, Context length, Concurrency, K/V cache, Enable Speculative Decoding (and Draft
+tokens), Enable Vision, Structured outputs and CUDA Graphs, each with one plain help line. **Check
+settings** runs the Host's startup check (measuring new cards once) and answers "These settings
+fit." or the shortfall sentence. **Start with these settings** starts the Host instance and attaches
+chat to it. After a passing check or start, **Save as profile** stores the settings; a selected
+saved profile has Rename, Save changes (after a passing check) and Delete.
+
+Saved profiles are the `custom_profiles` field of the Host's `host.json` in the GChat data folder
+(`<data>/ginfer/host/host.json`), keyed to the package SHA-256 and the saved GPUs (UUID, name,
+memory, compute capability). The snapshot reports each profile's `status`: `ready`,
+`model_changed`, `model_missing` or `hardware_changed`; only `ready` ones start. Route:
+`POST /host/v1/custom-profiles` with `action` `save` (name + settings), `update` (id + name and/or
+settings) or `delete` (id); engine command `custom_profile`.
+
 ## Flash pure 2-bit laptop and RTX 4090 launch catalogs — claude-quote-search, October 20
 
 GInfer `feat/claude-flash-consumer-profiles-20261020` adds two Linux Flash pure 2-bit `8bbb85bf`

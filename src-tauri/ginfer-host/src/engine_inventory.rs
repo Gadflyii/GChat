@@ -19,7 +19,7 @@ pub struct ArtifactIdentity {
 
 impl ArtifactIdentity {
     /// Qualification records describe evidence, not package admission policy.
-    pub(crate) fn supports_gpu(&self, compute_capability: Option<&str>) -> bool {
+    pub fn supports_gpu(&self, compute_capability: Option<&str>) -> bool {
         match compute_capability {
             Some("12.0") => true,
             Some("8.0" | "8.6" | "8.9") => !self.weights_id.contains("nvfp4"),

@@ -139,7 +139,7 @@ export default class ginfer_extension extends AIEngine {
   }
 
   private buildGinferConfig(
-    perLoad?: { gpu_uuids?: string[]; load_operation_id?: string }
+    perLoad?: { gpu_uuids?: string[]; load_operation_id?: string; device?: string }
   ): GinferConfig {
     return {
       // Desktop starts use the Host's complete tested profile. Neutral values
@@ -159,6 +159,8 @@ export default class ginfer_extension extends AIEngine {
       ...(perLoad?.gpu_uuids === undefined
         ? {}
         : { gpu_uuids: [...perLoad.gpu_uuids] }),
+      // Device: gpu or cpu; absent lets the Host pick (CPU-only model or no usable graphics card).
+      ...(perLoad?.device === 'gpu' || perLoad?.device === 'cpu' ? { device: perLoad.device } : {}),
     }
   }
 

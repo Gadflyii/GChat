@@ -21,3 +21,11 @@ export const DEFAULT_LAUNCH_OPTIONS: EngineLaunchOptions = {
   flash_host_ram_headroom_gib: null,
   expert_lfu: true,
 }
+
+/** The CPU device runs text only, without speculation; the Engine keeps INT8 K/V by default. */
+export const CPU_LAUNCH_OPTIONS: EngineLaunchOptions = {
+  ...DEFAULT_LAUNCH_OPTIONS,
+  device: 'cpu',
+  vision: false,
+  spec: 'none',
+}

@@ -16,6 +16,32 @@ export type LocalModelLoadProgress = {
 export type EngineModel = {
   id: string; path: string; artifact_set: boolean;
   metadata: { identity: { model_id: string; weights_id: string }; tp_size: number; draft_tp: number; size_bytes: number; nvfp4_kv_available?: boolean }
+  /** Devices the Host can try: ['cpu'] for a CPU-only model; the Engine still reports whether a GPU model runs on the CPU. */
+  devices?: EngineDevice[]
+  /** The Engine's CPU refusal for this package, when its capability report names one. */
+  cpu_admission?: { code: string; message?: string; cpu_alternatives?: { model_id: string; weights_id: string }[] }
+}
+/** GInfer's typed CPU admission codes, plus the Host's cpu_ram for a plan that does not fit. */
+export const CPU_ADMISSION_CODES = ['no_cpu_format', 'no_cpu_program', 'cpu_tp1_only', 'cpu_feature_unavailable', 'cpu_host_unsupported']
+export const CPU_PROBLEM_CODES = [...CPU_ADMISSION_CODES, 'cpu_ram']
+export type EngineDevice = 'gpu' | 'cpu'
+/** Where a model runs: Automatic uses the graphics cards when the computer has any and the model can use them. */
+export type DevicePreference = 'auto' | EngineDevice
+export type EngineCpu = {
+  model_name: string | null; isa_path: 'amx' | 'avx512' | 'avx2' | null; label: string | null
+  logical_cpus: number; total_ram_bytes: number | null
+  gpu_inventory_note: string | null
+}
+/** Host CPU errors lead with a [code]; the sentence after it is plain, the Engine text follows "Engine:". */
+export function engineErrorParts(text: string): { code?: string; message: string; detail?: string } {
+  const match = /^\[([a-z_]+)\]\s*/.exec(text)
+  const rest = match ? text.slice(match[0].length) : text
+  const engine = rest.indexOf(' Engine: ')
+  return {
+    ...(match ? { code: match[1] } : {}),
+    message: engine >= 0 ? rest.slice(0, engine) : rest,
+    ...(engine >= 0 ? { detail: rest.slice(engine + 1) } : {}),
+  }
 }
 export type EngineInstance = {
   instance_id: string; session_id: string | null; display_name: string; upstream_model_id: string;
@@ -31,7 +57,8 @@ export type EngineLaunchOptions = {
   kv_arena_headroom_bytes?: number;
   host_kv_cache_bytes: number | null; prefill_chunk: number; no_cuda_graph: boolean;
   flash_host_ram_headroom_gib?: number | null; expert_lfu?: boolean;
-  device?: 'gpu' | 'cpu'; cpu_ram_headroom_gib?: number | null;
+  /** Absent means GPU. */
+  device?: EngineDevice; cpu_ram_headroom_gib?: number | null;
 }
 export type EngineLaunchProfile = EngineLaunchOptions & {
   qualified_profile_id?: string | null;
@@ -167,6 +194,7 @@ export type EngineSnapshot = {
   profile_error?: string | null;
   host_id: string; display_name: string; revision: number; boot_id?: string;
   gpus: import('@/lib/model-release').ModelGpu[];
+  cpu?: EngineCpu;
   models: EngineModel[]; instances: EngineInstance[]
   inventory_errors?: { path: string; error: string }[]
   model_management?: { version: number; managed_root: string; engine_presets_available: boolean; downloads: import('@/lib/model-release').ModelDownload[] }

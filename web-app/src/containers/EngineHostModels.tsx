@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ChoiceSelect } from '@/components/ui/choice-select'
-import { engineCommand, hardwareProfileBlocksLaunch, type EngineHost, type EngineSnapshot, type EngineLaunchOptions, type EngineStartupQuote, type EngineHardwareProfile as HardwareProfileStatus } from '@/services/engines'
+import { engineCommand, engineErrorParts, hardwareProfileBlocksLaunch, type EngineHost, type EngineSnapshot, type EngineLaunchOptions, type EngineStartupQuote, type EngineHardwareProfile as HardwareProfileStatus } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { EngineHostSharing } from '@/containers/EngineHostSharing'
 import { EngineGbotControl } from '@/containers/EngineGbotControl'
@@ -81,7 +81,10 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [editingSession, setEditingSession] = useState<string | null>(null)
   const [options, setOptions] = useState<EngineLaunchOptions>({ vision: true, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto', kv_arena_bytes: null, kv_arena_headroom_bytes: DEFAULT_GPU_RESERVE_BYTES, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false, flash_host_ram_headroom_gib: null, expert_lfu: true })
   const selected = snapshot?.models.find((m) => m.id === modelId)
-  const configuration = { ...options, model_id: modelId, gpu_uuids: gpus, max_context: context, concurrency }
+  const cpuDevice = options.device === 'cpu'
+  const configuration = { ...options, model_id: modelId, gpu_uuids: cpuDevice ? [] : gpus, max_context: context, concurrency }
+  // The CPU device uses no graphics cards; the GPU device needs exactly the model's card count.
+  const devicePlacementReady = !!selected && (cpuDevice ? true : gpus.length === selected.metadata.tp_size)
   const profile = snapshot?.hardware_profile
   // Snapshot revisions and profiling progress can change while the same quote is
   // running. Only launch inputs and the Host's placement/profile state invalidate it.
@@ -111,6 +114,10 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const launchError = invalidGpuReserve ? 'Enter GPU memory to keep free as a nonnegative number of MB, within the supported size range.'
     : invalidFlashHeadroom ? 'Flash computer-memory headroom must be a whole number of GiB, at least 0, or left blank to use GInfer’s default.'
     : invalidNumbers ? 'Use whole numbers. Context length and model copies must be at least 1. Concurrency must be between 1 and 8. Advanced settings cannot be negative; the graphics-card memory limit must be greater than 0 or left blank.'
+    : cpuDevice && selected?.metadata.identity.weights_id.includes('nvfp4')
+      ? 'This version of the model (NVFP4) only runs on NVIDIA graphics cards. To run it on the CPU, use the INT or SMOL version.'
+    : cpuDevice && (options.vision || !['auto', 'none'].includes(options.spec))
+      ? 'On the CPU, Vision and Speculative Decoding are not available yet. Turn them off to use Device CPU.'
     : options.kv_dtype === 'nvfp4' && selected?.metadata.nvfp4_kv_available === false
       ? 'This model cannot use NVFP4 K/V cache. Choose INT8 or BF16, or add a model prepared for NVFP4 memory.' : null
   const act = async (action: keyof typeof modelActionMessages | 'hardware_profile' | 'gbot_grant', args: Record<string, unknown> = {}) => {
@@ -291,7 +298,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
               kv_dtype: profile.kv_dtype, kv_arena_bytes: profile.kv_arena_bytes, host_kv_cache_bytes: profile.host_kv_cache_bytes ?? null,
               kv_arena_headroom_bytes: profile.kv_arena_headroom_bytes ?? DEFAULT_GPU_RESERVE_BYTES,
               flash_host_ram_headroom_gib: profile.flash_host_ram_headroom_gib ?? null, expert_lfu: profile.expert_lfu ?? true,
-              prefill_chunk: profile.prefill_chunk, no_cuda_graph: profile.no_cuda_graph })
+              prefill_chunk: profile.prefill_chunk, no_cuda_graph: profile.no_cuda_graph,
+              device: profile.device ?? 'gpu', cpu_ram_headroom_gib: profile.cpu_ram_headroom_gib ?? null })
           }}>Edit settings</Button>}
           <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(instance.status)} onClick={async () => {
             if (await confirmAction({ title: 'Stop this model immediately?', message: 'This stops the model now and cancels any replies it is generating. Other people using this model will also lose their current replies.', confirmLabel: 'Stop immediately', destructive: true })) void act('stop', { instance_id: instance.instance_id, body: { force: true, expected_session_id: instance.session_id } })
@@ -308,13 +316,22 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         setModelId(value)
         const model = snapshot.models.find(m => m.id === value)
         const target = model?.metadata.identity.model_id
-        setContext(target === 'qwen3.8-27b' || target === 'qwen3.8-flash-next' ? 262144
+        setContext(target === 'qwen3.8-27b' || target === 'qwen3.8-flash-next' || target === 'qwen3.6-35b-a3b' ? 262144
           : target === 'muse-glimmer-30b' ? 131072 : 0)
+        // A CPU-only model starts on the CPU device with its text-only defaults.
+        if (model?.devices?.length === 1 && model.devices[0] === 'cpu')
+          setOptions(current => ({ ...current, device: 'cpu', vision: false, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: current.kv_dtype === 'nvfp4' ? 'auto' : current.kv_dtype }))
         const occupied = new Set(snapshot.instances.filter(i => ['ready', 'starting', 'stopping'].includes(i.status) && i.instance_id !== editing).flatMap(i => i.configuration.gpu_uuids))
         const available = snapshot.gpus.filter(g => !occupied.has(g.uuid))
         setGpus(model?.metadata.tp_size === 1 && available.length === 1 ? [available[0].uuid] : [])
       }} options={[{ value: '', label: 'Choose an installed model' }, ...snapshot.models.map(m => ({ value: m.id, title: weightsDrafterDetail(m.metadata.identity.weights_id), label: `${hostModelLabel(m)} · ${m.metadata.tp_size} ${m.metadata.tp_size === 1 ? 'graphics card' : 'graphics cards'} · ${(m.metadata.size_bytes / 1024 ** 3).toFixed(1)} GiB${m.artifact_set ? ' · multi-file model' : ''}` }))]} /></label>
-      <div className="flex flex-wrap gap-3">{snapshot.gpus.map((gpu, index) => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={(e) => setGpus((ids) => e.target.checked ? [...ids, gpu.uuid] : ids.filter((id) => id !== gpu.uuid))} />Graphics card {index + 1}: {gpu.display_name ?? gpu.name}</label>)}</div>
+      <div className="space-y-1">
+        <label className="text-sm">Device<ChoiceSelect aria-label="Device" className="ml-2" value={cpuDevice ? 'cpu' : 'gpu'} onValueChange={value => setOptions(value === 'cpu'
+          ? { ...options, device: 'cpu', vision: false, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: options.kv_dtype === 'nvfp4' ? 'auto' : options.kv_dtype }
+          : { ...options, device: 'gpu', cpu_ram_headroom_gib: null })} options={[{ value: 'gpu', label: 'GPU' }, { value: 'cpu', label: 'CPU' }]} /></label>
+        <p className="text-xs text-muted-foreground">Where the model runs. GPU uses NVIDIA graphics cards. CPU uses the processor and system memory (RAM); it needs no graphics card but answers more slowly.</p>
+      </div>
+      {!cpuDevice && <div className="flex flex-wrap gap-3">{snapshot.gpus.map((gpu, index) => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={(e) => setGpus((ids) => e.target.checked ? [...ids, gpu.uuid] : ids.filter((id) => id !== gpu.uuid))} />Graphics card {index + 1}: {gpu.display_name ?? gpu.name}</label>)}</div>}
       <div className="flex flex-wrap gap-4">
         <label className="text-sm">Context length (tokens)<Input type="number" min={1} value={context || ''} onChange={(e) => setContext(Number(e.target.value))} /></label>
         <label className="text-sm">Concurrency<Input type="number" min={1} max={8} value={concurrency} onChange={(e) => setConcurrency(Number(e.target.value))} /></label>
@@ -336,8 +353,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
           <p className="text-xs text-muted-foreground">Drafts text ahead for the model to check, which can speed up replies; DFlash is one method.</p>
         </div>
         <div className="space-y-1">
-          <label className="text-sm">K/V cache format<ChoiceSelect aria-label="K/V cache format" className="ml-2" value={options.kv_dtype} onValueChange={value => setOptions({ ...options, kv_dtype: value as EngineLaunchOptions['kv_dtype'] })} options={['auto', 'bf16', 'int8', 'nvfp4'].map(value => ({ value, label: value === 'auto' ? 'Automatic' : value.toUpperCase() }))} /></label>
-          <p className="text-xs text-muted-foreground">How the model stores the conversation in GPU memory. Smaller formats fit longer conversations.</p>
+          <label className="text-sm">K/V cache format<ChoiceSelect aria-label="K/V cache format" className="ml-2" value={options.kv_dtype} onValueChange={value => setOptions({ ...options, kv_dtype: value as EngineLaunchOptions['kv_dtype'] })} options={(cpuDevice ? ['auto', 'bf16', 'int8'] : ['auto', 'bf16', 'int8', 'nvfp4']).map(value => ({ value, label: value === 'auto' ? 'Automatic' : value.toUpperCase() }))} /></label>
+          <p className="text-xs text-muted-foreground">{cpuDevice ? 'How the model stores the conversation in system memory. INT8 (Automatic on the CPU) fits longer conversations than BF16.' : 'How the model stores the conversation in GPU memory. Smaller formats fit longer conversations.'}</p>
         </div>
       </div>
       {launchError && selected && <p role="alert" className="text-sm text-destructive">{launchError}</p>}
@@ -360,7 +377,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       </details>
       {!editing && <>
         <p className="text-sm text-muted-foreground">Checking settings does not start a model or set aside memory. The first check on new graphics cards measures them once, which can take a few minutes. When starting several copies, automatic sizing divides the available GPU K/V cache equally. Available memory is checked again when each model starts.</p>
-        <Button variant="outline" disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {
+        <Button variant="outline" disabled={busy || (profiling && !cpuDevice) || !!error || !!launchError || !devicePlacementReady} onClick={() => {
           const key = quoteKey
           const revision = quoteRevision.current
           setBusy(true); setStartupQuote(null)
@@ -370,10 +387,11 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
             .finally(() => setBusy(false))
         }}>Check model settings</Button>
         {currentQuote?.result?.fit?.fits === false && <p role="alert" className="text-sm text-destructive">{currentQuote.result.fit.message ?? 'These settings do not fit in the memory that is free.'}</p>}
-        {currentQuote?.result && currentQuote.result.fit?.fits !== false && <p role="status" className="text-sm">Model file checked: {identityLabel(currentQuote.result.model_identity)}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'model copy' : 'model copies'}. {currentQuote.result.kv_arena_bytes === null ? 'K/V cache is automatic. Start one copy first so GInfer can measure its memory use before sharing the graphics cards.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of GPU K/V cache per model copy.`} This check did not start a model.</p>}
-        {currentQuote?.error && <div role="alert" className="text-sm text-destructive"><p>These model settings could not be checked. Review your choices and available graphics-card memory, then try again.</p><ModelFailureDetails details={currentQuote.error} /></div>}
+        {currentQuote?.result && currentQuote.result.fit?.fits !== false && cpuDevice && <p role="status" className="text-sm">Model file checked: {identityLabel(currentQuote.result.model_identity)}. These settings fit this computer’s free memory (RAM) on the CPU; GInfer sizes the K/V cache when the model starts. This check did not start a model.</p>}
+        {currentQuote?.result && currentQuote.result.fit?.fits !== false && !cpuDevice && <p role="status" className="text-sm">Model file checked: {identityLabel(currentQuote.result.model_identity)}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'model copy' : 'model copies'}. {currentQuote.result.kv_arena_bytes === null ? 'K/V cache is automatic. Start one copy first so GInfer can measure its memory use before sharing the graphics cards.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of GPU K/V cache per model copy.`} This check did not start a model.</p>}
+        {currentQuote?.error && <div role="alert" className="text-sm text-destructive"><p>{cpuDevice && engineErrorParts(currentQuote.error.replace(/^Error: /, '')).code ? engineErrorParts(currentQuote.error.replace(/^Error: /, '')).message : 'These model settings could not be checked. Review your choices and available graphics-card memory, then try again.'}</p><ModelFailureDetails details={currentQuote.error} /></div>}
       </>}
-      <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={async () => {
+      <div className="flex gap-2"><Button disabled={busy || (profiling && !cpuDevice) || !!error || !!launchError || !devicePlacementReady} onClick={async () => {
         if (editing && !await confirmAction({ title: 'Save and restart this model?', message: 'The model will finish its current replies, then restart with your chosen settings. Other people using it will be affected while it restarts.', confirmLabel: 'Save and restart' })) return
         if (editing) {
           if (await act('reload', { instance_id: editing, body: { configuration, expected_session_id: editingSession } })) {

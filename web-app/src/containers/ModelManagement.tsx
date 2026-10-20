@@ -22,7 +22,7 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { useModelCatalogStore } from '@/stores/model-catalog-store'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
-import { engineAlias, engineCommand, plainHostError, type EngineModel, type EngineSnapshot, type LocalModelLoadProgress } from '@/services/engines'
+import { CPU_PROBLEM_CODES as CPU_CODES, engineAlias, engineCommand, engineErrorParts, plainHostError, type DevicePreference, type EngineModel, type EngineSnapshot, type LocalModelLoadProgress } from '@/services/engines'
 import { controlLocalHostModel } from '@/utils/localHostModel'
 import { HostCard } from '@/containers/EngineHostModels'
 import { gpuCardName, hostModelLabel, plainModelName } from '@/lib/engine-host-labels'
@@ -53,6 +53,7 @@ export type ModelManagementTab = (typeof managementTabs)[number]
 const REGISTERED_MODEL_REFRESH_FAILED = 'The model was added, but the model list could not be refreshed. Choose Refresh installed models to try again.'
 const ACCEPTED_DOWNLOAD_REFRESH_FAILED = 'The download request was accepted, but its status could not be refreshed. Choose Refresh downloads to check its current state.'
 const STOPPED_MODEL_REFRESH_FAILED = 'The model stopped, but the running model list could not be refreshed. Choose Refresh model status before loading or stopping another model.'
+const deviceHelp = 'Device: where the model runs. GPU uses NVIDIA graphics cards. CPU uses the processor and system memory (RAM); it needs no graphics card but answers more slowly. Automatic uses a graphics card when this computer has one the model can use.'
 const capabilityLabels = (capabilities: string[] = []) => capabilities.flatMap(capability => {
   switch (capability.toLowerCase()) {
     case 'text': return ['Text chat']
@@ -93,6 +94,8 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const hardwareReady = useHardware(s => s.hardwareReady)
   const selectedGpuUuids = useHardware(s => s.selectedGpuUuids)
   const setSelectedGpuUuids = useHardware(s => s.setSelectedGpuUuids)
+  const selectedDevice = useHardware(s => s.selectedDevice)
+  const setSelectedDevice = useHardware(s => s.setSelectedDevice)
   const providers = useModelProvider(s => s.providers)
   const activeModels = useAppState(s => s.activeModels)
   const catalog = useModelCatalogStore(s => s.catalog)
@@ -125,6 +128,8 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const [failedModelId, setFailedModelId] = useState<string | null>(null)
   const [customFor, setCustomFor] = useState<string | null>(null)
   const [customPreparing, setCustomPreparing] = useState<string | null>(null)
+  /** A CPU start problem in plain words; NVFP4 packages also offer the INT or SMOL version. */
+  const [cpuProblem, setCpuProblem] = useState<{ message: string; detail?: string; code?: string; modelId: string } | null>(null)
   const [pendingLoad, setPendingLoad] = useState<PendingLocalLoad | null>(null)
   const [loadProgress, setLoadProgress] = useState<LocalModelLoadProgress | null>(null)
   const [loadStatusUnavailable, setLoadStatusUnavailable] = useState(false)
@@ -142,7 +147,8 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const gpus: ModelGpu[] = useMemo(() => local ? (hardwareReady ? hardware.gpus : []).map(g => ({
     uuid: g.uuid, name: g.name, memory_mib: g.total_memory, compute_capability: g.nvidia_info?.compute_capability,
   })) : snapshot?.gpus ?? [], [local, hardwareReady, hardware.gpus, snapshot?.gpus])
-  const invalidGpuSelection = !hardwareReady || (selectedGpuUuids !== null &&
+  const cpuChosen = selectedDevice === 'cpu'
+  const invalidGpuSelection = !hardwareReady || (!cpuChosen && selectedGpuUuids !== null &&
     (!selectedGpuUuids.length || selectedGpuUuids.some(id => !gpus.some(g => g.uuid === id))))
   const downloads = local ? localDownloads : snapshot?.model_management?.downloads ?? []
   const downloadsChecked = !downloadNeedsRefresh && (!local || localDownloadsLoaded)
@@ -157,6 +163,19 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
     const instance = hostModel && localSnapshot?.instances.find(i =>
       (i.status === 'ready' || i.status === 'starting') && i.profile?.model_id === hostModel.id)
     return localHost && instance ? engineAlias(localHost.host_id, instance.instance_id) : undefined
+  }
+  const localCpu = localSnapshot?.cpu
+  /** The first CPU-admitted version (INT, then SMOL) the catalog holds as a single-file release. */
+  const cpuAlternative = (modelId: string) => {
+    const target = localModels.find(x => x.id === modelId)
+    const hostModel = localSnapshot?.models.find(h => h.path === target?.path)
+    const identity = hostModel?.metadata.identity
+    if (!identity) return undefined
+    const releases = catalog.filter(m => m.library_name === 'ginfer').flatMap(m => (m.releases ?? []) as ModelRelease[]).filter(r => r.tp === 1)
+    const named = hostModel.cpu_admission?.cpu_alternatives
+    return named
+      ? named.map(a => releases.find(r => r.identity.model_id === a.model_id && r.identity.weights_id === a.weights_id)).find(r => !!r)
+      : releases.find(r => r.identity.model_id === identity.model_id && !r.identity.weights_id.includes('nvfp4'))
   }
   const filteredModels = localModels.filter(m => (m.displayName ?? m.id).toLowerCase().includes(query.toLowerCase()))
   const releases = useMemo(() => catalog.filter(m => m.library_name === 'ginfer').flatMap(m =>
@@ -330,6 +349,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
     loadSucceeded.current = false
     setLoadResult('')
     setFailedModelId(null)
+    setCpuProblem(null)
     setPendingLoad(load)
     setLoadProgress(null)
     setLoadElapsedSeconds(0)
@@ -348,14 +368,25 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       // Automatic: tested settings for these cards, then your saved settings, then the longest
       // context that fits. After a custom start this attaches to the model that is starting.
       await switchToModel({ modelId, providerName: 'ginfer', serviceHub: service,
-        options: { useProfileDefaults: true, loadOperationId: load.operationId },
+        options: { useProfileDefaults: true, loadOperationId: load.operationId,
+          device: start ? (start.body.device === 'cpu' ? 'cpu' : 'gpu') : selectedDevice },
         signal: load.controller.signal,
         ...(start ? { gpuUuids: start.gpuUuids.length ? [...start.gpuUuids] : undefined }
-          : selectedGpuUuids === null ? {} : { gpuUuids: [...selectedGpuUuids] }) })
+          : selectedGpuUuids === null || cpuChosen ? {} : { gpuUuids: [...selectedGpuUuids] }) })
       load.ready = true
       loadSucceeded.current = true
       if (mounted.current) setLoadResult('Model loaded and ready to use.')
     } catch (e) {
+      const code = (e as { code?: string } | null)?.code
+      if (code && CPU_CODES.includes(code)) {
+        // A CPU problem has its own plain words and next step; custom GPU settings cannot fix it.
+        const parts = engineErrorParts(errorMessage(e).replace(/^Failed to load [^:]*: /, ''))
+        if (mounted.current) {
+          setCpuProblem({ message: parts.message, detail: parts.detail, code, modelId })
+          setLoadResult('Model could not be loaded. Check the error below before trying again.')
+        }
+        return
+      }
       if (mounted.current) {
         const cancelled = (e as { name?: string } | null)?.name === 'AbortError'
         setLoadResult(cancelled ? 'Model startup cancelled.' : 'Model could not be loaded. Check the error below before trying again.')
@@ -464,7 +495,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       </div></div></HeaderPage>
     <main className="space-y-5 overflow-y-auto p-5">
       <div className="flex flex-wrap gap-2">{gpus.map(g => <span key={g.uuid} className="rounded border px-3 py-1 text-sm">{g.name} · {(g.memory_mib / 1024).toFixed(0)} GiB memory</span>)}</div>
-      <p className="text-sm text-muted-foreground">{local ? 'Manage models on this computer.' : `Downloads and model operations run on ${host?.name ?? 'the selected computer'}.`} A model must fit the memory available on each graphics card it uses.</p>
+      <p className="text-sm text-muted-foreground">{local ? 'Manage models on this computer.' : `Downloads and model operations run on ${host?.name ?? 'the selected computer'}.`} A model must fit the memory available on each graphics card it uses, or on the CPU, the computer’s system memory (RAM).</p>
       <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex gap-1" role="tablist" aria-label="Model management">
         {managementTabs.map((t, index) => <Button key={t} role="tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1} variant={tab === t ? 'default' : 'ghost'} onClick={() => setTab(t)}
           onKeyDown={event => {
@@ -486,6 +517,15 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
           {customFor !== failedModelId && <Button variant="outline" disabled={busy} onClick={() => void openCustom(failedModelId, localModels.find(x => x.id === failedModelId)?.path)}>Choose custom settings</Button>}
         </div>
         : <ModelProblem message={errorSummary} detail={error} />)}
+      {cpuProblem && <div className="space-y-2">
+        <ModelProblem message={cpuProblem.message} detail={cpuProblem.detail} />
+        {cpuProblem.code === 'no_cpu_format' && (() => {
+          const alternative = cpuAlternative(cpuProblem.modelId)
+          return alternative
+            ? <Button disabled={busy} onClick={() => void download(alternative)}>Download {plainModelName(alternative.name)}</Button>
+            : <Button disabled={busy} onClick={() => void addLocalModel()}>Add the INT or SMOL version (.ginfer file)</Button>
+        })()}
+      </div>}
       {downloadNeedsRefresh && <ModelProblem message={ACCEPTED_DOWNLOAD_REFRESH_FAILED} detail={downloadRefreshError} />}
       {local && modelStatusError !== null && <div className="space-y-2">
         <ModelProblem message={STOPPED_MODEL_REFRESH_FAILED} detail={modelStatusError} />
@@ -511,14 +551,26 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       {local && localDownloadError && !downloadNeedsRefresh && <ModelProblem message="Could not check your downloads. Open Downloads and choose Refresh downloads to try again." detail={localDownloadError} />}
       {(tab === 'Recommended' || (tab === 'Installed' && local)) && <Input aria-label="Search models" placeholder="Find a model…" value={query} onChange={e => setQuery(e.target.value)} />}
       {tab === 'Installed' && <>
-        {local && <fieldset disabled={busy} className="space-y-2 rounded border p-3"><legend>Graphics cards to use when loading a model</legend>
+        {local && <fieldset disabled={busy} className="space-y-1 rounded border p-3"><legend>Device</legend>
+          <label className="flex items-center gap-2 text-sm">Device
+            <select aria-describedby="model-device-help" className="rounded border bg-background px-2 py-1" value={selectedDevice} onChange={e => setSelectedDevice(e.target.value as DevicePreference)}>
+              <option value="auto">Automatic</option>
+              <option value="gpu">GPU</option>
+              <option value="cpu">CPU</option>
+            </select>
+          </label>
+          <p id="model-device-help" className="text-xs text-muted-foreground">{deviceHelp}</p>
+          {localCpu && <p className="text-xs text-muted-foreground">This computer’s processor: {localCpu.label ?? 'no supported CPU path (needs AVX2)'}{localCpu.total_ram_bytes ? ` · ${formatModelBytes(localCpu.total_ram_bytes)} system memory` : ''}.</p>}
+          {localCpu?.gpu_inventory_note && selectedDevice !== 'cpu' && <p className="text-xs text-muted-foreground">No usable NVIDIA graphics card was found, so Automatic runs models on the CPU. {localCpu.gpu_inventory_note}</p>}
+        </fieldset>}
+        {local && !cpuChosen && <fieldset disabled={busy} className="space-y-2 rounded border p-3"><legend>Graphics cards to use when loading a model</legend>
           <label className="flex items-center gap-2"><input type="checkbox" checked={selectedGpuUuids === null} onChange={e => setSelectedGpuUuids(e.target.checked ? null : [])} />Automatic (all available graphics cards)</label>
           {gpus.map(g => <label key={g.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedGpuUuids?.includes(g.uuid) ?? false} onChange={e => setSelectedGpuUuids(e.target.checked ? [...(selectedGpuUuids ?? []), g.uuid] : (selectedGpuUuids ?? []).filter(id => id !== g.uuid))} />{gpuCardName(gpus, gpus.indexOf(g))}</label>)}
           <p className="text-sm text-muted-foreground">Choose the graphics cards to load the model onto. Leave Automatic checked to use every available card; a model that needs several cards needs that many selected.</p>
           {invalidGpuSelection && <p role="alert">{hardwareReady ? 'Select at least one available graphics card. A previously selected card may have been disconnected.' : 'Checking which graphics cards are available…'}</p>}
         </fieldset>}
         {local ? <>{!filteredModels.length && <div className="rounded-xl border p-8 text-center">{query ? <><p>No installed models match “{query}”.</p><Button className="mt-3" onClick={() => setQuery('')}>Clear search</Button></> : <><p>No installed models found.</p><Button className="mt-3" onClick={() => setTab('Recommended')}>Find a recommended model</Button></>}</div>}
-          {filteredModels.map(m => { const running = activeModels.includes(m.id) || !!hostInstanceOf(m.path); const hostModel = hostModelFor(m.path); return <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{plainModelName(m.displayName ?? m.id)}</h2><p className="text-sm text-muted-foreground">{stoppedModelId === m.id ? (modelStatusError !== null ? 'Status unavailable' : 'Checking status') : running ? 'Running' : 'Installed'} · {capabilityLabels(m.capabilities) || 'GInfer model'}. Load model picks settings for you: tested settings for your graphics card when they exist, then your saved settings, then the longest conversation that fits. Choose Custom settings to pick your own.</p></div><div className="flex gap-2"><Button disabled={busy || modelStatusError !== null || !localLoadReady || invalidGpuSelection || running} onClick={() => void loadLocal(m.id)}>Load model</Button>
+          {filteredModels.map(m => { const running = activeModels.includes(m.id) || !!hostInstanceOf(m.path); const hostModel = hostModelFor(m.path); return <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{plainModelName(m.displayName ?? m.id)}</h2><p className="text-sm text-muted-foreground">{stoppedModelId === m.id ? (modelStatusError !== null ? 'Status unavailable' : 'Checking status') : running ? 'Running' : 'Installed'} · {capabilityLabels(m.capabilities) || 'GInfer model'}. {cpuChosen ? 'Load model checks settings that fit this computer’s memory and runs the model on the CPU.' : 'Load model picks settings for you: tested settings for your graphics card when they exist, then your saved settings, then the longest conversation that fits.'} Choose Custom settings to pick your own.</p></div><div className="flex gap-2"><Button disabled={busy || modelStatusError !== null || !localLoadReady || invalidGpuSelection || running} onClick={() => void loadLocal(m.id)}>Load model</Button>
             <Button variant="outline" aria-expanded={customFor === m.id} disabled={busy || !localLoadReady || !localHost} onClick={() => void openCustom(m.id, m.path)}>Custom settings</Button><Button variant="outline" disabled={busy || modelStatusError !== null || !(activeModels.includes(m.id) || hostInstanceOf(m.path))} onClick={() => void (activeModels.includes(m.id) ? stopLocal(m.id) : stopHostInstance(m.id, hostInstanceOf(m.path)!))}>Stop model</Button><DeleteModelAction modelId={m.id} label={m.displayName ?? m.name} provider="ginfer" externalReference={m.source === 'external'} returnFocusRef={inventoryRefreshRef} /></div>
             {customFor === m.id && (hostModel && localHost && localSnapshot
               ? <ModelCustomSettings key={hostModel.id} hostId={localHost.host_id} snapshot={localSnapshot} model={hostModel} modelName={plainModelName(m.displayName ?? m.id)}

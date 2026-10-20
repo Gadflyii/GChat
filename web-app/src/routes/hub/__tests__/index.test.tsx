@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   command: vi.fn<(action: string, args?: Record<string, unknown>) => Promise<unknown>>(async () => []), refresh: vi.fn(async () => {}),
   switchModel: vi.fn<(params: { options?: { loadOperationId?: string }; signal?: AbortSignal }) => Promise<void>>(async () => {}),
   selectedGpuUuids: null as string[] | null, setSelectedGpuUuids: vi.fn(),
+  selectedDevice: 'auto' as 'auto' | 'gpu' | 'cpu', setSelectedDevice: vi.fn(),
   providers: [] as TestProvider[],
   getProviders: vi.fn<() => Promise<TestProvider[]>>(), setProviders: vi.fn<(providers: TestProvider[], revision?: number) => void>(),
   inventoryRevision: 0, recordModelInstall: vi.fn<(modelId: string) => void>(),
@@ -47,7 +48,8 @@ vi.mock('@tanstack/react-router', async importOriginal => ({
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => <a href={to}>{children}</a>,
 }))
 vi.mock('@/utils/switchModel', () => ({ switchToModel: mocks.switchModel }))
-vi.mock('@/services/engines', async importOriginal => ({ ...await importOriginal<typeof import('@/services/engines')>(),
+vi.mock('@/services/engines', async importOriginal => ({
+  ...await importOriginal<typeof import('@/services/engines')>(),
   engineCommand: mocks.command, engineAlias: (host: string, instance: string) => `ginfer/${host}/${instance}` }))
 vi.mock('@/hooks/useServiceHub', () => ({ isServiceHubInitialized: () => false, useServiceHub: () => ({
   models: () => ({ getActiveModels: mocks.getActiveModels, stopModel: mocks.stopModel, stopAllModels: mocks.stopAllModels }),
@@ -63,6 +65,7 @@ vi.mock('@/hooks/useModelProvider', () => {
 })
 vi.mock('@/hooks/useHardware', () => ({ useHardware: (selector: (s: unknown) => unknown) => selector({
   selectedGpuUuids: mocks.selectedGpuUuids, setSelectedGpuUuids: mocks.setSelectedGpuUuids,
+  selectedDevice: mocks.selectedDevice, setSelectedDevice: mocks.setSelectedDevice,
   hardwareReady: true, hardwareData: { gpus: [{ uuid: 'local-gpu', name: 'Local GPU', total_memory: 16384, nvidia_info: { compute_capability: '8.6' } }] },
 }) }))
 vi.mock('@/stores/model-catalog-store', () => ({ useModelCatalogStore: (selector: (s: unknown) => unknown) => selector({ catalog: mocks.catalog, error: mocks.catalogError, refresh: mocks.refreshCatalog }) }))
@@ -121,7 +124,7 @@ function savedProfile(id: string, name: string, status: string) {
 
 describe('host-scoped Models', () => {
   beforeEach(() => {
-    vi.clearAllMocks(); mocks.errors = {}; mocks.selectedGpuUuids = null
+    vi.clearAllMocks(); mocks.errors = {}; mocks.selectedGpuUuids = null; mocks.selectedDevice = 'auto'
     useAppState.setState({ activeModels: [] })
     mocks.localSnapshot = null
     useLocalModelDownloads.setState({ jobs: [], loaded: false, error: null })
@@ -774,6 +777,50 @@ describe('host-scoped Models', () => {
     expect(screen.getByRole('region', { name: 'Custom settings for Installed locally' })).toBeInTheDocument()
     mocks.switchModel.mockResolvedValue(undefined)
   })
+  it('loads on the CPU through the same Automatic load, without measuring graphics cards or sending the user to GInfer Hosts', async () => {
+    spyConfirm().mockReturnValueOnce(true)
+    const model = { id: 'host-model', path: '/models/local.ginfer', devices: ['cpu'], metadata: { identity: { model_id: 'qwen3.6-35b-a3b', weights_id: 'groupwise-int' }, tp_size: 1 } }
+    mocks.localSnapshot = { host_id: 'local-host', gpus: [], models: [model], instances: [],
+      cpu: { label: 'CPU AVX-512', total_ram_bytes: 64 * 1024 ** 3, gpu_inventory_note: null } }
+    const actions: string[] = []
+    mocks.command.mockImplementation(async action => { actions.push(action); return action === 'snapshot' ? mocks.localSnapshot : [] })
+    render(<ModelManagement />)
+    expect(screen.getByText(/This computer’s processor: CPU AVX-512/)).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /Device/ })).toHaveAccessibleDescription(/CPU uses the processor and system memory/)
+    fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model loaded and ready to use.'))
+    expect(mocks.switchModel).toHaveBeenCalledWith(expect.objectContaining({ options: expect.objectContaining({ useProfileDefaults: true, device: 'auto' }) }))
+    expect(actions).not.toContain('hardware_profile')
+    expect(screen.queryByRole('link', { name: 'Open GInfer Hosts' })).toBeNull()
+  })
+  it('explains a CPU memory shortfall with the amounts and never offers GInfer Hosts', async () => {
+    spyConfirm().mockReturnValueOnce(true)
+    mocks.selectedDevice = 'cpu'
+    mocks.switchModel.mockRejectedValue(Object.assign(new Error('Failed to load Installed locally: Not enough memory (RAM) to run this model on the CPU with these settings: it needs 24.0 GB, and 21.0 GB is free after leaving 4.3 GB for the rest of the computer (3.0 GB short). Close other programs, or choose a shorter Context length. Engine: CPU route Host memory: short'), { code: 'cpu_ram' }))
+    mocks.localSnapshot = customSnapshot({ gpus: [] })
+    render(<ModelManagement />)
+    expect(screen.queryByText('Graphics cards to use when loading a model')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Not enough memory (RAM) to run this model on the CPU with these settings: it needs 24.0 GB')
+    expect(alert).not.toHaveTextContent('[cpu_ram]')
+    expect(mocks.switchModel).toHaveBeenCalledWith(expect.objectContaining({ options: expect.objectContaining({ device: 'cpu' }) }))
+    expect(screen.queryByRole('link', { name: 'Open GInfer Hosts' })).toBeNull()
+    mocks.switchModel.mockResolvedValue(undefined)
+  })
+  it('names the INT or SMOL version when an NVFP4 package is chosen for the CPU', async () => {
+    spyConfirm().mockReturnValueOnce(true)
+    mocks.selectedDevice = 'cpu'
+    mocks.switchModel.mockRejectedValue(Object.assign(new Error('Failed to load Installed locally: This version of the model (NVFP4) only runs on NVIDIA graphics cards. To run it on the CPU, use the INT or SMOL version.'), { code: 'no_cpu_format' }))
+    const model = { id: 'host-model', path: '/models/local.ginfer', devices: ['gpu'], metadata: { identity: { model_id: 'qwen3.8-27b', weights_id: 'nvfp4-dflash2-nvfp4' }, tp_size: 1 } }
+    mocks.localSnapshot = { host_id: 'local-host', gpus: [], models: [model], instances: [] }
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('This version of the model (NVFP4) only runs on NVIDIA graphics cards. To run it on the CPU, use the INT or SMOL version.')
+    expect(screen.getByRole('button', { name: 'Add the INT or SMOL version (.ginfer file)' })).toBeEnabled()
+    mocks.switchModel.mockResolvedValue(undefined)
+  })
   it('checks custom settings, saves them as a profile and starts the model with them', async () => {
     mocks.getActiveModels.mockResolvedValue([])
     mocks.localSnapshot = customSnapshot()
@@ -1028,7 +1075,7 @@ describe('host-scoped Models', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
     await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledWith({
       modelId: 'local-model', providerName: 'ginfer', serviceHub: expect.anything(),
-      options: { useProfileDefaults: true, loadOperationId: expect.any(String) },
+      options: { useProfileDefaults: true, loadOperationId: expect.any(String), device: 'auto' },
       signal: expect.any(AbortSignal),
     }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled())
@@ -1053,7 +1100,7 @@ describe('host-scoped Models', () => {
     fireEvent.click(loadButton)
     await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledWith({
       modelId: 'local-model', providerName: 'ginfer', serviceHub: expect.anything(),
-      options: { useProfileDefaults: true, loadOperationId: expect.any(String) },
+      options: { useProfileDefaults: true, loadOperationId: expect.any(String), device: 'auto' },
       signal: expect.any(AbortSignal),
     }))
     expect(mocks.switchModel).toHaveBeenCalledTimes(1)
@@ -1078,7 +1125,7 @@ describe('host-scoped Models', () => {
     await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledTimes(1))
     expect(mocks.switchModel).toHaveBeenCalledWith(expect.objectContaining({
       modelId: 'local-model', providerName: 'ginfer',
-      options: { useProfileDefaults: true, loadOperationId: expect.any(String) },
+      options: { useProfileDefaults: true, loadOperationId: expect.any(String), device: 'auto' },
       signal: expect.any(AbortSignal),
     }))
     await waitFor(() => expect(loadButton).toBeEnabled())
@@ -1095,7 +1142,7 @@ describe('host-scoped Models', () => {
     await waitFor(() => expect(loadButton).toBeEnabled())
     expect(mocks.switchModel).toHaveBeenCalledWith(expect.objectContaining({
       modelId: 'local-model', providerName: 'ginfer', gpuUuids: ['local-gpu'],
-      options: { useProfileDefaults: true, loadOperationId: expect.any(String) },
+      options: { useProfileDefaults: true, loadOperationId: expect.any(String), device: 'auto' },
       signal: expect.any(AbortSignal),
     }))
     vi.restoreAllMocks()

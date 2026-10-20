@@ -21,7 +21,19 @@ function asString(v, defaultValue = '') {
 }
 function normalizeGinferConfig(config) {
     const value = config ?? {};
+    if (value.load_operation_id !== undefined &&
+        (typeof value.load_operation_id !== 'string' || !value.load_operation_id.trim())) {
+        throw new Error('A model load operation needs a nonempty identifier');
+    }
+    if (value.gpu_uuids !== undefined &&
+        (!Array.isArray(value.gpu_uuids) || value.gpu_uuids.length === 0 ||
+            value.gpu_uuids.some((id) => typeof id !== "string" || !id.trim()) ||
+            new Set(value.gpu_uuids).size !== value.gpu_uuids.length)) {
+        throw new Error("Choose at least one unique GPU");
+    }
     return {
+        ...(value.use_profile_defaults === true ? { use_profile_defaults: true } : {}),
+        ...(value.load_operation_id === undefined ? {} : { load_operation_id: value.load_operation_id }),
         vision: value.vision === undefined ? true : asBool(value.vision),
         spec: asString(value.spec, 'auto'),
         draft_tokens: asNumber(value.draft_tokens),
@@ -32,6 +44,8 @@ function normalizeGinferConfig(config) {
         prefill_chunk: asNumber(value.prefill_chunk),
         max_concurrency: asNumber(value.max_concurrency),
         no_cuda_graph: asBool(value.no_cuda_graph),
+        ...(value.gpu_uuids === undefined ? {} : { gpu_uuids: [...value.gpu_uuids] }),
+        ...(value.device === 'gpu' || value.device === 'cpu' ? { device: value.device } : {}),
     };
 }
 // GInfer server commands

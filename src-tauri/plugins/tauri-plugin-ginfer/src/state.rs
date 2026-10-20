@@ -4,6 +4,10 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
 
+fn gpu_device() -> String {
+    "gpu".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     pub pid: i32,  // opaque handle for unload/chat
@@ -34,6 +38,9 @@ pub struct SessionInfo {
     pub max_concurrency: u32,
     #[serde(default)]
     pub no_cuda_graph: bool,
+    /// Execution device of the resident server; CPU sessions have no CUDA graphs.
+    #[serde(default = "gpu_device")]
+    pub device: String,
     pub api_key: String,
 }
 
