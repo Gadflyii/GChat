@@ -32,10 +32,16 @@ function Help({ id, children }: { id: string; children: React.ReactNode }) {
 }
 
 /** Graphics cards no running model holds, as groups of the model's size that share one card type. */
+/** The graphics cards GInfer may use on this computer (CUDA_VISIBLE_DEVICES can hide some). */
+const usableGpus = (snapshot: EngineSnapshot) => {
+  const visible = (snapshot as { cuda_visible_gpu_uuids?: string[] }).cuda_visible_gpu_uuids
+  return visible ? snapshot.gpus.filter(gpu => visible.includes(gpu.uuid)) : snapshot.gpus
+}
+
 function freeGroup(snapshot: EngineSnapshot, size: number): string[] {
   const held = new Set(snapshot.instances.filter(i => ['ready', 'starting', 'stopping'].includes(i.status))
     .flatMap(i => i.configuration.gpu_uuids))
-  const free = snapshot.gpus.filter(gpu => !held.has(gpu.uuid))
+  const free = usableGpus(snapshot).filter(gpu => !held.has(gpu.uuid))
   for (const first of free) {
     const group = free.filter(gpu => gpu.name === first.name && gpu.compute_capability === first.compute_capability).slice(0, size)
     if (group.length === size) return group.map(gpu => gpu.uuid)
@@ -59,15 +65,22 @@ export function ModelCustomSettings({ hostId, snapshot, model, modelName, disabl
   onChanged: () => Promise<unknown>
 }) {
   const tp = model.metadata.tp_size
-  const initial = useMemo<Form>(() => ({
+  // A running copy of this model shows the settings it started with; they already work, so
+  // they can be saved as a profile straight away.
+  const runningProfile = snapshot.instances.find(i => i.status === 'ready' && i.profile?.model_id === model.id)?.profile
+  const initial = useMemo<Form>(() => runningProfile ? {
+    gpu_uuids: runningProfile.gpu_uuids, max_context: runningProfile.max_context, concurrency: runningProfile.concurrency,
+    options: Object.fromEntries(Object.keys({ ...DEFAULT_LAUNCH_OPTIONS, device: 'gpu', cpu_ram_headroom_gib: null }).map(key =>
+      [key, (runningProfile as Record<string, unknown>)[key] ?? (DEFAULT_LAUNCH_OPTIONS as Record<string, unknown>)[key] ?? null])) as EngineLaunchOptions,
+  } : {
     gpu_uuids: freeGroup(snapshot, tp), max_context: 32768, concurrency: 1, options: { ...DEFAULT_LAUNCH_OPTIONS },
   // The first form only; later snapshots must not overwrite the person's choices.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [])
+  }, [])
   const [form, setForm] = useState<Form>(initial)
   const [choice, setChoice] = useState('new')
   const [check, setCheck] = useState<{ key: string; quote?: EngineStartupQuote; error?: string } | null>(null)
-  const [verified, setVerified] = useState<string | null>(null)
+  const [verified, setVerified] = useState<string | null>(() => runningProfile ? JSON.stringify(settingsOf(initial, model.id)) : null)
   const [working, setWorking] = useState<null | 'check' | 'start' | 'save'>(null)
   const [saveName, setSaveName] = useState('')
   const [rename, setRename] = useState('')
@@ -167,12 +180,14 @@ export function ModelCustomSettings({ hostId, snapshot, model, modelName, disabl
   const defaultName = `${modelName} · ${form.max_context.toLocaleString()} tokens`
   const current = check?.key === key ? check : null
   const checkedNow = verified === key
-  const cards = snapshot.gpus.map((gpu, index) => ({ gpu, index }))
+  const usable = usableGpus(snapshot)
+  const cards = snapshot.gpus.map((gpu, index) => ({ gpu, index })).filter(({ gpu }) => usable.includes(gpu))
   const id = (name: string) => `custom-${model.id}-${name}`
 
   return <section aria-label={`Custom settings for ${modelName}`} className="w-full space-y-4 rounded-lg border p-4">
     <div><h3 className="font-medium">Custom settings</h3>
       <p className="text-sm text-muted-foreground">Choose your own settings for this model. Check them to see whether they fit, then start the model. You can save settings that work and pick them again later.</p></div>
+    {runningProfile && <p role="status" className="text-sm">The model is running with the settings below. You can save them as a profile.</p>}
     <label className="block text-sm">Saved settings
       <ChoiceSelect aria-label="Saved settings" className="mt-1 w-full" disabled={disabled || !!working} value={choice} onValueChange={choose}
         options={[{ value: 'new', label: 'New custom settings' },

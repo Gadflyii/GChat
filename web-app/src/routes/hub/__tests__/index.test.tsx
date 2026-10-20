@@ -865,6 +865,26 @@ describe('host-scoped Models', () => {
       options: expect.objectContaining({ useProfileDefaults: true }) }))
     expect(await screen.findByRole('status', { name: 'Model load status' })).toHaveTextContent('Model loaded and ready to use.')
   })
+  it('offers to save the settings a running model started with', async () => {
+    mocks.localSnapshot = customSnapshot({
+      cuda_visible_gpu_uuids: ['gpu-1'],
+      gpus: [{ uuid: 'gpu-1', name: 'NVIDIA GeForce RTX 5070 Ti', memory_mib: 16303, compute_capability: '12.0' },
+        { uuid: 'gpu-hidden', name: 'Hidden card', memory_mib: 8192, compute_capability: '8.6' }],
+      instances: [{ instance_id: 'i1', status: 'ready', configuration: { gpu_uuids: ['gpu-1'], max_context: 49152, concurrency: 1 },
+        profile: { model_id: 'host-model', gpu_uuids: ['gpu-1'], max_context: 49152, concurrency: 1, vision: true, structured_outputs: true,
+          spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false } }],
+    })
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('button', { name: 'Custom settings' }))
+    const panel = screen.getByRole('region', { name: 'Custom settings for Installed locally' })
+    expect(within(panel).getByText('The model is running with the settings below. You can save them as a profile.')).toBeInTheDocument()
+    expect(within(panel).getByRole('spinbutton', { name: 'Context length (tokens)' })).toHaveValue(49152)
+    expect(within(panel).queryByText(/Hidden card/)).toBeNull()
+    expect(within(panel).getByRole('button', { name: 'Check settings' })).toBeDisabled()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save as profile' }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('custom_profile', { host_id: 'local-host', body: expect.objectContaining({
+      action: 'save', settings: expect.objectContaining({ max_context: 49152, gpu_uuids: ['gpu-1'] }) }) }))
+  })
   it('lists tested and saved settings, labelled, and never applies a saved profile whose cards changed', async () => {
     const user = userEvent.setup()
     mocks.localSnapshot = customSnapshot({
