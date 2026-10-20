@@ -15,6 +15,43 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## CPU device — GCHAT-CPU-ONLY-LOAD, October 20
+
+GChat loads a model on the processor and system memory (GInfer `--device cpu`, OI-145) when the
+user picks Device CPU, when the package is CPU-only (Qwen3.6-35B-A3B), or when no visible graphics
+card can run the model. It never sends a CPU load to GInfer Hosts.
+
+- **Launch options:** `LaunchOptions.device` is `gpu` (absent) or `cpu`; `cpu_ram_headroom_gib`
+  maps to `--cpu-ram-headroom-gib` (GInfer default 4). A CPU argv is `<pkg> --host --port
+  --model-id --tp 1 --max-context --max-concurrency --device cpu --spec none` plus structured
+  outputs, `--kv-dtype`, `--kv-arena-bytes` and `--host-kv-cache-bytes` when set; it carries no
+  `--hardware-profile` and `CUDA_VISIBLE_DEVICES` is empty. TP other than 1, Vision, speculation,
+  NVFP4 K/V and graphics-card memory settings are refused with plain reasons.
+- **No GPU:** the Host starts with an empty GPU list when `nvidia-smi` is missing or fails, and
+  records why (`snapshot.cpu.gpu_inventory_note`). The snapshot `cpu` object names the processor
+  path (`amx`, `avx512`, `avx2`; `cpu_host.rs`) and MemTotal; each model lists its `devices`.
+- **Engine:** CPU launches use the runtime set's CUDA-free `cpu` image (GInfer
+  `stage_linux_runtime.py --architecture cpu`, same commit as the four CUDA images), else a CUDA
+  image when the NVIDIA driver is present. One CPU model runs at a time; no GPU hardware profile
+  is measured.
+- **Fit and refusals:** each CPU start runs the Engine's `--quote-only` (`cpu-host-plan`). A plan
+  that does not fit is `[cpu_ram] Not enough memory (RAM) … it needs N GB, and M GB is free after
+  leaving H GB …`. Engine refusals map to GInfer's typed admission codes (`no_cpu_format`,
+  `no_cpu_program`, `cpu_tp1_only`, `cpu_feature_unavailable`, `cpu_host_unsupported`) with one
+  plain sentence each; for example a GPU-only model on the CPU is "This model can't run on the
+  CPU yet." NVFP4 on the CPU names the INT or SMOL version and offers its download or an import.
+  When GInfer adds `ginfer-serve --capabilities` and the quote `admission` block
+  (docs/cpu-inference/all-models.md §3.4–3.5), the Host reads them; nothing else changes.
+- **Catalog:** CPU entries carry `cpu: {isa, min_ram_mib}` and `qualification.host_free_bytes`;
+  a host matches an entry when its processor path equals `isa` and MemTotal reaches the RAM class.
+- **Windows (not built or run yet):** a Windows CPU image (`GINFER_CUDA=OFF`, MSVC) staged in the
+  Windows runtime set and accepted by `desktop_runtimes_for(.., "windows")` and the NSIS/MSI
+  installer verify; Windows qualification of the CPU route (phase 1 qualified Linux only),
+  including the CPU grant from process affinity groups and AMX state permission; `cpu_host.rs`
+  RAM (`GlobalMemoryStatusEx`) and AMX detection (today Windows reports only AVX2/AVX-512 and no
+  RAM, so no CPU catalog entry can match); the extension hardware gate still requires an NVIDIA GPU
+  on Windows; and Windows CPU catalog entries smoked on a Windows host.
+
 ## Automatic first-run measurement scope — October 19
 
 Row FIRST-RUN-MEASURE-TIME. Automatic (`startWithCheckedSettings`) needs a hardware

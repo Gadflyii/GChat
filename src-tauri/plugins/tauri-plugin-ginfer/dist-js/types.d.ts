@@ -14,6 +14,8 @@ export interface SessionInfo {
     prefill_chunk: number;
     max_concurrency: number;
     no_cuda_graph: boolean;
+    /** Execution device of the resident server: `gpu` or `cpu`. */
+    device?: string;
     api_key: string;
 }
 export type GinferBenchmarkRequest = {
@@ -79,6 +81,10 @@ export interface UnloadResult {
     error?: string;
 }
 export type GinferConfig = {
+    /** Use the Host catalog profile's complete settings; GPU selection still applies. */
+    use_profile_defaults?: boolean;
+    /** Caller-owned Installed Load progress/cancellation scope. */
+    load_operation_id?: string;
     vision: boolean;
     /** Speculative backend: `auto`, `none`, or `dflash`. */
     spec: string;
@@ -95,6 +101,10 @@ export type GinferConfig = {
     /** Valid range 1..8; 0 leaves the server default. */
     max_concurrency: number;
     no_cuda_graph: boolean;
+    /** Device: `gpu`, `cpu`, or omitted for the Host's automatic choice. */
+    device?: string;
+    /** Ordered physical GPU UUIDs selected by the user; omitted means automatic. */
+    gpu_uuids?: string[];
 };
 export type GinferLoadRequest = {
     binaryPath: string;

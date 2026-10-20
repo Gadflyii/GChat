@@ -117,6 +117,8 @@ export type PreflightReason =
 
 export interface StartModelOptions {
   useProfileDefaults?: boolean
+  /** Device: gpu or cpu; omitted or auto lets the Host choose. */
+  device?: 'auto' | 'gpu' | 'cpu'
   /** Owns progress and cancellation for one Installed Load attempt. */
   loadOperationId?: string
 }

@@ -16,6 +16,33 @@ use std::{
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+/// Whether this load runs on the CPU device: explicit, else the CPU for a CPU-only model or
+/// when no visible graphics card can run the model.
+fn runs_on_cpu(config: &GinferConfig, model: &ginfer_host::service::ModelEntry, snapshot: &Value, visible: &[String]) -> Result<bool, String> {
+    let identity = &model.metadata.identity;
+    match config.device.as_str() {
+        "cpu" => Ok(true),
+        "gpu" => Ok(false),
+        "auto" | "" => {
+            // The Host reports the devices each package may use (the Engine's capability report,
+            // else its launch-target registry); a CPU-only package always runs on the CPU.
+            let devices: Vec<String> = snapshot["models"].as_array().into_iter().flatten()
+                .find(|entry| entry["id"].as_str() == Some(&model.id.to_string()))
+                .and_then(|entry| serde_json::from_value(entry["devices"].clone()).ok())
+                .unwrap_or_else(|| ginfer_host::engine_host::target_devices(identity).iter().map(|d| d.to_string()).collect());
+            if devices == ["cpu"] {
+                return Ok(true);
+            }
+            let usable = snapshot["gpus"].as_array().into_iter().flatten().any(|gpu| {
+                gpu["uuid"].as_str().is_some_and(|id| visible.iter().any(|v| v == id))
+                    && identity.supports_gpu(gpu["compute_capability"].as_str())
+            });
+            Ok(!usable)
+        }
+        _ => Err("Device must be GPU, CPU or Automatic".into()),
+    }
+}
+
 fn options(config: &GinferConfig) -> Result<LaunchOptions, String> {
     if config.use_profile_defaults {
         return Ok(LaunchOptions::default());
@@ -90,7 +117,12 @@ fn group_matches(group: &[String], config: &GinferConfig, visible: &[String]) ->
         && config.gpu_uuids.as_ref().map_or(true, |selected| selected == group)
 }
 
-fn selected_group(groups: &Value, config: &GinferConfig, visible: &[String]) -> Option<Vec<String>> {
+fn selected_group(groups: &Value, config: &GinferConfig, visible: &[String], cpu: bool) -> Option<Vec<String>> {
+    if cpu {
+        // A CPU-device entry offers one empty group when this host's processor and RAM match.
+        return groups.as_array()?.iter().any(|group| group.as_array().is_some_and(Vec::is_empty))
+            .then(Vec::new);
+    }
     groups.as_array()?.iter()
         .filter_map(|group| {
             let mut group: Vec<String> = serde_json::from_value(group.clone()).ok()?;
@@ -120,6 +152,7 @@ fn selected_profile(
     requested: &LaunchOptions,
     visible: &[String],
 ) -> Option<(LaunchProfile, Vec<String>)> {
+    let cpu = requested.is_cpu();
     snapshot["launch_profiles"]
         .as_array()
         .into_iter()
@@ -127,7 +160,10 @@ fn selected_profile(
         .filter(|entry| entry["model_id"].as_str() == Some(&model.to_string()))
         .filter_map(|entry| {
             let profile: LaunchProfile = serde_json::from_value(entry["profile"].clone()).ok()?;
-            let group = selected_group(&entry["gpu_groups"], config, visible)?;
+            if profile.options.is_cpu() != cpu {
+                return None;
+            }
+            let group = selected_group(&entry["gpu_groups"], config, visible, cpu)?;
             let p = &profile.options;
             (config.use_profile_defaults || ((config.max_context == 0 || config.max_context == profile.max_context)
                 && (config.max_concurrency == 0 || config.max_concurrency == profile.concurrency)
@@ -176,7 +212,7 @@ fn matches_resident(
     visible: &[String],
 ) -> bool {
     let p = &launch.options;
-    group_matches(&launch.gpu_uuids, config, visible)
+    (if requested.is_cpu() { p.is_cpu() && launch.gpu_uuids.is_empty() } else { !p.is_cpu() && group_matches(&launch.gpu_uuids, config, visible) })
         && (config.max_context == 0 || config.max_context == launch.max_context)
         && (config.max_concurrency == 0 || config.max_concurrency == launch.concurrency)
         && requested.vision == p.vision
@@ -304,6 +340,19 @@ async fn load_on_host_inner(
         else { Err("CUDA_DEVICE_ORDER must be valid Unicode".to_string()) }
     })?;
     let visible = visible_selection(&snapshot, &config, mask.as_deref(), device_order.as_deref())?;
+    let cpu = runs_on_cpu(&config, &model, &snapshot, &visible)?;
+    if cpu && config.gpu_uuids.is_some() {
+        return Err("The CPU device uses no graphics cards; choose Device GPU to pick graphics cards".into());
+    }
+    let mut requested = requested;
+    if cpu {
+        requested.device = "cpu".into();
+        if config.use_profile_defaults {
+            // The CPU route serves text without speculation in this release (GInfer OI-145).
+            requested.vision = false;
+            requested.spec = "none".into();
+        }
+    }
     let selected = selected_profile(&snapshot, model.id, &config, &requested, &visible);
     let automatic_launch = if config.use_profile_defaults {
         selected.as_ref().map(|(profile, group)| {
@@ -320,6 +369,9 @@ async fn load_on_host_inner(
         .filter_map(|i| {
             let launch: LaunchRequest = serde_json::from_value(i["profile"].clone()).ok()?;
             let id: Uuid = serde_json::from_value(i["instance_id"].clone()).ok()?;
+            if launch.options.is_cpu() != cpu {
+                return None;
+            }
             let settings_match = if config.use_profile_defaults {
                 match automatic_launch.as_ref() {
                     Some(expected) => {
@@ -391,7 +443,9 @@ async fn load_on_host_inner(
     let available: Vec<_> = order.iter().filter(|id| !occupied.contains(id.as_str()))
         .filter_map(|id| inventory.iter().find(|gpu| gpu["uuid"].as_str() == Some(id.as_str())))
         .collect();
-    let gpu_uuids = if let Some(selected) = &config.gpu_uuids {
+    let gpu_uuids = if cpu {
+        vec![]
+    } else if let Some(selected) = &config.gpu_uuids {
         if selected.len() != model.metadata.tp_size as usize || available.len() != selected.len()
             || available.iter().any(|gpu| gpu["name"] != available[0]["name"]
                 || gpu["compute_capability"] != available[0]["compute_capability"]) {
@@ -515,6 +569,7 @@ async fn attach(
             break handle;
         }
     };
+    let cpu = launch.options.is_cpu();
     let info = SessionInfo {
         pid,
         port: connection.port,
@@ -534,7 +589,8 @@ async fn attach(
             .unwrap_or_else(|| "auto".into()),
         prefill_chunk: launch.options.prefill_chunk,
         max_concurrency: launch.concurrency,
-        no_cuda_graph: launch.options.no_cuda_graph,
+        no_cuda_graph: launch.options.no_cuda_graph || cpu,
+        device: launch.options.device.clone(),
         api_key: connection.api_key.clone(),
     };
     map.insert(
@@ -591,7 +647,7 @@ mod tests {
             let visible = visible_selection(&snapshot, &config, None, None).unwrap();
             let expected = vec!["GPU-one".to_string(), "GPU-zero".to_string()];
             assert_eq!(config.gpu_uuids.as_ref().unwrap(), &expected);
-            assert_eq!(selected_group(&groups, &config, &visible), Some(expected.clone()));
+            assert_eq!(selected_group(&groups, &config, &visible, false), Some(expected.clone()));
             assert!(group_matches(&expected, &config, &visible));
             assert!(visible_selection(&snapshot, &config, Some("0"), Some("PCI_BUS_ID")).is_err());
             assert!(visible_selection(&snapshot, &config, Some("GPU-one"), None).is_err());
@@ -651,9 +707,65 @@ mod tests {
     fn automatic_catalog_selection_respects_visibility_order() {
         let groups = serde_json::json!([["GPU-zero"], ["GPU-one"]]);
         let visible = vec!["GPU-one".to_string(), "GPU-zero".to_string()];
-        assert_eq!(selected_group(&groups, &GinferConfig::default(), &visible), Some(vec!["GPU-one".to_string()]));
+        assert_eq!(selected_group(&groups, &GinferConfig::default(), &visible, false), Some(vec!["GPU-one".to_string()]));
         let explicit = GinferConfig { gpu_uuids: Some(vec!["GPU-zero".to_string()]), ..Default::default() };
-        assert_eq!(selected_group(&groups, &explicit, &visible), Some(vec!["GPU-zero".to_string()]));
+        assert_eq!(selected_group(&groups, &explicit, &visible, false), Some(vec!["GPU-zero".to_string()]));
+    }
+
+    fn model_entry(model_id: &str, weights_id: &str) -> ginfer_host::service::ModelEntry {
+        serde_json::from_value(serde_json::json!({"id": Uuid::new_v4(), "path": "/models/m.ginfer", "artifact_set": false,
+            "metadata": {"identity": {"model_id": model_id, "weights_id": weights_id}, "tp_size": 1, "draft_tp": 0,
+                "size_bytes": 1, "object_count": 1, "nvfp4_kv_available": false}})).unwrap()
+    }
+
+    #[test]
+    fn device_choice_follows_the_user_then_the_package_then_usable_gpus() {
+        let qwen36 = model_entry("qwen3.6-35b-a3b", "groupwise-int");
+        let qwen = model_entry("qwen3.8-27b", "groupwise-int-dflash2-q4");
+        let gpu = serde_json::json!({"uuid": "GPU-one", "compute_capability": "8.9"});
+        let snapshot = |gpus: Vec<Value>, devices: Option<Vec<&str>>, model: &ginfer_host::service::ModelEntry| serde_json::json!({
+            "gpus": gpus, "models": [{"id": model.id, "devices": devices}]});
+        let visible = vec!["GPU-one".to_string()];
+        let auto = GinferConfig::default();
+        assert!(runs_on_cpu(&auto, &qwen36, &snapshot(vec![gpu.clone()], Some(vec!["cpu"]), &qwen36), &visible).unwrap());
+        // Without a Host device list, the launch-target registry still marks the CPU-only package.
+        assert!(runs_on_cpu(&auto, &qwen36, &snapshot(vec![gpu.clone()], None, &qwen36), &visible).unwrap());
+        assert!(!runs_on_cpu(&auto, &qwen, &snapshot(vec![gpu.clone()], Some(vec!["gpu", "cpu"]), &qwen), &visible).unwrap());
+        assert!(runs_on_cpu(&auto, &qwen, &snapshot(vec![], Some(vec!["gpu", "cpu"]), &qwen), &[]).unwrap());
+        let old = serde_json::json!({"uuid": "GPU-one", "compute_capability": "7.5"});
+        assert!(runs_on_cpu(&auto, &qwen, &snapshot(vec![old], Some(vec!["gpu", "cpu"]), &qwen), &visible).unwrap());
+        let cpu = GinferConfig { device: "cpu".into(), ..Default::default() };
+        let gpu_choice = GinferConfig { device: "gpu".into(), ..Default::default() };
+        assert!(runs_on_cpu(&cpu, &qwen, &snapshot(vec![gpu.clone()], None, &qwen), &visible).unwrap());
+        assert!(!runs_on_cpu(&gpu_choice, &qwen36, &snapshot(vec![], None, &qwen36), &[]).unwrap());
+        assert!(runs_on_cpu(&GinferConfig { device: "tpu".into(), ..Default::default() }, &qwen, &snapshot(vec![], None, &qwen), &[]).is_err());
+    }
+
+    #[test]
+    fn cpu_loads_select_only_cpu_entries_with_their_empty_group() {
+        let model = Uuid::new_v4();
+        let mut cpu_profile = screened_profile();
+        cpu_profile.id = "cpu-avx512-qwen36".into();
+        cpu_profile.options = LaunchOptions { device: "cpu".into(), vision: false, spec: "none".into(), ..LaunchOptions::default() };
+        let snapshot = serde_json::json!({"launch_profiles":[
+            {"model_id":model, "profile":cpu_profile, "gpu_groups":[[]]},
+            {"model_id":model, "profile":screened_profile(), "gpu_groups":[["GPU-one"]]}]});
+        let visible = vec!["GPU-one".to_string()];
+        let config = GinferConfig { use_profile_defaults: true, ..Default::default() };
+        let cpu = LaunchOptions { device: "cpu".into(), vision: false, spec: "none".into(), ..LaunchOptions::default() };
+        let (selected, group) = selected_profile(&snapshot, model, &config, &cpu, &visible).unwrap();
+        assert_eq!((selected.id.as_str(), group), ("cpu-avx512-qwen36", vec![]));
+        let (selected, group) = selected_profile(&snapshot, model, &config, &LaunchOptions::default(), &visible).unwrap();
+        assert_eq!((selected.id.as_str(), group), ("rtx-pro6000-flash-next-smol-q2g64-tp1-c8-128k-int8-screened", vec!["GPU-one".to_string()]));
+        // A CPU entry this host's processor or RAM does not match offers no group.
+        let unmatched = serde_json::json!({"launch_profiles":[{"model_id":model, "profile":cpu_profile_options(), "gpu_groups":[]}]});
+        assert!(selected_profile(&unmatched, model, &config, &cpu, &visible).is_none());
+    }
+
+    fn cpu_profile_options() -> LaunchProfile {
+        let mut profile = screened_profile();
+        profile.options = LaunchOptions { device: "cpu".into(), vision: false, spec: "none".into(), ..LaunchOptions::default() };
+        profile
     }
 
     fn screened_profile() -> LaunchProfile {
@@ -771,10 +883,10 @@ mod tests {
         let visible: Vec<String> = ["GPU-three", "GPU-one", "GPU-two", "GPU-zero"]
             .into_iter().map(String::from).collect();
         let pairs = serde_json::json!([["GPU-zero", "GPU-one"], ["GPU-two", "GPU-three"]]);
-        assert_eq!(selected_group(&pairs, &GinferConfig::default(), &visible),
+        assert_eq!(selected_group(&pairs, &GinferConfig::default(), &visible, false),
             Some(vec!["GPU-three".into(), "GPU-two".into()]));
         let four = serde_json::json!([["GPU-zero", "GPU-one", "GPU-two", "GPU-three"]]);
-        assert_eq!(selected_group(&four, &GinferConfig::default(), &visible), Some(visible));
+        assert_eq!(selected_group(&four, &GinferConfig::default(), &visible, false), Some(visible));
     }
 
     #[test]
@@ -785,13 +897,13 @@ mod tests {
             gpu_uuids: Some(vec!["GPU-one".into(), "GPU-zero".into()]),
             ..Default::default()
         };
-        assert_eq!(selected_group(&groups, &config, &visible), config.gpu_uuids);
+        assert_eq!(selected_group(&groups, &config, &visible, false), config.gpu_uuids);
         config.gpu_uuids = Some(vec!["GPU-zero".into(), "GPU-two".into()]);
-        assert!(selected_group(&groups, &config, &visible).is_none());
+        assert!(selected_group(&groups, &config, &visible, false).is_none());
         config.gpu_uuids = Some(vec!["GPU-zero".into(), "GPU-zero".into()]);
-        assert!(selected_group(&groups, &config, &visible).is_none());
+        assert!(selected_group(&groups, &config, &visible, false).is_none());
         let invalid = serde_json::json!([[], ["GPU-zero", "GPU-zero"], ["GPU-zero", "GPU-hidden"]]);
-        assert!(selected_group(&invalid, &GinferConfig::default(), &visible).is_none());
+        assert!(selected_group(&invalid, &GinferConfig::default(), &visible, false).is_none());
     }
 
     #[test]

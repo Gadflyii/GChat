@@ -6,6 +6,7 @@ export function EngineInstanceSettings({ instance, online }: { instance: EngineI
   const config = instance.configuration
   const gpuCount = config.tp ?? config.gpu_uuids.length
   const speculation = { auto: 'Automatic', none: 'Off', dflash: 'DFlash', mtp: 'MTP' }[config.spec ?? 'auto']
+  const cpu = config.device === 'cpu'
   const kvFormat = config.kv_dtype === undefined || config.kv_dtype === 'auto' ? 'Automatic' : config.kv_dtype.toUpperCase()
 
   return <div className="space-y-3 text-sm text-muted-foreground">
@@ -15,9 +16,13 @@ export function EngineInstanceSettings({ instance, online }: { instance: EngineI
       <p className="font-medium text-foreground">Chosen model settings</p>
       <p className="text-xs">These are the settings you requested. The running model’s reported limit appears above.</p>
       <div>
+        <p>Device: {cpu ? 'CPU' : 'GPU'}</p>
+        <p className="text-xs">Where the model runs: NVIDIA graphics cards (GPU), or the processor and system memory (CPU).</p>
+      </div>
+      {!cpu && <div>
         <p>Tensor parallel (GPUs): {gpuCount}</p>
         <p className="text-xs">A model can use one graphics card or be split across several matching cards.</p>
-      </div>
+      </div>}
       <div>
         <p>Concurrency: {config.concurrency}</p>
         <p className="text-xs">The maximum number of replies the model can generate at the same time.</p>
@@ -36,7 +41,7 @@ export function EngineInstanceSettings({ instance, online }: { instance: EngineI
     <details className="space-y-1">
       <summary className="cursor-pointer">Technical details</summary>
       <p>Vision: {config.vision ? 'on' : 'off'}</p>
-      <p>CUDA Graphs {config.no_cuda_graph ? 'disabled' : 'enabled'}</p>
+      <p>CUDA Graphs {config.no_cuda_graph || cpu ? 'disabled' : 'enabled'}</p>
       <p>Structured outputs (JSON): {config.structured_outputs === undefined ? 'not reported' : config.structured_outputs ? 'on' : 'off'}</p>
       <p className="text-xs">Response formats let apps request replies such as JSON. CUDA Graphs reduce repeated setup work on the graphics card. GInfer does not currently report the memory format, amount of text drafted ahead or CUDA Graphs setting actually in use.</p>
     </details>

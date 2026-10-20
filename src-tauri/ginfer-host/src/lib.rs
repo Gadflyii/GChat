@@ -1,5 +1,6 @@
 pub mod discovery;
 pub mod benchmark_hardware;
+pub mod cpu_host;
 pub mod engine_host;
 pub mod engine_inventory;
 pub mod engine_registry;

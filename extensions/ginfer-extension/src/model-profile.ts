@@ -1,5 +1,5 @@
 export type GinferModelProfile = {
-  family: 'qwen3.8-27b' | 'muse-glimmer-30b' | 'qwen3.8-flash-next'
+  family: 'qwen3.8-27b' | 'muse-glimmer-30b' | 'qwen3.8-flash-next' | 'qwen3.6-35b-a3b'
   nativeContextTokens: number
 }
 
@@ -33,6 +33,9 @@ const MUSE_WEIGHTS = new Set([
   'smol-q2g64-mix-dflash-q4',
 ])
 const FLASH_WEIGHTS = new Set(['groupwise-int', 'smol-q2g64', 'nvfp4'])
+// CPU-only Qwen3.6-35B-A3B (GInfer OI-145): INT and SMOL packages, native context 262,144.
+const QWEN36_NATIVE_CONTEXT = 262_144
+const QWEN36_WEIGHTS = new Set(['groupwise-int', 'smol-q2g64'])
 
 function registeredIdentity(
   modelId: string,
@@ -71,6 +74,15 @@ export function ginferModelProfile(modelId: string): GinferModelProfile | undefi
     return {
       family: 'qwen3.8-flash-next',
       nativeContextTokens: FLASH_NATIVE_CONTEXT,
+    }
+  }
+  if (
+    registeredIdentity(modelId, 'qwen3.6-35b-a3b', QWEN36_WEIGHTS) ||
+    /^qwen36_35b_a3b_(?:int_rtn|int|smol|smol_autoround)$/.test(modelId)
+  ) {
+    return {
+      family: 'qwen3.6-35b-a3b',
+      nativeContextTokens: QWEN36_NATIVE_CONTEXT,
     }
   }
   return undefined

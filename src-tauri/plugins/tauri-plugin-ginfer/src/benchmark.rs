@@ -737,6 +737,7 @@ mod tests {
             prefill_chunk: 0,
             max_concurrency,
             no_cuda_graph: false,
+            device: "gpu".into(),
             api_key: "secret".into(),
         })
         .unwrap()

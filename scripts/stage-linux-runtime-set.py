@@ -9,6 +9,8 @@ import shutil
 from urllib.parse import unquote, urlsplit
 
 ARCHITECTURES = {'8.0': 'sm80', '8.6': 'sm86', '8.9': 'sm89', '12.0': 'sm120a'}
+# Optional CUDA-free image for the CPU device (GInfer tools/stage_linux_runtime.py --architecture cpu).
+CPU_IMAGE = {'cpu': 'cpu'}
 OPERATOR_DOCS = {'README.md', 'VERSION', 'docs/cli.md', 'docs/serving.md',
                  'docs/release-names/README.md'}
 
@@ -65,22 +67,23 @@ def stage_operator_docs(source, destination):
 def verify(source):
     source = source.resolve(strict=True)
     contract = json.loads((source / 'runtime-set.json').read_text())
+    images = dict(ARCHITECTURES, **CPU_IMAGE) if 'cpu' in (contract.get('runtimes') or {}) else ARCHITECTURES
     if (contract.get('schema') != 'ginfer-linux-runtime-set-v1'
             or contract.get('platform') != 'linux-x64'
-            or contract.get('runtimes') != ARCHITECTURES):
-        raise ValueError('Linux release requires exactly SM80, SM86, SM89 and SM120a runtimes')
+            or contract.get('runtimes') != images):
+        raise ValueError('Linux release requires exactly SM80, SM86, SM89 and SM120a runtimes, plus at most the CPU image')
     commit = contract.get('source_commit', '')
     if len(commit) != 40 or any(c not in '0123456789abcdef' for c in commit):
         raise ValueError('runtime set must identify its exact source commit')
     documentation = None
-    for directory in ARCHITECTURES.values():
+    for directory in images.values():
         root = source / directory
         manifest = json.loads((root / 'runtime-manifest.json').read_text())
         if (manifest.get('schema') != 'ginfer-linux-runtime-v1'
                 or manifest.get('platform') != 'linux-x64'
                 or manifest.get('source_commit') != commit
                 or manifest.get('source_dirty') is not False
-                or manifest.get('cuda_architecture') != directory.replace('sm', 'sm_')
+                or manifest.get('cuda_architecture') != ('none' if directory == 'cpu' else directory.replace('sm', 'sm_'))
                 or manifest.get('build_glibc') != 'glibc 2.39'):
             raise ValueError(f'{directory}: expected a clean Ubuntu 24.04 runtime from {commit}')
         members = set()
@@ -140,7 +143,8 @@ def main():
     if args.operator_docs_destination:
         stage_operator_docs(args.source / 'sm120a', args.operator_docs_destination)
         print(f"Staged five operator documentation entries from {contract['source_commit']}")
-    print(f"Verified all four Linux runtimes from {contract['source_commit']}")
+    images = 'all four Linux runtimes and the CPU image' if 'cpu' in contract['runtimes'] else 'all four Linux runtimes'
+    print(f"Verified {images} from {contract['source_commit']}")
 
 
 if __name__ == '__main__':

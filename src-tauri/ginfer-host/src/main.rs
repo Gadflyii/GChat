@@ -486,20 +486,32 @@ async fn run(
     let mut inventory = tokio::process::Command::new(&args.nvidia_smi);
     #[cfg(windows)]
     inventory.creation_flags(0x08000000);
-    let output = inventory.args([
+    // No usable NVIDIA driver leaves an empty GPU inventory: models then run on the CPU device.
+    let (inventory_rows, gpu_inventory_note) = match inventory.args([
             "--query-gpu=uuid,name,memory.total,compute_cap,pci.device_id,pci.bus_id,driver_version",
             "--format=csv,noheader,nounits",
         ])
         .output()
         .await
-        .map_err(|e| format!("could not inventory NVIDIA GPUs: {e}"))?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).into_owned());
+    {
+        Ok(output) if output.status.success() => (String::from_utf8_lossy(&output.stdout).into_owned(), None),
+        Ok(output) => {
+            let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            (String::new(), Some(if detail.is_empty() {
+                format!("No usable NVIDIA graphics card: nvidia-smi exited with {}", output.status)
+            } else {
+                format!("No usable NVIDIA graphics card: nvidia-smi reported {detail}")
+            }))
+        }
+        Err(error) => (String::new(), Some(format!("No NVIDIA graphics driver was found ({error})"))),
+    };
+    if let Some(note) = &gpu_inventory_note {
+        eprintln!("{note}; models can run on the CPU");
     }
     let mut gpus = Vec::new();
     let mut pci_inventory = Vec::new();
     let mut driver_versions = std::collections::BTreeSet::new();
-    for line in String::from_utf8_lossy(&output.stdout).lines() {
+    for line in inventory_rows.lines() {
         let values: Vec<_> = line.split(',').map(str::trim).collect();
         if values.len() != 7 {
             return Err("unrecognized NVIDIA inventory row".into());
@@ -520,11 +532,13 @@ async fn run(
     let cli_name = if cfg!(windows) { "ginfer.exe" } else { "ginfer" };
     // Query the installed CLI once, independently of this process's visibility/order.
     // Older Engines may lack the passive command; UUID masks remain available.
-    let fastest_first = match probe_cuda_device_order(&engine.with_file_name(cli_name), &physical_uuids).await {
-        Ok(order) => Some(order),
-        Err(error) => {
-            eprintln!("{error}; numeric FASTEST_FIRST GPU masks are unavailable");
-            None
+    let fastest_first = if physical_uuids.is_empty() { None } else {
+        match probe_cuda_device_order(&engine.with_file_name(cli_name), &physical_uuids).await {
+            Ok(order) => Some(order),
+            Err(error) => {
+                eprintln!("{error}; numeric FASTEST_FIRST GPU masks are unavailable");
+                None
+            }
         }
     };
     let host = Host::open_with_gpu_inventory(
@@ -537,6 +551,7 @@ async fn run(
         args.desktop_provider,
     )
     .await?;
+    host.set_gpu_inventory_note(gpu_inventory_note);
     if driver_versions.len() == 1 {
         if let Err(error) = host.processes.lock().await.configure_nvidia_driver_version(
             driver_versions.first().unwrap(),
@@ -564,6 +579,12 @@ async fn run(
             })
             .collect(),
     )?;
+    // Device admission comes from the Engine's identity catalog, read once per engine install.
+    let serve = host.processes.lock().await.capability_engine();
+    match ginfer_host::engine_host::probe_capabilities(&serve).await {
+        Ok(capabilities) => host.set_engine_capabilities(Some(capabilities)),
+        Err(error) => eprintln!("{error}; CPU admission follows each Engine startup quote"),
+    }
     let preferred = if args.desktop_managed {
         ginfer_host::local_host::management_address(&data_dir, args.listen)?
     } else {

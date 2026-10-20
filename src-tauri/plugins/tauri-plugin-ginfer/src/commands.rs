@@ -28,6 +28,8 @@ pub struct GinferConfig {
     pub max_concurrency: u32,
     pub no_cuda_graph: bool,
     pub gpu_uuids: Option<Vec<String>>,
+    /// "gpu", "cpu", or "auto": the CPU for a CPU-only model or a host with no supported GPU.
+    pub device: String,
 }
 impl Default for GinferConfig {
     fn default() -> Self {
@@ -45,6 +47,7 @@ impl Default for GinferConfig {
             max_concurrency: 0,
             no_cuda_graph: false,
             gpu_uuids: None,
+            device: "auto".into(),
         }
     }
 }

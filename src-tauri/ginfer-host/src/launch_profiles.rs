@@ -9,6 +9,8 @@ use std::{collections::BTreeSet, path::Path};
 
 pub const HEADROOM_BYTES: u64 = 1 << 30;
 pub const MIN_PROFILE_HEADROOM_BYTES: u64 = 300 * 1024 * 1024;
+/// GInfer's `--cpu-ram-headroom-gib` default.
+pub const CPU_DEFAULT_HEADROOM_GIB: u64 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -21,10 +23,18 @@ pub struct LaunchProfile {
     pub artifact_bytes: u64,
     pub tp: u32,
     pub draft_tp: u32,
+    /// Graphics-card requirement; empty/zero on a CPU-device profile.
+    #[serde(default)]
     pub gpu_name: String,
+    #[serde(default)]
     pub compute_capability: String,
+    #[serde(default)]
     pub vram_tier_gib: u32,
+    #[serde(default)]
     pub min_memory_mib_per_gpu: u64,
+    /// CPU-device requirement: the tested processor path and RAM class.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu: Option<CpuRequirement>,
     pub max_context: u32,
     pub concurrency: u32,
     #[serde(deserialize_with = "recorded_options")]
@@ -42,6 +52,15 @@ where
     serde_json::from_value(serde_json::Value::Object(options)).map_err(serde::de::Error::custom)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuRequirement {
+    /// `amx`, `avx512` or `avx2` (cpu_host::ISA_PATHS); a host matches its own best path.
+    pub isa: String,
+    /// Smallest MemTotal, in MiB, of the RAM class this entry was tested for.
+    pub min_ram_mib: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Qualification {
@@ -52,6 +71,9 @@ pub struct Qualification {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub free_bytes_per_gpu: Option<u64>,
     pub full_context_requests: u32,
+    /// CPU device: lowest Host MemAvailable measured while the entry served its smoke.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_free_bytes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub calculation: Option<CapacityCalculation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -114,8 +136,63 @@ impl ProfileCatalog {
 }
 
 impl LaunchProfile {
-    pub fn validate(&self) -> Result<(), String> {
+    /// CPU-device entries carry a processor path and RAM class instead of a graphics card.
+    fn validate_cpu(&self) -> Result<(), String> {
         let fail = || format!("invalid or unqualified launch profile: {}", self.id);
+        let Some(cpu) = &self.cpu else { return Err(fail()) };
+        let headroom = self.options.cpu_ram_headroom_gib.unwrap_or(CPU_DEFAULT_HEADROOM_GIB) << 30;
+        if self.id.is_empty()
+            || self.name.trim().is_empty()
+            || !matches!(self.platform.as_str(), "linux" | "windows")
+            || !crate::cpu_host::ISA_PATHS.contains(&cpu.isa.as_str())
+            || cpu.min_ram_mib == 0
+            || !self.gpu_name.is_empty()
+            || !self.compute_capability.is_empty()
+            || self.vram_tier_gib != 0
+            || self.min_memory_mib_per_gpu != 0
+            || self.artifact_bytes == 0
+            || self.artifact_sha256.len() != 64
+            || !self.artifact_sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            || (self.tp, self.draft_tp) != (1, 0)
+            || !(1..=8).contains(&self.concurrency)
+            || self.max_context == 0
+            || self.identity.weights_id.is_empty()
+            || self.qualification.evidence.trim().is_empty()
+            || self.qualification.engine_revision.trim().is_empty()
+            || self.qualification.free_bytes_per_gpu.is_some()
+            || self.qualification.calculation.is_some()
+            || self.qualification.host_free_bytes.is_none_or(|free| free < headroom)
+        {
+            return Err(fail());
+        }
+        let evidence_valid = match self.qualification.tier {
+            QualificationTier::FullContextTested => {
+                self.qualification.full_context_requests == self.concurrency
+                    && self.qualification.smoke_requests.is_none()
+            }
+            QualificationTier::ScreenedStartup => {
+                self.qualification.full_context_requests == 0
+                    && self.qualification.smoke_requests == Some(self.concurrency)
+            }
+            _ => false,
+        };
+        if !evidence_valid {
+            return Err(fail());
+        }
+        if self.max_context > self.options.validate_target(&self.identity, self.tp, self.draft_tp)? {
+            return Err(fail());
+        }
+        Ok(())
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if self.options.is_cpu() {
+            return self.validate_cpu();
+        }
+        let fail = || format!("invalid or unqualified launch profile: {}", self.id);
+        if self.cpu.is_some() || self.qualification.host_free_bytes.is_some() {
+            return Err(fail());
+        }
         if self.id.is_empty()
             || self.name.trim().is_empty()
             || !matches!(self.platform.as_str(), "linux" | "windows")
@@ -201,8 +278,25 @@ impl LaunchProfile {
             && model.metadata.size_bytes == self.artifact_bytes
     }
 
+    /// Launch choices on this host: GPU groups, or one empty group for a CPU-device entry whose
+    /// processor path and RAM class match. The Engine's quote still checks free RAM.
+    pub fn launch_groups(&self, gpus: &[Gpu], reserved: &BTreeSet<String>, host: &crate::cpu_host::CpuFacts) -> Vec<Vec<String>> {
+        let Some(cpu) = self.cpu.as_ref().filter(|_| self.options.is_cpu()) else {
+            return self.gpu_groups(gpus, reserved);
+        };
+        let ram_class = host.total_ram_bytes.is_some_and(|total| total >= cpu.min_ram_mib << 20);
+        if self.platform == std::env::consts::OS && host.isa_path == Some(cpu.isa.as_str()) && ram_class {
+            vec![vec![]]
+        } else {
+            vec![]
+        }
+    }
+
     /// Each group is an independent choice. P2P and available memory are checked by the engine.
     pub fn gpu_groups(&self, gpus: &[Gpu], reserved: &BTreeSet<String>) -> Vec<Vec<String>> {
+        if self.options.is_cpu() {
+            return vec![];
+        }
         if self.platform != std::env::consts::OS {
             return vec![];
         }
@@ -271,6 +365,7 @@ mod tests {
             compute_capability: "12.0".into(),
             vram_tier_gib: 32,
             min_memory_mib_per_gpu: 32000,
+            cpu: None,
             max_context: 65536,
             concurrency: 4,
             options: LaunchOptions {
@@ -285,6 +380,7 @@ mod tests {
                 engine_revision: "fixture".into(),
                 free_bytes_per_gpu: Some(HEADROOM_BYTES),
                 full_context_requests: 4,
+                host_free_bytes: None,
             },
         }
     }
@@ -803,6 +899,69 @@ mod tests {
             .map(|s| s.id)
             .collect();
         let mut flash_ids = BTreeSet::new();
+        // Qwen3.6-35B-A3B CPU-device entries (INT daf27aaf, SMOL c8c167eb): one screened entry per
+        // CPU path and RAM class, smoked from its file on a host of that path (GCHAT-CPU-ONLY-LOAD).
+        struct CpuSetting {
+            file: &'static str,
+            id: &'static str,
+            weights: &'static str,
+            isa: &'static str,
+            min_ram_mib: u64,
+            context: u32,
+            concurrency: u32,
+            host_free: u64,
+            engine: &'static str,
+        }
+        let consumer_cpu_settings = [
+            CpuSetting {
+                file: "linux-cpu-amx-qwen36-35b-a3b-groupwise-int.json",
+                weights: "groupwise-int",
+                id: "cpu-amx-qwen36-35b-a3b-groupwise-int-tp1-c8-256k-int8-screened",
+                isa: "amx", min_ram_mib: 92160, context: 262144, concurrency: 8,
+                host_free: CPU_AMX_HOST_FREE, engine: CPU_ENGINE,
+            },
+            CpuSetting {
+                file: "linux-cpu-avx512-qwen36-35b-a3b-groupwise-int.json",
+                weights: "groupwise-int",
+                id: "cpu-avx512-qwen36-35b-a3b-groupwise-int-tp1-c4-256k-int8-screened",
+                isa: "avx512", min_ram_mib: 61440, context: 262144, concurrency: 4,
+                host_free: 58593513472, engine: CPU_ENGINE,
+            },
+            CpuSetting {
+                file: "linux-cpu-avx2-qwen36-35b-a3b-groupwise-int.json",
+                weights: "groupwise-int",
+                id: "cpu-avx2-qwen36-35b-a3b-groupwise-int-tp1-c1-256k-int8-screened",
+                isa: "avx2", min_ram_mib: 40960, context: 262144, concurrency: 1,
+                host_free: CPU_AVX2_HOST_FREE, engine: CPU_ENGINE,
+            },
+            CpuSetting {
+                file: "linux-cpu-amx-qwen36-35b-a3b-smol-q2g64.json",
+                id: "cpu-amx-qwen36-35b-a3b-smol-q2g64-tp1-c1-64k-int8-screened",
+                weights: "smol-q2g64",
+                isa: "amx", min_ram_mib: 22528, context: 65536, concurrency: 1,
+                host_free: CPU_SMOL_AMX_HOST_FREE, engine: CPU_SMOL_ENGINE,
+            },
+            CpuSetting {
+                file: "linux-cpu-avx512-qwen36-35b-a3b-smol-q2g64.json",
+                id: "cpu-avx512-qwen36-35b-a3b-smol-q2g64-tp1-c1-64k-int8-screened",
+                weights: "smol-q2g64",
+                isa: "avx512", min_ram_mib: 22528, context: 65536, concurrency: 1,
+                host_free: CPU_SMOL_AVX512_HOST_FREE, engine: CPU_SMOL_ENGINE,
+            },
+            CpuSetting {
+                file: "linux-cpu-avx2-qwen36-35b-a3b-smol-q2g64.json",
+                id: "cpu-avx2-qwen36-35b-a3b-smol-q2g64-tp1-c1-64k-int8-screened",
+                weights: "smol-q2g64",
+                isa: "avx2", min_ram_mib: 22528, context: 65536, concurrency: 1,
+                host_free: CPU_SMOL_AVX2_HOST_FREE, engine: CPU_SMOL_ENGINE,
+            },
+        ];
+        let expected_cpu_ids: BTreeSet<_> = consumer_cpu_settings
+            .iter()
+            .filter(|s| supplied_paths.iter().any(|path| path.file_name().is_some_and(|name| name == s.file)))
+            .map(|s| s.id)
+            .collect();
+        let mut cpu_ids = BTreeSet::new();
         let screened_pro_supplied = supplied_paths.iter().any(|path| {
             path.file_name().is_some_and(|name| {
                 name == "linux-rtx-pro6000-flash-next-smol-q2g64.json"
@@ -828,6 +987,15 @@ mod tests {
             if !flash_catalog_ids.is_empty() {
                 let actual_ids: BTreeSet<_> = profiles.iter().map(|p| p.id.as_str()).collect();
                 assert_eq!(actual_ids, flash_catalog_ids, "{}", path.display());
+            }
+            let cpu_catalog_ids: BTreeSet<_> = consumer_cpu_settings
+                .iter()
+                .filter(|s| path.file_name().is_some_and(|name| name == s.file))
+                .map(|s| s.id)
+                .collect();
+            if !cpu_catalog_ids.is_empty() {
+                let actual_ids: BTreeSet<_> = profiles.iter().map(|p| p.id.as_str()).collect();
+                assert_eq!(actual_ids, cpu_catalog_ids, "{}", path.display());
             }
             for p in profiles {
                 assert!(ids.insert(p.id.clone()), "duplicate {}", p.id);
@@ -962,6 +1130,8 @@ mod tests {
                         no_cuda_graph: false,
                         flash_host_ram_headroom_gib: Some(10),
                         expert_lfu: true,
+                        device: "gpu".into(),
+                        cpu_ram_headroom_gib: None,
                     }, "{}", p.id);
                     assert_eq!(p.qualification.tier, QualificationTier::ScreenedStartup);
                     assert_eq!(p.qualification.engine_revision, s.engine);
@@ -969,6 +1139,47 @@ mod tests {
                     assert_eq!(p.qualification.full_context_requests, 0);
                     assert_eq!(p.qualification.smoke_requests, Some(8));
                     assert!(p.qualification.calculation.is_none());
+                }
+                if let Some(s) = consumer_cpu_settings.iter().find(|s| p.id == s.id) {
+                    cpu_ids.insert(s.id);
+                    assert_eq!(p.platform, "linux");
+                    assert_eq!(p.identity.model_id, "qwen3.6-35b-a3b");
+                    assert_eq!(p.identity.weights_id, s.weights);
+                    let (sha256, bytes) = if s.weights == "groupwise-int" {
+                        ("daf27aafd5f461f81de9a7fa63b8c3f1e56c3ac42b2da858842275879b90bdfa", 20016414464)
+                    } else {
+                        ("c8c167eb2fa6d6d35377d09ad6dc3812349f5feec9836837d159e136f3ae37f8", 14446362368)
+                    };
+                    assert_eq!((p.artifact_sha256.as_str(), p.artifact_bytes), (sha256, bytes));
+                    assert_eq!((p.tp, p.draft_tp, p.concurrency, p.max_context), (1, 0, s.concurrency, s.context));
+                    assert_eq!(p.cpu, Some(CpuRequirement { isa: s.isa.into(), min_ram_mib: s.min_ram_mib }));
+                    assert_eq!((p.gpu_name.as_str(), p.compute_capability.as_str(), p.vram_tier_gib, p.min_memory_mib_per_gpu), ("", "", 0, 0));
+                    assert_eq!(p.options, LaunchOptions {
+                        device: "cpu".into(),
+                        vision: false,
+                        structured_outputs: true,
+                        spec: "none".into(),
+                        kv_dtype: "int8".into(),
+                        ..LaunchOptions::default()
+                    }, "{}", p.id);
+                    assert_eq!(p.qualification.tier, QualificationTier::ScreenedStartup);
+                    assert_eq!(p.qualification.engine_revision, s.engine);
+                    assert_eq!(p.qualification.host_free_bytes, Some(s.host_free));
+                    assert_eq!(p.qualification.free_bytes_per_gpu, None);
+                    assert_eq!((p.qualification.full_context_requests, p.qualification.smoke_requests), (0, Some(s.concurrency)));
+                    // Matched by processor path and RAM class only; never a GPU group.
+                    let host = crate::cpu_host::CpuFacts { model_name: None, isa_path: Some(s.isa),
+                        logical_cpus: 16, total_ram_bytes: Some(s.min_ram_mib << 20) };
+                    let gpu = Gpu { uuid: "GPU-any".into(), name: "NVIDIA GeForce RTX 4090".into(), display_name: None,
+                        memory_mib: 24564, compute_capability: Some("8.9".into()) };
+                    assert!(p.gpu_groups(std::slice::from_ref(&gpu), &BTreeSet::new()).is_empty());
+                    assert_eq!(p.launch_groups(std::slice::from_ref(&gpu), &BTreeSet::new(), &host), vec![Vec::<String>::new()]);
+                    for other in crate::cpu_host::ISA_PATHS.iter().filter(|isa| **isa != s.isa) {
+                        let other = crate::cpu_host::CpuFacts { isa_path: Some(other), ..host.clone() };
+                        assert!(p.launch_groups(&[], &BTreeSet::new(), &other).is_empty(), "{} on {other:?}", p.id);
+                    }
+                    let small = crate::cpu_host::CpuFacts { total_ram_bytes: Some((s.min_ram_mib << 20) - 1), ..host.clone() };
+                    assert!(p.launch_groups(&[], &BTreeSet::new(), &small).is_empty());
                 }
                 if p.id == "rtx-pro6000-flash-next-smol-q2g64-tp1-c8-128k-int8-screened" {
                     screened_pro_found = true;
@@ -989,7 +1200,77 @@ mod tests {
         assert_eq!(consumer_ids, expected_consumer_ids);
         assert_eq!(muse_ids, expected_muse_ids);
         assert_eq!(flash_ids, expected_flash_ids);
+        assert_eq!(cpu_ids, expected_cpu_ids);
     }
+
+    fn cpu_profile() -> LaunchProfile {
+        let mut p = profile();
+        p.identity = ArtifactIdentity { model_id: "qwen3.6-35b-a3b".into(), weights_id: "groupwise-int".into() };
+        p.tp = 1;
+        p.gpu_name.clear();
+        p.compute_capability.clear();
+        p.vram_tier_gib = 0;
+        p.min_memory_mib_per_gpu = 0;
+        p.cpu = Some(CpuRequirement { isa: "avx512".into(), min_ram_mib: 60_000 });
+        p.max_context = 262144;
+        p.concurrency = 1;
+        p.options = LaunchOptions { device: "cpu".into(), vision: false, spec: "none".into(), kv_dtype: "int8".into(), ..LaunchOptions::default() };
+        p.qualification = Qualification {
+            tier: QualificationTier::ScreenedStartup, evidence: "synthetic test only".into(),
+            engine_revision: "fixture".into(), free_bytes_per_gpu: None, full_context_requests: 0,
+            host_free_bytes: Some(CPU_DEFAULT_HEADROOM_GIB << 30), calculation: None, smoke_requests: Some(1),
+        };
+        p
+    }
+
+    #[test]
+    fn cpu_profiles_name_a_processor_path_and_ram_class_instead_of_a_gpu() {
+        let p = cpu_profile();
+        p.validate().unwrap();
+        let host = crate::cpu_host::CpuFacts { model_name: None, isa_path: Some("avx512"), logical_cpus: 32,
+            total_ram_bytes: Some(60_000 << 20) };
+        let gpus = vec![Gpu { uuid: "GPU-a".into(), name: "Fixture GPU".into(), display_name: None,
+            memory_mib: 32607, compute_capability: Some("12.0".into()) }];
+        assert_eq!(p.launch_groups(&gpus, &BTreeSet::new(), &host), vec![Vec::<String>::new()]);
+        assert!(p.gpu_groups(&gpus, &BTreeSet::new()).is_empty());
+        for other in [
+            crate::cpu_host::CpuFacts { isa_path: Some("amx"), ..host.clone() },
+            crate::cpu_host::CpuFacts { isa_path: None, ..host.clone() },
+            crate::cpu_host::CpuFacts { total_ram_bytes: Some((60_000 << 20) - 1), ..host.clone() },
+        ] {
+            assert!(p.launch_groups(&gpus, &BTreeSet::new(), &other).is_empty(), "{other:?}");
+        }
+        let json = serde_json::to_value(&p).unwrap();
+        assert_eq!(json["cpu"], serde_json::json!({"isa": "avx512", "min_ram_mib": 60000}));
+        let reread: LaunchProfile = serde_json::from_value(json).unwrap();
+        reread.validate().unwrap();
+        for invalid in [
+            LaunchProfile { cpu: None, ..p.clone() },
+            LaunchProfile { cpu: Some(CpuRequirement { isa: "sse4".into(), min_ram_mib: 1 }), ..p.clone() },
+            LaunchProfile { gpu_name: "Fixture GPU".into(), ..p.clone() },
+            LaunchProfile { tp: 2, ..p.clone() },
+            LaunchProfile { options: LaunchOptions { vision: true, ..p.options.clone() }, ..p.clone() },
+            LaunchProfile { qualification: Qualification { host_free_bytes: Some((4 << 30) - 1), ..p.qualification.clone() }, ..p.clone() },
+            LaunchProfile { qualification: Qualification { host_free_bytes: None, ..p.qualification.clone() }, ..p.clone() },
+            LaunchProfile { qualification: Qualification { free_bytes_per_gpu: Some(HEADROOM_BYTES), ..p.qualification.clone() }, ..p.clone() },
+            LaunchProfile { qualification: Qualification { smoke_requests: Some(2), ..p.qualification.clone() }, ..p.clone() },
+            LaunchProfile { options: LaunchOptions { device: "gpu".into(), ..p.options.clone() }, ..p.clone() },
+        ] {
+            assert!(invalid.validate().is_err(), "{}", invalid.id);
+        }
+        // A GPU entry cannot carry CPU requirements.
+        assert!(LaunchProfile { cpu: p.cpu.clone(), ..profile() }.validate().is_err());
+    }
+
+    /// The CPU image (GINFER_CUDA=OFF) of the NEW-ENGINE-BUNDLE commit; host minima from each smoke.
+    const CPU_ENGINE: &str = "2d54a4e318079fe0ac18c125992fb83a0f66fc24";
+    const CPU_AMX_HOST_FREE: u64 = 705639821312;
+    /// SMOL c8c167eb entries use the CPU image of b66dcab22, the commit that admits its down37 map.
+    const CPU_SMOL_ENGINE: &str = "b66dcab2233b067b0ac6b92ef8185ebf94282b40";
+    const CPU_SMOL_AMX_HOST_FREE: u64 = 776355155968;
+    const CPU_SMOL_AVX512_HOST_FREE: u64 = 85359411200;
+    const CPU_SMOL_AVX2_HOST_FREE: u64 = 25587666944;
+    const CPU_AVX2_HOST_FREE: u64 = 15864188928;
 
     #[test]
     fn screened_profiles_require_startup_guard_without_claiming_full_context_capacity() {

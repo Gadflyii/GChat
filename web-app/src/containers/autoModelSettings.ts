@@ -1,7 +1,12 @@
 import {
   engineCommand,
+  engineErrorParts,
+  CPU_ADMISSION_CODES,
+  type DevicePreference,
+  type EngineDevice,
   type EngineHardwareProfile,
   type EngineLaunchOptions,
+  type EngineModel,
   type EngineSnapshot,
   type EngineStartupQuote,
 } from '@/services/engines'
@@ -24,6 +29,38 @@ export const DEFAULT_LAUNCH_OPTIONS: EngineLaunchOptions = {
   expert_lfu: true,
 }
 
+/** The CPU device runs text only, without speculation; the Engine keeps INT8 K/V by default. */
+export const CPU_LAUNCH_OPTIONS: EngineLaunchOptions = {
+  ...DEFAULT_LAUNCH_OPTIONS,
+  device: 'cpu',
+  vision: false,
+  spec: 'none',
+}
+
+/** A start problem in plain words, with the Host's typed code and Engine text kept for details. */
+export class ModelStartError extends Error {
+  code?: string
+  detail?: string
+  /** CPU problems have their own next step; GInfer Hosts cannot fix them. */
+  device?: EngineDevice
+  constructor(text: string, device?: EngineDevice) {
+    const parts = engineErrorParts(text)
+    super(parts.message)
+    this.code = parts.code
+    this.detail = parts.detail
+    this.device = device
+  }
+}
+
+const SUPPORTED_GPU = ['8.0', '8.6', '8.9', '12.0']
+
+/** Automatic picks the CPU for a CPU-only model or a computer without a usable NVIDIA graphics card. */
+export function resolveDevice(snapshot: EngineSnapshot, model: EngineModel, preference: DevicePreference = 'auto'): EngineDevice {
+  if (preference !== 'auto') return preference
+  if (model.devices?.length === 1 && model.devices[0] === 'cpu') return 'cpu'
+  return snapshot.gpus.some((gpu) => SUPPORTED_GPU.includes(gpu.compute_capability ?? '')) ? 'gpu' : 'cpu'
+}
+
 const busy = (profile?: EngineHardwareProfile) =>
   profile?.status === 'running' || profile?.status === 'cancelling'
 
@@ -31,7 +68,7 @@ const LADDER = [262144, 131072, 65536, 32768, 16384, 8192]
 
 /** Context lengths to try, longest first. Models known to support 262,144 start there. */
 export function conversationLengths(modelId: string): number[] {
-  if (modelId === 'qwen3.8-27b' || modelId === 'qwen3.8-flash-next') return LADDER
+  if (modelId === 'qwen3.8-27b' || modelId === 'qwen3.8-flash-next' || modelId === 'qwen3.6-35b-a3b') return LADDER
   return LADDER.slice(1)
 }
 
@@ -42,6 +79,7 @@ export type AutoStartDeps = {
   signal?: AbortSignal
   pollMs?: number
   timeoutMs?: number
+  device?: DevicePreference
 }
 
 const message = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause))
@@ -63,6 +101,7 @@ export async function startWithCheckedSettings(
   const snapshot = await command<EngineSnapshot>('snapshot', { host_id: hostId })
   const model = snapshot.models.find((m) => m.path === modelPath)
   if (!model) throw new Error('This model is no longer installed.')
+  if (resolveDevice(snapshot, model, deps.device) === 'cpu') return startOnCpu(hostId, model, deps)
   const busyCards = new Set(
     snapshot.instances
       .filter((i) => ['ready', 'starting', 'stopping'].includes(i.status))
@@ -147,6 +186,45 @@ export async function startWithCheckedSettings(
     if (mine?.status === 'failed')
       throw new Error(mine.last_error ?? 'The model could not start.')
     if (Date.now() > deadline) throw new Error('The model did not become ready in time.')
+    await sleep(deps.pollMs ?? 2000)
+  }
+}
+
+/** CPU device: no graphics-card measurement; the Engine plans memory, shorter contexts are tried when RAM is short. */
+async function startOnCpu(hostId: string, model: EngineModel, deps: AutoStartDeps): Promise<void> {
+  const command = deps.command ?? engineCommand
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+  const report = deps.report ?? (() => undefined)
+  report('Finding settings that fit your computer’s memory…')
+  let lastError = 'No settings could be checked.'
+  let chosen: Record<string, unknown> | undefined
+  for (const max_context of conversationLengths(model.metadata.identity.model_id)) {
+    if (deps.signal?.aborted) throw new Error('Model startup cancelled.')
+    const configuration = { ...CPU_LAUNCH_OPTIONS, model_id: model.id, gpu_uuids: [], max_context, concurrency: 1 }
+    try {
+      await command<EngineStartupQuote>('quote', { host_id: hostId, body: { ...configuration, remaining_instances: 1 } })
+      chosen = configuration
+      break
+    } catch (cause) {
+      lastError = message(cause)
+      // A model or processor the CPU cannot run fails the same way at every length.
+      const code = engineErrorParts(lastError).code
+      if (code && CPU_ADMISSION_CODES.includes(code)) throw new ModelStartError(lastError, 'cpu')
+    }
+  }
+  if (!chosen) throw new ModelStartError(lastError, 'cpu')
+  report('Starting the model on the CPU. Large models take a few minutes to read into memory…')
+  const started = await command<{ instance_id?: string } | undefined>('launch', { host_id: hostId, body: { ...chosen, remaining_instances: 1 } })
+  const deadline = Date.now() + (deps.timeoutMs ?? 15 * 60 * 1000)
+  for (;;) {
+    if (deps.signal?.aborted) throw new Error('Model startup cancelled.')
+    const now = await command<EngineSnapshot>('snapshot', { host_id: hostId })
+    const mine = now.instances.find((i) => started?.instance_id
+      ? i.instance_id === started.instance_id
+      : i.configuration.device === 'cpu' && i.profile?.model_id === model.id)
+    if (mine?.status === 'ready') return
+    if (mine?.status === 'failed') throw new ModelStartError(mine.last_error ?? 'The model could not start.', 'cpu')
+    if (Date.now() > deadline) throw new ModelStartError('The model did not become ready in time.', 'cpu')
     await sleep(deps.pollMs ?? 2000)
   }
 }
