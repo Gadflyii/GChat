@@ -922,7 +922,7 @@ mod tests {
                 file: "linux-cpu-avx512-qwen36-35b-a3b-groupwise-int.json",
                 id: "cpu-avx512-qwen36-35b-a3b-groupwise-int-tp1-c4-256k-int8-screened",
                 isa: "avx512", min_ram_mib: 61440, context: 262144, concurrency: 4,
-                host_free: 57744515072, engine: CPU_ENGINE,
+                host_free: 58593513472, engine: CPU_ENGINE,
             },
             CpuSetting {
                 file: "linux-cpu-avx2-qwen36-35b-a3b-groupwise-int.json",
@@ -1235,7 +1235,7 @@ mod tests {
 
     /// The CPU image (GINFER_CUDA=OFF) of the NEW-ENGINE-BUNDLE commit; host minima from each smoke.
     const CPU_ENGINE: &str = "2d54a4e318079fe0ac18c125992fb83a0f66fc24";
-    const CPU_AMX_HOST_FREE: u64 = 0;
+    const CPU_AMX_HOST_FREE: u64 = 705639821312;
     const CPU_AVX2_HOST_FREE: u64 = 15864188928;
 
     #[test]
