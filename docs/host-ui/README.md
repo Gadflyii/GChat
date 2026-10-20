@@ -7056,3 +7056,22 @@ radios were already 3.86 and 4.97. Images and numbers:
 shipped stylesheet in the WebView2 engine, not the Tauri window, and no signed-in
 Workspace session; those two limits remain. Focused test
 `native-control-theme.test.ts` pins the border; ONE `make verify` is on the branch.
+
+## Package hashing speed — Claude, October 20
+
+`GCHAT-IMPORT-HASH-SPEED`. The one-time SHA-256 of an imported package
+(`payload_verification::hash_payload_controlled`, also used by verification) ran at 347-412 MB/s
+on S1 while `sha256sum` ran at about 1 GB/s on the same 10.7 GB package (483343c2).
+
+Cause (measured on S1, page cache evicted before each run, same file): reads alone run at 2.1 GB/s.
+The hash was the limit: the release profile builds with `opt-level = "z"`, and under it the `sha2`
+0.10.9 SHA-NI path runs at 426 MB/s; at `opt-level = 3` it runs at 1265 MB/s. The old loop also read
+1 MiB and hashed in turn (322 MB/s end to end).
+
+Fix: `[profile.release.package.sha2] opt-level = 3` in `src-tauri/Cargo.toml` (this crate only; no new
+crate, hardware path chosen by the crate's runtime CPU detection), and a reader thread that fills four
+8 MiB buffers ahead of the hasher. The digest, receipt format, cancellation and progress (now every
+8 MiB) are unchanged. S1 real package through `identify_controlled`: 1255 MB/s, 8.5 s (was 33.1 s
+for the same loop and profile); `sha256sum` 10.6 s; digest equal to `sha256sum`
+(`483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4`). Windows native timing needs a
+Windows host build and is not measured here.

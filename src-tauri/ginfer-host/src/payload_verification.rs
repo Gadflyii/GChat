@@ -200,27 +200,75 @@ fn hash_payload(file: &mut File) -> Result<String, String> {
     hash_payload_controlled(file, bytes, &|| false, &|_, _| {})
 }
 
+/// Read buffers in flight between the reader thread and the hasher.
+const HASH_BUFFERS: usize = 4;
+const HASH_BUFFER_BYTES: usize = 8 * 1024 * 1024;
+
+/// SHA-256 of the file from its current position. A reader thread fills large
+/// buffers ahead of the hasher so disk reads and hashing overlap; the digest
+/// is still one sequential SHA-256 (hardware SHA instructions where the CPU
+/// has them, via the sha2 crate's runtime detection). Cancellation and
+/// progress stay on the calling thread.
 fn hash_payload_controlled(
     file: &mut File,
     bytes: u64,
     cancelled: &impl Fn() -> bool,
     progress: &impl Fn(u64, u64),
 ) -> Result<String, String> {
-    let mut digest = Sha256::new();
-    let mut buffer = vec![0; 1024 * 1024];
-    let mut completed = 0;
-    loop {
-        check_cancelled(cancelled)?;
-        let read = file.read(&mut buffer).map_err(|e| e.to_string())?;
-        check_cancelled(cancelled)?;
-        if read == 0 {
-            return Ok(hex::encode(digest.finalize()));
-        }
-        digest.update(&buffer[..read]);
-        completed += read as u64;
-        progress(completed, bytes);
-        check_cancelled(cancelled)?;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::mpsc::sync_channel;
+    let stop = AtomicBool::new(false);
+    let (full_tx, full_rx) = sync_channel::<Result<(Vec<u8>, usize), String>>(HASH_BUFFERS);
+    let (free_tx, free_rx) = sync_channel::<Vec<u8>>(HASH_BUFFERS);
+    for _ in 0..HASH_BUFFERS {
+        free_tx
+            .send(vec![0; HASH_BUFFER_BYTES])
+            .map_err(|e| e.to_string())?;
     }
+    std::thread::scope(|scope| {
+        let stop = &stop;
+        scope.spawn(move || {
+            while let Ok(mut buffer) = free_rx.recv() {
+                if stop.load(Ordering::Relaxed) {
+                    return;
+                }
+                let read = loop {
+                    match file.read(&mut buffer) {
+                        Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                        other => break other,
+                    }
+                };
+                let last = matches!(read, Ok(0) | Err(_));
+                let message = read.map(|n| (buffer, n)).map_err(|e| e.to_string());
+                if full_tx.send(message).is_err() || last {
+                    return;
+                }
+            }
+        });
+        let result = (|| {
+            let mut digest = Sha256::new();
+            let mut completed = 0;
+            loop {
+                check_cancelled(cancelled)?;
+                let (buffer, read) = full_rx
+                    .recv()
+                    .map_err(|_| "payload reader stopped".to_string())??;
+                check_cancelled(cancelled)?;
+                if read == 0 {
+                    return Ok(hex::encode(digest.finalize()));
+                }
+                digest.update(&buffer[..read]);
+                let _ = free_tx.send(buffer);
+                completed += read as u64;
+                progress(completed, bytes);
+                check_cancelled(cancelled)?;
+            }
+        })();
+        stop.store(true, Ordering::Relaxed);
+        drop(free_tx);
+        drop(full_rx);
+        result
+    })
 }
 
 fn check_cancelled(cancelled: &impl Fn() -> bool) -> Result<(), String> {
@@ -452,7 +500,7 @@ mod tests {
     #[test]
     fn cancellation_after_a_chunk_stops_reads_without_a_receipt() {
         let (_directory, path, _) = fixture();
-        let payload = vec![42_u8; 3 * 1024 * 1024];
+        let payload = vec![42_u8; 3 * HASH_BUFFER_BYTES];
         std::fs::write(&path, &payload).unwrap();
         let cancelled = Cell::new(false);
         let progress = RefCell::new(Vec::new());
@@ -475,15 +523,51 @@ mod tests {
             *progress.borrow(),
             vec![
                 (0, payload.len() as u64),
-                (1024 * 1024, payload.len() as u64)
+                (HASH_BUFFER_BYTES as u64, payload.len() as u64)
             ]
+        );
+    }
+
+    #[test]
+    fn overlapped_hash_matches_one_shot_digest_across_buffer_boundaries() {
+        let (_directory, path, _) = fixture();
+        let payload: Vec<u8> = (0..(2 * HASH_BUFFER_BYTES + 12_345))
+            .map(|i| (i.wrapping_mul(31) >> 3) as u8)
+            .collect();
+        std::fs::write(&path, &payload).unwrap();
+        let mut file = File::open(&path).unwrap();
+        assert_eq!(
+            hash_payload(&mut file).unwrap(),
+            hex::encode(Sha256::digest(&payload))
+        );
+        std::fs::write(&path, b"").unwrap();
+        let mut empty = File::open(&path).unwrap();
+        assert_eq!(hash_payload(&mut empty).unwrap(), hex::encode(Sha256::digest(b"")));
+    }
+
+    /// Manual: GINFER_HASH_FILE=<package> cargo test --release -p ginfer-host
+    /// real_package_digest -- --ignored --nocapture; compare with sha256sum.
+    #[test]
+    #[ignore]
+    fn real_package_digest() {
+        let path = std::env::var("GINFER_HASH_FILE").expect("GINFER_HASH_FILE");
+        let started = std::time::Instant::now();
+        let record = identify_controlled(Path::new(&path), || false, |_, _| {})
+            .unwrap()
+            .unwrap();
+        let seconds = started.elapsed().as_secs_f64();
+        println!(
+            "sha256={} {:.1} MB/s in {:.2}s",
+            record.sha256,
+            record.fingerprint.bytes as f64 / seconds / 1e6,
+            seconds
         );
     }
 
     #[test]
     fn controlled_progress_reports_real_read_bytes() {
         let (_directory, path, _) = fixture();
-        let payload = vec![42_u8; 2 * 1024 * 1024 + 8];
+        let payload = vec![42_u8; 2 * HASH_BUFFER_BYTES + 8];
         std::fs::write(&path, &payload).unwrap();
         let sha256 = hex::encode(Sha256::digest(&payload));
         let total = payload.len() as u64;
@@ -503,8 +587,8 @@ mod tests {
             *progress.borrow(),
             vec![
                 (0, total),
-                (1024 * 1024, total),
-                (2 * 1024 * 1024, total),
+                (HASH_BUFFER_BYTES as u64, total),
+                (2 * HASH_BUFFER_BYTES as u64, total),
                 (total, total),
             ]
         );
