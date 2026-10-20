@@ -51,6 +51,7 @@ export function normalizeGinferConfig(config: any): GinferConfig {
     max_concurrency: asNumber(value.max_concurrency),
     no_cuda_graph: asBool(value.no_cuda_graph),
     ...(value.gpu_uuids === undefined ? {} : { gpu_uuids: [...value.gpu_uuids] }),
+    ...(value.device === 'gpu' || value.device === 'cpu' ? { device: value.device } : {}),
   }
 }
 

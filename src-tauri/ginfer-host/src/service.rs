@@ -122,6 +122,12 @@ pub struct Host {
     pub gpus: Vec<Gpu>,
     pub cuda_visible_gpu_uuids: Vec<String>,
     pub gpu_device_orders: GpuDeviceOrders,
+    /// Processor path and RAM for the CPU device, detected once at startup.
+    pub cpu: crate::cpu_host::CpuFacts,
+    /// Why no NVIDIA graphics card is usable, when the inventory could not run.
+    gpu_inventory_note: std::sync::RwLock<Option<String>>,
+    /// `ginfer-serve --capabilities`, when the installed Engine provides it.
+    engine_capabilities: std::sync::RwLock<Option<crate::engine_host::EngineCapabilities>>,
     pub boot_id: Uuid,
     pub revision: Arc<AtomicU64>,
     pub directory: PathBuf,
@@ -343,6 +349,21 @@ fn startup_quote_marker(instance_id: Uuid, model_id: &str, rank: &serde_json::Va
 }
 
 impl Host {
+    /// A host with no usable NVIDIA driver still serves models on the CPU device.
+    pub fn set_gpu_inventory_note(&self, note: Option<String>) {
+        *self.gpu_inventory_note.write().unwrap_or_else(|e| e.into_inner()) = note;
+    }
+    pub fn set_engine_capabilities(&self, capabilities: Option<crate::engine_host::EngineCapabilities>) {
+        *self.engine_capabilities.write().unwrap_or_else(|e| e.into_inner()) = capabilities;
+    }
+    /// Devices this package may use and, when the Engine refuses the CPU, its typed reason.
+    fn package_devices(&self, metadata: &crate::engine_inventory::ArtifactMetadata) -> (Vec<&'static str>, Option<serde_json::Value>) {
+        let capabilities = self.engine_capabilities.read().unwrap_or_else(|e| e.into_inner());
+        match capabilities.as_ref().and_then(|c| c.devices(&metadata.identity, metadata.tp_size).map(|d| (d, c.cpu_reason(&metadata.identity)))) {
+            Some(found) => found,
+            None => (crate::engine_host::target_devices(&metadata.identity), None),
+        }
+    }
     pub async fn open(
         directory: PathBuf,
         name: String,
@@ -538,6 +559,9 @@ impl Host {
             cuda_visible_gpu_uuids,
             gpu_device_orders: device_orders,
             gpus,
+            cpu: crate::cpu_host::detect(),
+            gpu_inventory_note: std::sync::RwLock::new(None),
+            engine_capabilities: std::sync::RwLock::new(None),
             boot_id: Uuid::new_v4(),
             revision,
             directory,
@@ -665,7 +689,7 @@ impl Host {
         let inventory = self.inventory.read().await.clone();
         let mut recipes = Vec::new();
         for request in saved {
-            if !matches!(request.options.spec.as_str(), "auto" | "dflash")
+            if request.options.is_cpu() || !matches!(request.options.spec.as_str(), "auto" | "dflash")
                 || !matches!(request.options.draft_policy.as_str(), "auto" | "adaptive")
                 || request.options.draft_tokens != 0
                 || !inventory.iter().any(|model| model.id == request.model_id && model.metadata.draft_tp > 0)
@@ -1165,9 +1189,10 @@ impl Host {
                     profile.compute_capability.as_str(),
                     profile.min_memory_mib_per_gpu,
                     profile.tp,
+                    profile.cpu.clone(),
                 )).or_insert_with(|| (
-                    serde_json::json!(profile.gpu_groups(&self.gpus, &Default::default())),
-                    serde_json::json!(profile.gpu_groups(&self.gpus, &Default::default())),
+                    serde_json::json!(profile.launch_groups(&self.gpus, &Default::default(), &self.cpu)),
+                    serde_json::json!(profile.launch_groups(&self.gpus, &Default::default(), &self.cpu)),
                 ));
                 for model in matching {
                     available_profiles
@@ -1246,10 +1271,24 @@ impl Host {
             "first_run":{"complete":first_run_complete},
             "draft_width_calibrations":self.draft_width.status(),
             "gpus":self.gpus,"cuda_visible_gpu_uuids":self.cuda_visible_gpu_uuids,"gpu_device_orders":self.gpu_device_orders,"models":models,
+            "cpu":{"model_name":self.cpu.model_name,"isa_path":self.cpu.isa_path,
+                "label":self.cpu.isa_path.map(crate::cpu_host::isa_label),
+                "logical_cpus":self.cpu.logical_cpus,"total_ram_bytes":self.cpu.total_ram_bytes,
+                "gpu_inventory_note":self.gpu_inventory_note.read().unwrap_or_else(|e| e.into_inner()).clone(),
+                "engine_cpu_host":self.engine_capabilities.read().unwrap_or_else(|e| e.into_inner()).as_ref().map(|c| c.0["cpu_host"].clone())},
             "inventory_errors":*self.inventory_errors.read().await,
             "profile_error":*self.profile_error.read().await,
             "model_management":{"version":1,"downloads":self.downloads.list().await,
                 "managed_root":self.downloads.root(),"engine_presets_available":engine_presets_available}});
+        if let Some(entries) = snapshot["models"].as_array_mut() {
+            for (entry, model) in entries.iter_mut().zip(&models) {
+                let (devices, reason) = self.package_devices(&model.metadata);
+                entry["devices"] = serde_json::json!(devices);
+                if let Some(reason) = reason {
+                    entry["cpu_admission"] = reason;
+                }
+            }
+        }
         snapshot["instances"] = serde_json::Value::Array(instances);
         snapshot["launch_profiles"] = serde_json::Value::Array(available_profiles);
         snapshot["max_perf_profiles"] = serde_json::Value::Array(max_perf_profiles);
@@ -1340,6 +1379,25 @@ impl Host {
                 "artifact changed since inventory scan; refresh inventory before loading".into(),
             );
         }
+        if request.options.is_cpu() {
+            if !request.gpu_uuids.is_empty() {
+                return Err("The CPU device uses no graphics cards; clear the graphics-card selection".into());
+            }
+            let (devices, reason) = self.package_devices(&metadata);
+            if !devices.contains(&"cpu") {
+                return Err(match reason {
+                    Some(reason) => crate::engine_host::cpu_admission_error(&reason),
+                    None => crate::engine_host::cpu_format_error(&metadata.identity)
+                        .unwrap_or_else(|| crate::engine_host::cpu_admission_error(&serde_json::json!({
+                            "code": crate::engine_host::NO_CPU_PROGRAM, "message": "not CPU-admitted"}))),
+                });
+            }
+            if self.cpu.isa_path.is_none() {
+                return Err(crate::engine_host::cpu_admission_error(&serde_json::json!({
+                    "code": crate::engine_host::CPU_HOST_UNSUPPORTED,
+                    "message": "the Host found no AVX2, FMA and F16C on this processor"})));
+            }
+        }
         for uuid in &request.gpu_uuids {
             let gpu = self.gpus.iter().find(|gpu| &gpu.uuid == uuid).ok_or("unknown GPU")?;
             if !metadata.identity.supports_gpu(gpu.compute_capability.as_deref())
@@ -1395,7 +1453,7 @@ impl Host {
                 request.gpu_uuids.iter().cloned().collect();
             if selected.len() != request.gpu_uuids.len()
                 || !profile
-                    .gpu_groups(&self.gpus, &Default::default())
+                    .launch_groups(&self.gpus, &Default::default(), &self.cpu)
                     .iter()
                     .any(|g| {
                         g.iter().cloned().collect::<std::collections::BTreeSet<_>>() == selected
@@ -1596,6 +1654,9 @@ impl Host {
     /// Only native acceptance in this Host process admits the selected artifact.
     pub(crate) async fn ensure_selected_profile(&self, launch: &EngineLaunch) -> Result<(), String> {
         self.stop_background_profile().await?;
+        if launch.options.is_cpu() {
+            return Ok(());
+        }
         let (job, cli, has_children) = {
             let processes = self.processes.lock().await;
             (processes.hardware_profile.clone(), processes.profiling_cli(&launch.gpu_uuids), processes.has_children())
@@ -1704,6 +1765,12 @@ impl Host {
         }
         self.stop_background_profile().await?;
         self.draft_width.cancel().await?;
+        if launch.options.is_cpu() {
+            if remaining != 1 {
+                return Err("The CPU device runs one copy of a model".into());
+            }
+            return self.quote_cpu(launch).await;
+        }
         loop {
             self.refresh_processes().await?;
             let starting = self.processes.lock().await.instances().any(|instance|
@@ -1739,6 +1806,23 @@ impl Host {
             Some(quote.kv_budget(launch, remaining)?)
         };
         Ok((value, kv_arena_bytes))
+    }
+    /// The Engine plans CPU memory itself: AUTO K/V stays automatic and the plan must fit.
+    async fn quote_cpu(&self, launch: &EngineLaunch) -> Result<(serde_json::Value, Option<u64>), String> {
+        let mut command = self.processes.lock().await.startup_quote_command(launch, None)?;
+        let output = tokio::time::timeout(Duration::from_secs(600), command.output()).await
+            .map_err(|_| "Engine startup quote timed out")?
+            .map_err(|error| format!("could not run Engine startup quote: {error}"))?;
+        if !output.status.success() {
+            let tail = &output.stderr[output.stderr.len().saturating_sub(16_384)..];
+            return Err(crate::engine_host::cpu_quote_failure(String::from_utf8_lossy(tail).trim()));
+        }
+        let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+            .map_err(|error| format!("Engine startup quote is unavailable or invalid; update the Engine runtime: {error}"))?;
+        let quote: crate::engine_host::CpuStartupQuote = serde_json::from_value(value.clone())
+            .map_err(|error| format!("Engine CPU startup quote is unavailable or invalid; update the Engine runtime: {error}"))?;
+        quote.admit(launch)?;
+        Ok((value, launch.options.kv_arena_bytes))
     }
     async fn quote(&self, request: LaunchRequest, remaining: u32) -> Result<serde_json::Value, String> {
         let _lifecycle = self.lifecycle.lock().await;
@@ -2596,6 +2680,7 @@ impl Host {
                     .await
                     .profiles
                     .values()
+                    .filter(|profile| !profile.options.is_cpu())
                     .map(|profile| profile.gpu_uuids.clone())
                     .collect();
                 let processes = self.processes.lock().await;
@@ -4229,6 +4314,7 @@ time.sleep(60)
             compute_capability: "12.0".into(),
             vram_tier_gib: 32,
             min_memory_mib_per_gpu: 32606,
+            cpu: None,
             max_context: 131072,
             concurrency: 8,
             options: LaunchOptions {
@@ -4243,6 +4329,7 @@ time.sleep(60)
                 engine_revision: "6b85ecf77da129fe332818b8bcaec9467b56bdaa".into(),
                 free_bytes_per_gpu: Some(373293056),
                 full_context_requests: 0,
+                host_free_bytes: None,
                 calculation: None,
                 smoke_requests: Some(8),
             },
@@ -6743,6 +6830,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             compute_capability: "12.0".into(),
             vram_tier_gib: 32,
             min_memory_mib_per_gpu: 32000,
+            cpu: None,
             max_context: 8192,
             concurrency: 4,
             options: LaunchOptions {
@@ -6757,6 +6845,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
                 engine_revision: "fixture".into(),
                 free_bytes_per_gpu: Some(crate::launch_profiles::HEADROOM_BYTES),
                 full_context_requests: 4,
+                host_free_bytes: None,
             },
         };
         qualified.validate().unwrap();

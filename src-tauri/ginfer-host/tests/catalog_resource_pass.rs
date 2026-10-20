@@ -85,12 +85,12 @@ fn catalog_resource_pass() {
                 identity: ArtifactIdentity { model_id:model.into(), weights_id:"nvfp4".into() },
                 artifact_sha256: "a".repeat(64), artifact_bytes:size, tp, draft_tp:0,
                 gpu_name: "Fixture GPU".into(), compute_capability:"12.0".into(),
-                vram_tier_gib:32, min_memory_mib_per_gpu:32000, max_context:65536, concurrency:4,
+                vram_tier_gib:32, min_memory_mib_per_gpu:32000, cpu: None, max_context:65536, concurrency:4,
                 options: LaunchOptions::default(),
                 qualification: Qualification {
                     tier: QualificationTier::FullContextTested, evidence:"synthetic only".into(),
                     engine_revision:"fixture".into(), free_bytes_per_gpu:Some(HEADROOM_BYTES),
-                    full_context_requests:4, calculation:None, smoke_requests:None,
+                    full_context_requests:4, host_free_bytes:None, calculation:None, smoke_requests:None,
                 },
             };
             profile.validate().unwrap();
