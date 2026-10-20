@@ -1446,7 +1446,7 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
             artifact.to_string_lossy().into_owned(),
             GinferConfig {
                 kv_arena_bytes: (1_u64 << 30).to_string(),
-                max_context: 0, max_concurrency: 0, ..config
+                max_context: 0, max_concurrency: 0, ..config.clone()
             }, 5,
         ).await.unwrap();
         assert_eq!(explicit.kv_arena_bytes, (1_u64 << 30).to_string());
