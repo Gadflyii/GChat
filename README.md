@@ -114,6 +114,25 @@ inference running when it exits. One selected host coordinates shared work pools
 and client placements across workstations. See the [operator guide](docs/ginfer-manager/guide.md)
 and [current build and verification status](docs/ginfer-manager/README.md).
 
+### Closing GChat and the system tray
+
+On Windows and on a Linux desktop session, a running GChat or GInfer process always has a
+visible system tray icon, and nothing runs unseen.
+
+- Closing the window quits GChat completely unless a model is loaded, Gbot schedules or triggers
+  are enabled, a Gbot task is running, or GChat starts at sign-in. Then it hides to the tray and
+  shows one notice: "GChat is still running in the system tray because ... Right-click the tray
+  icon and choose Quit to close it."
+- The tray menu has **Open GChat**, **Open Server Manager** and **Quit GChat**. Quit stops chats,
+  the Gbot service, the model (a model that is still loading finishes loading first), then the
+  Host, and exits.
+- Gbot sign-in startup opens GChat itself, hidden in the tray, and it starts the Gbot service.
+- A tray that cannot be shown (no StatusNotifierWatcher on the Linux session bus, or the icon
+  fails to build) never leaves a hidden process behind: a sign-in start exits and logs why, and
+  closing the window always quits everything.
+- A headless Linux server (neither `DISPLAY` nor `WAYLAND_DISPLAY`) has no tray; the Host and the
+  Gbot service run there as services.
+
 ### Chat and tools
 
 Regular conversations stream through the same local engine used by the API and agent surfaces.

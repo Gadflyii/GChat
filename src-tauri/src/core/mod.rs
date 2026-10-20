@@ -18,6 +18,8 @@ pub mod ginfer_models;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod gbot;
 pub mod http;
+#[cfg(all(not(feature = "cli"), any(windows, target_os = "linux")))]
+pub mod lifecycle;
 pub mod mcp;
 #[cfg(target_os = "windows")]
 pub mod notifications;

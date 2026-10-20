@@ -222,6 +222,42 @@ pub async fn stop_configured_local_host_if_idle<R: tauri::Runtime>(
     let directory = configured_stop_directory(&configuration)?;
     client.stop_local_host_if_idle(&directory, expected_host_id).await
 }
+
+/// The running app's own Host state folder (its data folder is already chosen).
+#[cfg(any(windows, target_os = "linux"))]
+fn running_host_directory<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<std::path::PathBuf, String> {
+    let directory = crate::core::app::commands::get_jan_data_folder_path(app.clone()).join("ginfer/host");
+    if !directory.is_absolute() {
+        return Err("GChat data folder must be absolute to stop its Host".into());
+    }
+    Ok(directory)
+}
+
+/// Whether the selected desktop Host has a model loaded or loading.
+#[cfg(any(windows, target_os = "linux"))]
+pub async fn configured_local_host_has_models<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<bool, String> {
+    let Some(client) = client_slot().get() else { return Ok(false); };
+    let directory = running_host_directory(app)?;
+    client.local_host_has_models(&directory).await
+}
+
+/// Quit on Windows and Linux: unload the selected desktop Host's models
+/// gracefully, then stop the Host. Only an already selected owner is used; a
+/// missing one is a no-op and nothing is started or created.
+#[cfg(any(windows, target_os = "linux"))]
+pub async fn stop_configured_local_host_and_models<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<bool, String> {
+    let Some(client) = client_slot().get() else { return Ok(false); };
+    let directory = running_host_directory(app)?;
+    client
+        .stop_local_host_and_models(&directory, std::time::Duration::from_secs(600))
+        .await
+}
 async fn state() -> Result<ginfer_host::client::ClientViewGuard<'static>, String> {
     client().view().await
 }

@@ -58,7 +58,14 @@ pub fn run() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|_app, argv, _cwd| {
           println!("a new app instance was opened with {argv:?} and the deep link event was already triggered");
           // when defining deep link schemes at runtime, you must also check `argv` here
+          // A second launch brings back a window hidden in the tray.
+          #[cfg(any(windows, target_os = "linux"))]
+          core::lifecycle::show_main_window(_app);
         }));
+        #[cfg(any(windows, target_os = "linux"))]
+        {
+            builder = builder.manage(core::lifecycle::Lifecycle::default());
+        }
         // Linux owns its XDG autostart entry in core::system::autostart.
         // Other desktops retain the plugin after single-instance as required.
         // AppleScript mode on macOS registers a real Login Item (visible in
@@ -627,8 +634,8 @@ pub fn run() {
             store.save().expect("Failed to save store");
             // Migration completed
 
-            // Tray icon: always on for macOS (matches menu-bar product conventions);
-            // env-gated on Windows/Linux where design polish is deferred.
+            // Tray icon: always on for desktop. A process with no window must
+            // always have a visible tray icon beside it (see core::lifecycle).
             #[cfg(target_os = "macos")]
             {
                 log::info!("Enabling system tray icon (macOS)");
@@ -636,12 +643,12 @@ pub fn run() {
                     log::warn!("Failed to set up system tray: {e}");
                 }
             }
-            #[cfg(all(desktop, not(target_os = "macos")))]
-            if option_env!("ENABLE_SYSTEM_TRAY_ICON").unwrap_or("false") == "true" {
-                log::info!("Enabling system tray icon");
-                if let Err(e) = setup::setup_tray(app) {
-                    log::warn!("Failed to set up system tray: {e}");
-                }
+            #[cfg(any(windows, target_os = "linux"))]
+            if !core::lifecycle::install_tray(app) && core::lifecycle::background_launch() {
+                // Started hidden but cannot be seen: leave instead of hiding.
+                log::error!("GChat was started in the background but its tray icon is unavailable: exiting");
+                app.handle().exit(0);
+                return Ok(());
             }
 
             #[cfg(all(feature = "deep-link", any(windows, target_os = "linux")))]
@@ -673,8 +680,33 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 if let Some(window) = app.get_webview_window("main") {
-                    window.show()?;
+                    if !core::lifecycle::background_launch() {
+                        window.show()?;
+                    }
                 }
+            }
+
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    core::gbot::refresh_sign_in_entry(&handle).await;
+                });
+            }
+
+            // Sign-in startup: live in the tray and bring the Gbot service up.
+            #[cfg(any(windows, target_os = "linux"))]
+            if core::lifecycle::background_launch() {
+                #[cfg(target_os = "linux")]
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = core::gbot::start_service_for_background(&handle).await {
+                        log::warn!("Gbot service could not start at sign-in: {error}");
+                    }
+                });
             }
 
             Ok(())
@@ -698,6 +730,10 @@ pub fn run() {
             RunEvent::ExitRequested { .. } => {
                 app.state::<AppState>().agent_runs.close_admission();
                 log::info!("Application exit requested");
+                #[cfg(any(windows, target_os = "linux"))]
+                if app.state::<core::lifecycle::Lifecycle>().begin_quit() {
+                    core::lifecycle::exit_after_deadline();
+                }
             }
             RunEvent::WindowEvent {
                 label,
@@ -707,8 +743,14 @@ pub fn run() {
                 #[cfg(any(target_os = "linux", target_os = "windows"))]
                 handle_agent_window_event(&app.state::<AppState>(), &label, &window_event);
                 match window_event {
-                    tauri::WindowEvent::CloseRequested { .. } => {
+                    tauri::WindowEvent::CloseRequested { api, .. } => {
                         log::info!("Window close requested: {label}");
+                        #[cfg(any(windows, target_os = "linux"))]
+                        if label == "main" {
+                            core::lifecycle::on_main_close_requested(app, &api);
+                        }
+                        #[cfg(not(any(windows, target_os = "linux")))]
+                        let _ = api;
                     }
                     tauri::WindowEvent::Destroyed => {
                         log::info!("Window destroyed: {label}");
@@ -820,13 +862,9 @@ pub fn run() {
                             log::info!("ginfer processes cleaned up successfully");
                         }
 
-                        #[cfg(windows)]
-                        if let Err(error) = crate::core::engine_hosts::stop_configured_local_host_if_idle(
-                            &app_handle,
-                            None,
-                        ).await {
-                            log::warn!("Windows Host normal Stop on Quit was not confirmed: {error}");
-                        }
+                        // Gbot service, then the model, then the Host.
+                        #[cfg(any(windows, target_os = "linux"))]
+                        crate::core::lifecycle::stop_services(&app_handle).await;
 
                         log::info!("App cleanup completed");
                     });

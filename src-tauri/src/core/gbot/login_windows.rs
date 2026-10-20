@@ -135,7 +135,7 @@ fn command_line(bootstrap: &Bootstrap) -> Result<String, String> {
     let mut args = vec![quote(bootstrap.executable.as_os_str())?];
     args.extend(
         bootstrap
-            .arguments()
+            .sign_in_arguments()
             .iter()
             .map(|arg| quote(arg))
             .collect::<Result<Vec<_>, _>>()?,
@@ -305,12 +305,7 @@ mod tests {
         let name = entry_name(&bootstrap.data_folder).unwrap();
         assert_eq!(
             registry.get(&name).unwrap(),
-            Some(format!(
-                "\"{}\" \"--gbot-service\" \"--data-folder\" \"{}\" \"--resources\" \"{}\"",
-                bootstrap.executable.display(),
-                bootstrap.data_folder.display(),
-                bootstrap.resources.display()
-            ))
+            Some(format!("\"{}\" \"--background\"", bootstrap.executable.display()))
         );
         assert!(enabled(&bootstrap.data_folder).unwrap());
         configure_with(&bootstrap, false, true, &registry).unwrap();
@@ -494,7 +489,7 @@ mod tests {
         assert!(quote(OsStr::new("x\nother.exe")).is_err());
         let directory = tempfile::tempdir().unwrap();
         let mut bootstrap = bootstrap(directory.path());
-        bootstrap.resources = directory.path().join("x".repeat(261));
+        bootstrap.executable = directory.path().join("x".repeat(261));
         let registry = FakeRunKey::default();
         assert!(configure_with(&bootstrap, true, true, &registry)
             .unwrap_err()

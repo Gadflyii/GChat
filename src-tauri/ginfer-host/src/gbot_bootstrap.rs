@@ -137,6 +137,11 @@ pub struct Bootstrap {
     pub appimage_resources: Option<PathBuf>,
 }
 impl Bootstrap {
+    /// Sign-in startup opens GChat itself, hidden in the system tray, so that a
+    /// visible tray icon exists whenever the Gbot service is running.
+    pub fn sign_in_arguments(&self) -> Vec<OsString> {
+        vec!["--background".into()]
+    }
     pub fn arguments(&self) -> Vec<OsString> {
         let mut args = vec![
             "--gbot-service".into(),

@@ -766,6 +766,41 @@ impl Client {
         self.stop_cached_local_host_if_idle(Some(directory), expected_host_id).await
     }
 
+    /// Whether the already selected desktop Host has a model loaded or loading.
+    /// Never starts, discovers or creates anything: no selection means false.
+    pub async fn local_host_has_models(&self, directory: &Path) -> Result<bool, String> {
+        // A Host this computer already registered (for example one a previous
+        // session left running) is read from the locator, never started.
+        let _ = self.selected_local_owner().await;
+        let local = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            self.local_owner.lock(),
+        ).await.map_err(|_| "Local Host bootstrap is still in progress".to_string())?;
+        let Some(crate::local_host_registry::Owner::Desktop(host)) = &local.1 else { return Ok(false); };
+        if !crate::local_host_registry::same_directory(directory, &host.directory) {
+            return Ok(false);
+        }
+        let host = (**host).clone();
+        drop(local);
+        host.models_running().await
+    }
+
+    /// Quit: also unload the Host's models gracefully before stopping it. As with
+    /// the idle stop, an absent desktop selection is a no-op (false).
+    pub async fn stop_local_host_and_models(
+        &self,
+        directory: &Path,
+        load_wait: std::time::Duration,
+    ) -> Result<bool, String> {
+        if !directory.is_absolute() {
+            return Err("local Host state directory must be absolute".into());
+        }
+        let _ = self.selected_local_owner().await;
+        self.stop_cached_local_host_if_idle_with(Some(directory), None, |host| async move {
+            host.stop_with_models(load_wait).await
+        }).await
+    }
+
     async fn stop_cached_local_host_if_idle(
         &self,
         directory: Option<&Path>,

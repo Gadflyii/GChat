@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { useNavigate } from '@tanstack/react-router'
+import { route } from '@/constants/routes'
 import { useShallow } from 'zustand/react/shallow'
 
 import { useAppState } from '@/hooks/useAppState'
@@ -28,12 +30,12 @@ const TRAY_REFRESH_MS = 5000
  * Push live status into the desktop system tray every 5 s.
  *
  * The backing Rust command ({@link ../../../src-tauri/src/core/tray_status.rs `update_tray_status`})
- * is a no-op when the tray was never installed (desktop builds without the
- * `ENABLE_SYSTEM_TRAY_ICON` env gate), so this hook is safe to mount unconditionally
- * inside Tauri — but we still short-circuit on web, mobile, and Linux to avoid
+ * is a no-op when the tray was never installed (a desktop session with no tray), so this hook is safe to mount unconditionally
+ * inside Tauri — but we still short-circuit on web and mobile to avoid
  * unnecessary IPC chatter.
  */
 export function useTrayStatusSync(): void {
+  const navigate = useNavigate()
   const { serverStatus, activeModels } = useAppState(
     useShallow((state) => ({
       serverStatus: state.serverStatus,
@@ -53,7 +55,7 @@ export function useTrayStatusSync(): void {
   latest.current = { serverStatus, activeModels, serverPort, apiPrefix }
 
   useEffect(() => {
-    if (!IS_TAURI || !(IS_MACOS || IS_WINDOWS)) return
+    if (!IS_TAURI || !(IS_MACOS || IS_WINDOWS || IS_LINUX)) return
 
     let cancelled = false
 
@@ -118,7 +120,7 @@ export function useTrayStatusSync(): void {
   // start fails because no model is loaded the frontend will surface the
   // error the next time the user opens the app.
   useEffect(() => {
-    if (!IS_TAURI || !(IS_MACOS || IS_WINDOWS)) return
+    if (!IS_TAURI || !(IS_MACOS || IS_WINDOWS || IS_LINUX)) return
     const unlisteners: Array<() => Promise<void>> = []
     let cancelled = false
     const register = (promise: Promise<() => void>): void => {
@@ -180,9 +182,16 @@ export function useTrayStatusSync(): void {
       })
     )
 
+    // "Open Server Manager" in the tray menu opens the Engines page.
+    register(
+      listen<unknown>('tray-open-manager', () => {
+        void navigate({ to: route.engines.index })
+      })
+    )
+
     return () => {
       cancelled = true
       unlisteners.splice(0).forEach((detach) => void detach())
     }
-  }, [])
+  }, [navigate])
 }

@@ -166,6 +166,24 @@ impl LocalHost {
         }).await.map_err(|_| "The selected Host did not confirm normal Stop in time; status is unknown and no forced stop was sent".to_string())?
     }
 
+    /// True while any model instance is loaded or loading on this managed Host.
+    pub async fn models_running(&self) -> Result<bool, String> {
+        tokio::time::timeout(Duration::from_secs(3), async {
+            let address = management_address(&self.directory, self.listen)?;
+            let control = LocalControl::open(&self.directory, &format!("https://{address}"))?;
+            let snapshot = control.snapshot().await?;
+            Ok(snapshot["instances"].as_array().into_iter().flatten().any(|instance|
+                matches!(instance["status"].as_str(), Some("ready" | "starting"))))
+        }).await.map_err(|_| "The Host did not report its models in time".to_string())?
+    }
+
+    /// Quit path: stop this managed Host's models gracefully, then the Host.
+    pub async fn stop_with_models(&self, load_wait: Duration) -> Result<serde_json::Value, String> {
+        let address = management_address(&self.directory, self.listen)?;
+        let control = LocalControl::open(&self.directory, &format!("https://{address}"))?;
+        control.stop_models_then_host(&self.directory, load_wait).await
+    }
+
     pub async fn ensure_shared_running(self) -> Result<LocalControl, String> {
         crate::local_host_registry::resolve(Some(
             crate::local_host_registry::Owner::Desktop(Box::new(self)),

@@ -542,6 +542,128 @@ impl GbotState {
         }
     }
 }
+/// Sign-in startup: GChat opens hidden in the tray and brings the local Gbot
+/// service up, so the service never runs without a tray icon beside it.
+#[cfg_attr(feature = "cli", allow(dead_code))]
+pub(crate) async fn start_service_for_background<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    #[cfg(any(target_os = "linux", windows))]
+    {
+        let state = app.state::<GbotState>();
+        let root = state.root(app).await?;
+        if service_target(&root)? != ServiceTarget::Local {
+            return Ok(());
+        }
+        let resources = app.path().resource_dir().map_err(|e| e.to_string())?;
+        background::ensure_running(&root, &resources).await.map(|_| ())
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}
+
+/// Rewrites a sign-in entry saved by an older build (it started the windowless
+/// Gbot service directly) to the current tray-owning form. No-op when sign-in
+/// startup is off or the service is paired elsewhere.
+#[cfg_attr(feature = "cli", allow(dead_code))]
+pub(crate) async fn refresh_sign_in_entry<R: Runtime>(app: &AppHandle<R>) {
+    #[cfg(any(target_os = "linux", windows))]
+    {
+        let refreshed = async {
+            #[cfg(windows)]
+            let _data_folder = crate::core::engine_hosts::data_folder_access().read().await;
+            let root = app.state::<GbotState>().root(app).await?;
+            let target = service_target(&root)?;
+            if !login::enabled(&root)? || target != ServiceTarget::Local {
+                return Ok::<_, String>(());
+            }
+            let bootstrap = ginfer_host::gbot_bootstrap::Bootstrap::capture(
+                &root,
+                &app.path().resource_dir().map_err(|e| e.to_string())?,
+            )?;
+            login::reconcile(&bootstrap, true)
+        }
+        .await;
+        if let Err(error) = refreshed {
+            log::warn!("Gbot sign-in entry was not refreshed: {error}");
+        }
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
+    let _ = app;
+}
+
+/// Quit: stop the local Gbot service (a no-op when none is running).
+#[cfg_attr(feature = "cli", allow(dead_code))]
+pub(crate) async fn stop_service_for_quit<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    // Quit must not wait for first-run resource installation: with no service
+    // directory or no live owner there is nothing to stop.
+    let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
+    let directory = root.join("gbot");
+    if !directory.is_dir()
+        || ginfer_host::service_owner::ServiceOwner::acquire(&directory).is_ok()
+    {
+        return Ok(());
+    }
+    app.state::<GbotState>().quit(app).await
+}
+
+/// Whether the local Gbot service is doing background work that should survive
+/// closing the window: sign-in startup is on, a schedule or trigger is enabled,
+/// or a task is running. Reads saved state only; it never contacts the service.
+#[cfg_attr(feature = "cli", allow(dead_code))]
+pub(crate) async fn background_work_active<R: Runtime>(app: &AppHandle<R>) -> bool {
+    let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
+    tokio::task::spawn_blocking(move || background_work_in(&root))
+        .await
+        .unwrap_or(false)
+}
+
+fn background_work_in(root: &Path) -> bool {
+    if service_target(root).map_or(true, |target| target != ServiceTarget::Local) {
+        return false;
+    }
+    #[cfg(any(target_os = "linux", windows))]
+    if login::enabled(root).unwrap_or(false) {
+        return true;
+    }
+    // Only a running service can fire schedules or run tasks.
+    if ginfer_host::service_owner::ServiceOwner::acquire(&root.join("gbot")).is_ok() {
+        return false;
+    }
+    #[derive(Deserialize)]
+    struct Schedules {
+        #[serde(default)]
+        schedules: Vec<ScheduleFlag>,
+    }
+    #[derive(Deserialize)]
+    struct ScheduleFlag {
+        #[serde(default)]
+        enabled: bool,
+    }
+    #[derive(Deserialize)]
+    struct TaskFlag {
+        state: Option<String>,
+    }
+    let tasks = root.join("gbot/tasks");
+    if std::fs::read(tasks.join("schedules.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Schedules>(&bytes).ok())
+        .is_some_and(|saved| saved.schedules.iter().any(|schedule| schedule.enabled))
+    {
+        return true;
+    }
+    std::fs::read_dir(&tasks).into_iter().flatten().flatten().any(|entry| {
+        let path = entry.path();
+        path.extension().is_some_and(|extension| extension == "json")
+            && path.file_name().is_some_and(|name| name != "schedules.json")
+            && std::fs::read(&path)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<TaskFlag>(&bytes).ok())
+                .is_some_and(|task| task.state.as_deref() == Some("running"))
+    })
+}
+
 #[tauri::command]
 pub async fn gbot_service_target<R: Runtime>(app: AppHandle<R>) -> Result<ServiceTarget, String> {
     service_target(&crate::core::app::commands::get_jan_data_folder_path(app))
@@ -1266,5 +1388,41 @@ mod tests {
         }
         assert!(!supported_route("/v1/setup/kvm/exec"));
         assert!(!supported_route("/v1/schedules/dispatch"));
+    }
+}
+
+#[cfg(test)]
+mod background_tests {
+    use super::*;
+
+    fn write(path: &Path, text: &str) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn only_a_running_service_with_enabled_work_keeps_gchat_in_the_tray() {
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path();
+        let tasks = root.join("gbot/tasks");
+        write(&tasks.join("schedules.json"), r#"{"schedules":[{"enabled":true}]}"#);
+        // No service is running, so nothing is scheduled to fire.
+        assert!(!background_work_in(root));
+        // A running service owns the lock.
+        let _owner = ginfer_host::service_owner::ServiceOwner::acquire(&root.join("gbot")).unwrap();
+        assert!(background_work_in(root));
+        write(&tasks.join("schedules.json"), r#"{"schedules":[{"enabled":false}]}"#);
+        assert!(!background_work_in(root));
+        write(&tasks.join("a.json"), r#"{"state":"completed"}"#);
+        assert!(!background_work_in(root));
+        write(&tasks.join("b.json"), r#"{"state":"running"}"#);
+        assert!(background_work_in(root));
+        // A paired service is not this computer's background work.
+        save_service_target(
+            root,
+            &ServiceTarget::PairedHost { host_id: uuid::Uuid::new_v4() },
+        )
+        .unwrap();
+        assert!(!background_work_in(root));
     }
 }

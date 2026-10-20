@@ -129,13 +129,13 @@ fn reconcile_at(config: &Path, bootstrap: &Bootstrap, run: bool) -> Result<(), S
     let mut args = vec![quote(bootstrap.executable.as_os_str())?];
     args.extend(
         bootstrap
-            .arguments()
+            .sign_in_arguments()
             .iter()
             .map(|arg| quote(arg))
             .collect::<Result<Vec<_>, _>>()?,
     );
     let entry = format!(
-        "[Desktop Entry]\nType=Application\nName=Gbot background service\nExec={}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n",
+        "[Desktop Entry]\nType=Application\nName=GChat (background)\nExec={}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n",
         args.join(" ")
     );
     write_private(&path, entry.as_bytes())
@@ -168,12 +168,8 @@ mod tests {
         std::fs::write(&other, "keep").unwrap();
         let entry = entry_path(directory.path(), &bootstrap.data_folder);
         let content = std::fs::read_to_string(&entry).unwrap();
-        assert!(content.contains("Exec=\"/opt/GChat/GChat.AppImage\" \"--gbot-service\""));
-        assert!(content.contains(&format!(
-            "\"--data-folder\" \"{}\"",
-            bootstrap.data_folder.display()
-        )));
-        assert!(content.contains("\"--appimage-resources\" \"usr/lib/GChat/resources\""));
+        assert!(content.contains("Exec=\"/opt/GChat/GChat.AppImage\" \"--background\"\n"));
+        assert!(!content.contains("--gbot-service"));
         assert!(!content.contains("/tmp/.mount"));
         assert!(!content.contains("credential"));
         reconcile_at(directory.path(), &bootstrap, false).unwrap();
@@ -197,11 +193,7 @@ mod tests {
         let result = relocate_at(&config, &old.data_folder, &updated, || {
             assert!(!old_entry.exists());
             let content = std::fs::read_to_string(&new_entry).unwrap();
-            assert!(content.contains("Exec=\"/opt/GChat/GChat.AppImage\" \"--gbot-service\""));
-            assert!(content.contains(&format!(
-                "\"--data-folder\" \"{}\"",
-                updated.data_folder.display()
-            )));
+            assert!(content.contains("Exec=\"/opt/GChat/GChat.AppImage\" \"--background\""));
             assert!(!content.contains(&old.data_folder.display().to_string()));
             assert_eq!(
                 std::fs::read(&unrelated).unwrap(),

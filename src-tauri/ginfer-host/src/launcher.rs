@@ -694,6 +694,54 @@ impl LocalControl {
         self.stop_host(directory, true).await
     }
 
+    /// Quit: stop every model instance gracefully, then the Host itself. A model
+    /// that is still loading is allowed to finish loading first, so Quit never
+    /// kills a load part-way; the wait is bounded by `load_wait`.
+    pub async fn stop_models_then_host(
+        &self,
+        directory: &Path,
+        load_wait: Duration,
+    ) -> Result<Value, String> {
+        let status = |instance: &Value| instance["status"].as_str().unwrap_or("").to_owned();
+        let deadline = tokio::time::Instant::now() + load_wait;
+        loop {
+            let snapshot = self.snapshot().await?;
+            let loading = snapshot["instances"].as_array().into_iter().flatten()
+                .any(|instance| status(instance) == "starting");
+            if !loading || tokio::time::Instant::now() >= deadline {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        let snapshot = self.snapshot().await?;
+        for instance in snapshot["instances"].as_array().into_iter().flatten() {
+            if !matches!(status(instance).as_str(), "ready" | "starting") {
+                continue;
+            }
+            let Some(id) = instance["instance_id"].as_str() else { continue };
+            let path = format!("/host/v1/instances/{id}/stop");
+            let body = |force: bool| json!({"expected_session_id":instance["session_id"],"force":force});
+            if let Err(error) = self.request(&path, Some(body(false))).await {
+                eprintln!("Quit: graceful model stop was refused ({error}); forcing it");
+                self.request(&path, Some(body(true))).await?;
+            }
+        }
+        let stopped = tokio::time::Instant::now() + Duration::from_secs(60);
+        loop {
+            let snapshot = self.snapshot().await?;
+            let running = snapshot["instances"].as_array().into_iter().flatten()
+                .any(|instance| matches!(status(instance).as_str(), "ready" | "starting" | "stopping"));
+            if !running {
+                break;
+            }
+            if tokio::time::Instant::now() >= stopped {
+                return Err("A model did not stop in time; the Host was left running".into());
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        self.stop_host(directory, false).await
+    }
+
     pub(crate) async fn stop_host_for_relocation(&self, directory: &Path) -> Result<Value, String> {
         self.stop_host(directory, false).await
     }

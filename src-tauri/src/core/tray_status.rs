@@ -432,7 +432,7 @@ pub async fn update_tray_status(app: AppHandle, payload: TrayStatusPayload) -> R
     let state = app.state::<crate::core::state::AppState>();
     let guard = state.tray_handles.lock().map_err(|e| e.to_string())?;
     let Some(handles) = guard.as_ref() else {
-        // Tray not installed (non-macOS without ENABLE_SYSTEM_TRAY_ICON, or setup failed).
+        // Tray not installed (headless session, no watcher, or setup failed).
         return Ok(());
     };
 
@@ -552,7 +552,7 @@ pub async fn update_tray_status(_payload: serde_json::Value) -> Result<(), Strin
 ///
 /// On macOS this shells out to `pbcopy` to avoid pulling in
 /// `tauri-plugin-clipboard-manager` purely for this one feature. On other
-/// desktops the tray is env-gated and currently opt-in, so this path stays
+/// desktops the tray is always installed, so this path stays
 /// a best-effort fallback there.
 #[cfg(desktop)]
 pub fn write_clipboard(text: &str) -> Result<(), String> {

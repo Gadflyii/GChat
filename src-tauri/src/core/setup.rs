@@ -855,7 +855,14 @@ pub fn setup_tray(app: &App) -> tauri::Result<TrayIcon> {
     )?;
 
     let show_i = MenuItem::with_id(app.handle(), "open", "Open GChat", true, None::<&str>)?;
-    let quit_i = MenuItem::with_id(app.handle(), "quit", "Quit", true, None::<&str>)?;
+    let manager_i = MenuItem::with_id(
+        app.handle(),
+        "open_manager",
+        "Open Server Manager",
+        true,
+        None::<&str>,
+    )?;
+    let quit_i = MenuItem::with_id(app.handle(), "quit", "Quit GChat", true, None::<&str>)?;
 
     //* Three separators carve the menu into Pico-style sections so the rows
     //  feel grouped instead of one long list.
@@ -877,6 +884,7 @@ pub fn setup_tray(app: &App) -> tauri::Result<TrayIcon> {
             &status_ram_bar,
             &sep_before_actions,
             &show_i,
+            &manager_i,
             &quit_i,
         ],
     )?;
@@ -907,6 +915,7 @@ pub fn setup_tray(app: &App) -> tauri::Result<TrayIcon> {
     //* Иконка в строке меню macOS: отдельный asset; icon_as_template(false) — показывать PNG как есть
     //  Single-click opens the status menu (Pico-style). The right-click menu is the same.
     let mut tray_builder = TrayIconBuilder::with_id("tray")
+        .tooltip("GChat")
         .menu(&menu)
         .show_menu_on_left_click(true);
 
@@ -938,6 +947,21 @@ pub fn setup_tray(app: &App) -> tauri::Result<TrayIcon> {
                     let _ = window.set_focus();
                 }
             }
+            // The Server Manager is the Engines page: show the window, then ask
+            // the frontend to open it.
+            "open_manager" => {
+                #[cfg(target_os = "macos")]
+                let _ = app.show();
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+                if let Err(e) = app.emit("tray-open-manager", ()) {
+                    log::warn!("Failed to emit tray-open-manager: {e}");
+                }
+            }
+            // Quit runs the ordered shutdown: chats, Gbot, model, Host, then exit.
             "quit" => {
                 app.exit(0);
             }
