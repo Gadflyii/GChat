@@ -52,6 +52,19 @@ pub struct Startup {
     pub automatic: bool,
 }
 
+/// For settings GInfer chose itself: the longest standard context below `current` that the
+/// startup check says fits, when `current` does not fit.
+fn automatic_shorter_context(quote: &Value, current: u32) -> Option<u32> {
+    if quote["fit"]["fits"] != false {
+        return None;
+    }
+    quote["fit"]["max_context"]
+        .as_u64()
+        .map(|n| n.min(u64::from(u32::MAX)) as u32)
+        .and_then(crate::startup_fit::standard_context)
+        .filter(|context| *context < current)
+}
+
 fn stage(progress: &Progress, profiled: bool, reviewed: bool, jobs: &[Download]) -> &'static str {
     if progress.complete {
         return "complete";
@@ -1338,11 +1351,7 @@ impl Host {
             let mut quoted = self.quote_first_run(profile).await;
             // Without tested settings, the longest standard context that fits is chosen.
             let shorter = match &quoted {
-                Ok(quote) if profile.automatic && quote["fit"]["fits"] == false => quote["fit"]["max_context"]
-                    .as_u64()
-                    .map(|n| n.min(u64::from(u32::MAX)) as u32)
-                    .and_then(crate::startup_fit::standard_context)
-                    .filter(|context| *context < profile.request.max_context),
+                Ok(quote) if profile.automatic => automatic_shorter_context(quote, profile.request.max_context),
                 _ => None,
             };
             if let Some(context) = shorter {
@@ -1379,6 +1388,18 @@ mod tests {
     use super::*;
     use sha2::{Digest, Sha256};
     use std::time::Duration;
+
+    #[test]
+    fn automatic_startup_settings_take_the_longest_standard_context_that_fits() {
+        let fits = json!({"fit":{"fits":true,"max_context":null}});
+        assert_eq!(automatic_shorter_context(&fits, 262144), None);
+        let short = json!({"fit":{"fits":false,"max_context":169984}});
+        assert_eq!(automatic_shorter_context(&short, 262144), Some(131072));
+        // Nothing shorter fits, or no fitting length is known: the check reports the shortfall.
+        assert_eq!(automatic_shorter_context(&json!({"fit":{"fits":false,"max_context":4096}}), 262144), None);
+        assert_eq!(automatic_shorter_context(&json!({"fit":{"fits":false,"max_context":null}}), 262144), None);
+        assert_eq!(automatic_shorter_context(&short, 131072), None);
+    }
 
     fn gpu() -> Gpu {
         Gpu {
