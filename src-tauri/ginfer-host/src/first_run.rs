@@ -2725,7 +2725,7 @@ mod tests {
         assert_eq!(accepted["step"], "startup");
         host.first_run_maintenance().await.unwrap();
         let status = host.first_run_status().await.unwrap();
-        assert!(status["startup_profiles"][0]["quote"].is_object());
+        assert!(status["startup_profiles"][0]["quote"].is_object(), "{}", status["startup_profiles"]);
         assert_eq!(status["startup_profiles"][0]["max_context"], 65536);
         assert_eq!(status["startup_profiles"][0]["concurrency"], 3);
         assert!(status["startup_profiles"][0]["kv_arena_bytes"].is_null());
