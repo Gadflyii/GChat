@@ -173,7 +173,7 @@ mod tests {
         assert!(evaluate(&quote, 262144, false).fits);
         assert!(!fit.fits);
         // 15761145856 free - 9701323008 fixed - 314572800 headroom = 5745250048 bytes of K/V.
-        assert_eq!(fit.max_context, Some(5745250048 / 34603008 * 1024));
+        assert_eq!(fit.max_context, Some(169984)); // 5745250048 / 34603008 segments * 1024 tokens
         assert_eq!(fit.shortfall_bytes, Some(9701323008 + 256 * 34603008 + 314572800 - 15761145856));
         assert_eq!(fit.resource.as_deref(), Some("device-memory"));
         assert_eq!(fit.message(), "[does_not_fit] These settings need 3.2 GB more GPU memory than is free. Try a shorter context length: 169,984 tokens or less fits.");
