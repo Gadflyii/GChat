@@ -1,5 +1,32 @@
 # GInfer host UI
 
+## Flash pure 2-bit laptop and RTX 4090 launch catalogs — claude-quote-search, October 20
+
+GInfer `feat/claude-flash-consumer-profiles-20261020` adds two Linux Flash pure 2-bit `8bbb85bf`
+entries in the RTX 5090 Flash shape (screened startup, C8, INT8 KV, fixed MTP3, automatic KV with
+the 300 MiB reserve, prefill chunk 0, LFU on, 10 GiB Host headroom), at the quote-only bounds that
+equal the exhaustive search (QUOTE-ONLY-HOST-RAM), Engine `bec3a9040`; record in GInfer
+`docs/consumer-launch-profiles/README.md`.
+
+| Card | Catalog file | Entry | Context / C | Smoke |
+|---|---|---|---:|---|
+| RTX 3080 Ti Laptop 16 GB | `linux-rtx3080ti-laptop-flash-next-smol-q2g64.json` | `rtx3080ti-laptop-flash-next-smol-q2g64-tp1-c8-66k-int8-screened` | 67584 / 8 | Ready 44.1 s, 16,000 IDs exact, GPU free min 1459617792 B |
+| RTX 4090 24 GB | `linux-rtx4090-flash-next-smol-q2g64.json` | `rtx4090-flash-next-smol-q2g64-tp1-c8-137k-int8-screened` | 140288 / 8 | Ready 21.7 s, 16,000 IDs exact, GPU free min 1098907648 B |
+
+Each smoke started from the catalog file with the Host's argv (`engine_host.rs` command plus
+`LaunchOptions::args()`). The supplied-catalog regression in `ginfer-host/src/launch_profiles.rs` now
+binds every consumer Flash entry (RTX 5090, RTX 4090, laptop) through one settings table, checks
+each Flash file's exact ID set, and runs the same GPU-group selection check as the Qwen and Muse
+consumer entries. Native Windows Flash entries are out of scope.
+
+Verification (S1 CPUs 32-63, container `gchat-s1-verify:20261015`, GChat `b0ca98b9b`): the focused
+`launch_profiles` tests passed with all 54 GInfer catalogs supplied (16 passed), and ONE
+`make install-and-build && make verify` with the 37 Linux catalogs supplied passed: frontend 4000
+passed/6 skipped, extensions 128, six coverage floors, Rust 1385 passed/0 failed/31 ignored across 23
+summaries. Same environment-only settings as the Muse run (`YARN_ENABLE_IMMUTABLE_INSTALLS=false`,
+`WHISPER_DONT_GENERATE_BINDINGS=1`); a first attempt without `install-and-build` stopped at `yarn lint`
+before any check ran (no node_modules).
+
 ## Muse 2-bit mix per-class launch catalogs — claude-arch:muse-mix-profiles, October 19
 
 Ron 2026-10-19: Muse 30B 2-bit mix `9d4ca1b2` stays the shipped Muse 2-bit package; its Linux

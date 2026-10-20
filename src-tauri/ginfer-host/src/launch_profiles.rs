@@ -758,12 +758,51 @@ mod tests {
             .map(|s| s.id)
             .collect();
         let mut muse_ids = BTreeSet::new();
-        let mut consumer_flash_found = false;
-        let consumer_flash_supplied = supplied_paths.iter().any(|path| {
-            path.file_name().is_some_and(|name| {
-                name == "linux-rtx5090-flash-next-smol-q2g64.json"
+        // Flash pure 2-bit 8bbb85bf consumer entries: one screened C8 profile per card.
+        struct FlashSetting {
+            file: &'static str,
+            id: &'static str,
+            gpu: &'static str,
+            cc: &'static str,
+            tier: u32,
+            memory: u64,
+            context: u32,
+            free: u64,
+            engine: &'static str,
+        }
+        let consumer_flash_settings = [
+            FlashSetting {
+                file: "linux-rtx5090-flash-next-smol-q2g64.json",
+                id: "rtx5090-flash-next-smol-q2g64-tp1-c8-256k-int8-screened",
+                gpu: "NVIDIA GeForce RTX 5090", cc: "12.0", tier: 32, memory: 32606,
+                context: 262144, free: 1051721728,
+                engine: "aa1c480162683d6da344456e2ccf0c14d2d291a3",
+            },
+            FlashSetting {
+                file: "linux-rtx4090-flash-next-smol-q2g64.json",
+                id: "rtx4090-flash-next-smol-q2g64-tp1-c8-137k-int8-screened",
+                gpu: "NVIDIA GeForce RTX 4090", cc: "8.9", tier: 24, memory: 24564,
+                context: 140288, free: 1098907648,
+                engine: "bec3a90404b7e68d1d00dea5978ada12bdbf7f24",
+            },
+            FlashSetting {
+                file: "linux-rtx3080ti-laptop-flash-next-smol-q2g64.json",
+                id: "rtx3080ti-laptop-flash-next-smol-q2g64-tp1-c8-66k-int8-screened",
+                gpu: "NVIDIA GeForce RTX 3080 Ti Laptop GPU", cc: "8.6", tier: 16, memory: 16384,
+                context: 67584, free: 1459617792,
+                engine: "bec3a90404b7e68d1d00dea5978ada12bdbf7f24",
+            },
+        ];
+        let expected_flash_ids: BTreeSet<_> = consumer_flash_settings
+            .iter()
+            .filter(|s| {
+                supplied_paths
+                    .iter()
+                    .any(|path| path.file_name().is_some_and(|name| name == s.file))
             })
-        });
+            .map(|s| s.id)
+            .collect();
+        let mut flash_ids = BTreeSet::new();
         let screened_pro_supplied = supplied_paths.iter().any(|path| {
             path.file_name().is_some_and(|name| {
                 name == "linux-rtx-pro6000-flash-next-smol-q2g64.json"
@@ -780,6 +819,15 @@ mod tests {
             if !muse_catalog_ids.is_empty() {
                 let actual_ids: BTreeSet<_> = profiles.iter().map(|p| p.id.as_str()).collect();
                 assert_eq!(actual_ids, muse_catalog_ids, "{}", path.display());
+            }
+            let flash_catalog_ids: BTreeSet<_> = consumer_flash_settings
+                .iter()
+                .filter(|s| path.file_name().is_some_and(|name| name == s.file))
+                .map(|s| s.id)
+                .collect();
+            if !flash_catalog_ids.is_empty() {
+                let actual_ids: BTreeSet<_> = profiles.iter().map(|p| p.id.as_str()).collect();
+                assert_eq!(actual_ids, flash_catalog_ids, "{}", path.display());
             }
             for p in profiles {
                 assert!(ids.insert(p.id.clone()), "duplicate {}", p.id);
@@ -870,6 +918,7 @@ mod tests {
                 }
                 if consumer_qwen_settings.iter().any(|(_, id, ..)| p.id == *id)
                     || consumer_muse_settings.iter().any(|s| p.id == s.id)
+                    || consumer_flash_settings.iter().any(|s| p.id == s.id)
                 {
                     let gpu = Gpu {
                         uuid: "GPU-consumer".into(),
@@ -886,16 +935,16 @@ mod tests {
                         assert!(groups.is_empty(), "{}", p.id);
                     }
                 }
-                if p.id == "rtx5090-flash-next-smol-q2g64-tp1-c8-256k-int8-screened" {
-                    consumer_flash_found = true;
+                if let Some(s) = consumer_flash_settings.iter().find(|s| p.id == s.id) {
+                    flash_ids.insert(s.id);
                     assert_eq!(p.platform, "linux");
                     assert_eq!(p.identity.model_id, "qwen3.8-flash-next");
                     assert_eq!(p.identity.weights_id, "smol-q2g64");
                     assert_eq!(p.artifact_sha256, "8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08");
                     assert_eq!(p.artifact_bytes, 70247086080);
                     assert_eq!((p.tp, p.draft_tp, p.concurrency), (1, 0, 8));
-                    assert_eq!((p.gpu_name.as_str(), p.compute_capability.as_str()), ("NVIDIA GeForce RTX 5090", "12.0"));
-                    assert_eq!((p.vram_tier_gib, p.min_memory_mib_per_gpu, p.max_context), (32, 32606, 262144));
+                    assert_eq!((p.gpu_name.as_str(), p.compute_capability.as_str()), (s.gpu, s.cc));
+                    assert_eq!((p.vram_tier_gib, p.min_memory_mib_per_gpu, p.max_context), (s.tier, s.memory, s.context));
                     assert_eq!(p.options, LaunchOptions {
                         vision: false,
                         structured_outputs: false,
@@ -915,8 +964,8 @@ mod tests {
                         expert_lfu: true,
                     }, "{}", p.id);
                     assert_eq!(p.qualification.tier, QualificationTier::ScreenedStartup);
-                    assert_eq!(p.qualification.engine_revision, "aa1c480162683d6da344456e2ccf0c14d2d291a3");
-                    assert_eq!(p.qualification.free_bytes_per_gpu, Some(1051721728));
+                    assert_eq!(p.qualification.engine_revision, s.engine);
+                    assert_eq!(p.qualification.free_bytes_per_gpu, Some(s.free));
                     assert_eq!(p.qualification.full_context_requests, 0);
                     assert_eq!(p.qualification.smoke_requests, Some(8));
                     assert!(p.qualification.calculation.is_none());
@@ -939,7 +988,7 @@ mod tests {
         assert_eq!(laptop_ids, expected_laptop_ids);
         assert_eq!(consumer_ids, expected_consumer_ids);
         assert_eq!(muse_ids, expected_muse_ids);
-        assert_eq!(consumer_flash_found, consumer_flash_supplied);
+        assert_eq!(flash_ids, expected_flash_ids);
     }
 
     #[test]
