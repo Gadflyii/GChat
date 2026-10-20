@@ -45,6 +45,15 @@ Live checks (Engine CPU image `2d54a4e31`, then the NEW-ENGINE-BUNDLE `d1d542000
 - The bundle's five-image runtime set verifies with `scripts/stage-linux-runtime-set.py` ("all four
   Linux runtimes and the CPU image from d1d542000").
 
+Verification (S1 CPUs 0-31, container `gchat-s1-verify:20261015` run with `--init`, GChat
+`b23fed1de`, all 3,595 tracked files byte-identical to the branch): the focused `launch_profiles` tests
+passed with the 43 Linux catalogs of GInfer `feat/claude-gchat-cpu-load-20261020` supplied (17 passed,
+six CPU entries bound), and ONE `make install-and-build && make verify` with the same catalogs passed:
+frontend 4004 passed/6 skipped, extensions 129, Rust desktop 797 and Host 299 passed with every other
+crate passing. A first `make verify` in a container without an init process failed only the two
+`skill_run_script` descendant-reaping tests (orphans stayed zombies without PID 1 reaping); it is not a
+result.
+
 Windows is not built or run (it waits for the Windows engine decision); see the manager record for
 what it needs.
 
