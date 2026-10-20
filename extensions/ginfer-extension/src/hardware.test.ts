@@ -48,21 +48,35 @@ describe('evaluateGinferHardware', () => {
     expect(result.reason).toMatch(/Linux or Windows/)
   })
 
-  it('rejects a machine with no NVIDIA GPU', () => {
-    const amdGpu = {
-      name: 'AMD GPU',
-      total_memory: 16384,
-      vendor: 'AMD',
-      uuid: 'def',
-      driver_version: '1.0',
-    }
-    const result = evaluate('linux', [amdGpu])
-    expect(result.ok).toBe(false)
-    expect(result.reason).toMatch(/NVIDIA CUDA GPU/)
+  const amdGpu = {
+    name: 'AMD GPU',
+    total_memory: 16384,
+    vendor: 'AMD',
+    uuid: 'def',
+    driver_version: '1.0',
+  }
+  const withCpu = (os_type: string, gpus: SystemInfo['gpus'], arch: string, extensions: string[]) =>
+    evaluateGinferHardware({ ...info(os_type, gpus), cpu: { name: 'cpu', core_count: 8, arch, extensions } } as SystemInfo)
+
+  it('runs on the Linux CPU device without a usable NVIDIA GPU', () => {
+    expect(withCpu('linux', [amdGpu], 'x86_64', ['avx', 'avx2', 'fma'])).toEqual({ ok: true })
+    expect(withCpu('linux', [], 'x86_64', [])).toEqual({ ok: true })
+    expect(withCpu('linux', [nvidiaGpu('7.5')], 'x86_64', ['avx2'])).toEqual({ ok: true })
   })
 
-  it('rejects a known unsupported compute capability', () => {
-    const result = evaluate('linux', [nvidiaGpu('7.5')])
+  it('rejects a machine with no NVIDIA GPU and no CPU device', () => {
+    for (const result of [
+      withCpu('linux', [amdGpu], 'aarch64', []),
+      withCpu('linux', [amdGpu], 'x86_64', ['sse4_2', 'avx']),
+      withCpu('windows', [amdGpu], 'x86_64', ['avx2']),
+    ]) {
+      expect(result.ok).toBe(false)
+      expect(result.reason).toMatch(/NVIDIA CUDA GPU/)
+    }
+  })
+
+  it('rejects a known unsupported compute capability without a CPU device', () => {
+    const result = withCpu('linux', [nvidiaGpu('7.5')], 'aarch64', [])
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/compute capability/)
     expect(result.reason).toMatch(/7\.5/)

@@ -43,12 +43,18 @@ export function evaluateGinferHardware(info: SystemInfo): GinferHardwareCheck {
       reason: `Ginference requires Linux or Windows (this machine reports "${info.os_type}").`,
     }
   }
+  // Linux runs models on the CPU device when no graphics card can: x86-64 with AVX2 (an
+  // unreported extension list is not proof of a missing one). Windows CPU serving waits
+  // for its native Engine build.
+  const cpuDevice = info.os_type === 'linux' && ['x86_64', 'x86-64', 'amd64'].includes(String(info.cpu?.arch ?? '').toLowerCase())
+    && (!info.cpu?.extensions?.length || info.cpu.extensions.some((extension) => extension.toLowerCase() === 'avx2'))
 
   const nvidiaGpus = (info.gpus ?? []).filter(
     (gpu) => gpu.vendor?.toLowerCase() === 'nvidia'
   )
 
   if (nvidiaGpus.length === 0) {
+    if (cpuDevice) return { ok: true }
     return {
       ok: false,
       reason:
@@ -66,6 +72,7 @@ export function evaluateGinferHardware(info: SystemInfo): GinferHardwareCheck {
     ? SUPPORTED_COMPUTE_CAPABILITIES.linux
     : SUPPORTED_COMPUTE_CAPABILITIES.windows
   if (reported.length > 0 && !reported.some((cc) => supported.some((target) => target === cc))) {
+    if (cpuDevice) return { ok: true }
     return {
       ok: false,
       reason: `Ginference targets NVIDIA compute capability ${supported.join(', ')}; this GPU reports ${reported.join(', ')}.`,

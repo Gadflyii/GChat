@@ -26,6 +26,7 @@ import type {
 } from './types'
 import { getCatalogOrFallback } from '@/services/model-catalog-registry'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
+import { useHardware } from '@/hooks/useHardware'
 
 // The only local inference provider id. Resolving this through
 // LOCAL_GINFER_PROVIDER keeps `getEngine()` calls provider-agnostic.
@@ -393,9 +394,12 @@ export class DefaultModelsService implements ModelsService {
     // Ordinary GInfer starts use a complete tested Host profile. Per-model
     // context metadata must not override that profile's startup settings.
     if (provider.provider === 'ginfer') {
+      // Explicit loads pass the Models page device; restored loads use the saved choice.
+      const device = options?.device ?? useHardware.getState().selectedDevice
       const settings = {
         use_profile_defaults: true,
         ...(gpuUuids === undefined ? {} : { gpu_uuids: [...gpuUuids] }),
+        ...(device === 'gpu' || device === 'cpu' ? { device } : {}),
         ...(options?.loadOperationId
           ? { load_operation_id: options.loadOperationId }
           : {}),

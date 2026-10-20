@@ -96,6 +96,9 @@ interface HardwareStore {
   hardwareReady: boolean
   selectedGpuUuids: string[] | null
   setSelectedGpuUuids: (uuids: string[] | null) => void
+  /** Device for local model loads: Automatic, GPU or CPU. Kept across restarts. */
+  selectedDevice: 'auto' | 'gpu' | 'cpu'
+  setSelectedDevice: (device: 'auto' | 'gpu' | 'cpu') => void
   systemUsage: SystemUsage
 
   // Update functions
@@ -130,6 +133,8 @@ export const useHardware = create<HardwareStore>()(
       hardwareReady: false,
       selectedGpuUuids: null,
       setSelectedGpuUuids: (uuids) => set({ selectedGpuUuids: uuids === null ? null : [...uuids] }),
+      selectedDevice: 'auto',
+      setSelectedDevice: (selectedDevice) => set({ selectedDevice }),
       systemUsage: defaultSystemUsage,
       gpuLoading: {},
       pollingPaused: false,

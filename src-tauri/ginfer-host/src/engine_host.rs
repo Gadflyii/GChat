@@ -191,9 +191,12 @@ pub fn gpu_uuids_in_pci_bus_order(inventory: &[(String, String)]) -> Result<Vec<
     Ok(ordered.into_iter().map(|(_, uuid)| uuid).collect())
 }
 
+/// Runtime-set key of the CUDA-free CPU image (GInfer `GINFER_CUDA=OFF`).
+pub const CPU_RUNTIME: &str = "cpu";
+
 pub fn validate_runtimes(runtimes: &BTreeMap<String, PathBuf>) -> Result<(), String> {
     for (architecture, path) in runtimes {
-        if !matches!(architecture.as_str(), "8.0" | "8.6" | "8.9" | "12.0") {
+        if !matches!(architecture.as_str(), "8.0" | "8.6" | "8.9" | "12.0" | CPU_RUNTIME) {
             return Err(format!(
                 "Unsupported runtime compute capability: {architecture}"
             ));
@@ -353,6 +356,10 @@ pub struct LaunchOptions {
     pub host_kv_cache_bytes: Option<u64>,
     pub prefill_chunk: u32,
     pub no_cuda_graph: bool,
+    /// Execution device: "gpu" (the default when absent) or "cpu" (`--device cpu`).
+    pub device: String,
+    /// CPU device only: Host RAM left free beyond the model's plan; None uses the Engine default.
+    pub cpu_ram_headroom_gib: Option<u64>,
 }
 impl Default for LaunchOptions {
     fn default() -> Self {
@@ -373,11 +380,47 @@ impl Default for LaunchOptions {
             host_kv_cache_bytes: None,
             prefill_chunk: 0,
             no_cuda_graph: false,
+            device: "gpu".into(),
+            cpu_ram_headroom_gib: None,
         }
     }
 }
 impl LaunchOptions {
+    pub fn is_cpu(&self) -> bool {
+        self.device == "cpu"
+    }
+    /// The CPU device runs one TP1 text process on Host memory (GInfer `--device cpu`).
+    fn validate_device(&self, tp: u32) -> Result<(), String> {
+        match self.device.as_str() {
+            "gpu" if self.cpu_ram_headroom_gib.is_some() => {
+                Err("CPU RAM headroom applies only to the CPU device".into())
+            }
+            "gpu" => Ok(()),
+            "cpu" if tp != 1 => Err("The CPU device runs one process; use TP 1".into()),
+            "cpu" if self.vision => {
+                Err("Vision is not available on the CPU device yet; turn off Enable Vision".into())
+            }
+            "cpu" if !matches!(self.spec.as_str(), "auto" | "none")
+                || self.draft_tokens != 0
+                || self.draft_tp != 0 =>
+            {
+                Err("Speculative decoding is not available on the CPU device yet; turn off Enable Speculative Decoding".into())
+            }
+            "cpu" if self.kv_dtype == "nvfp4" => {
+                Err("The CPU device stores the K/V cache as INT8 or BF16; NVFP4 is a graphics-card format".into())
+            }
+            "cpu" if self.vram_budget_bytes.is_some()
+                || self.flash_host_ram_headroom_gib.is_some()
+                || self.prefill_chunk != 0 =>
+            {
+                Err("Graphics-card settings (memory budgets, prefill chunk) do not apply to the CPU device".into())
+            }
+            "cpu" => Ok(()),
+            _ => Err("device must be gpu or cpu".into()),
+        }
+    }
     pub fn validate(&self, tp: u32) -> Result<(), String> {
+        self.validate_device(tp)?;
         if self.vram_budget_bytes == Some(0) {
             return Err("Flash weight residency budget must be positive".into());
         }
@@ -486,11 +529,27 @@ impl LaunchOptions {
                     131072
                 }
             }
+            // CPU-only target (GInfer OI-145): text, TP1, no speculation, `--device cpu` required.
+            "qwen3.6-35b-a3b" => {
+                if !matches!(identity.weights_id.as_str(), "groupwise-int" | "smol-q2g64") {
+                    return Err("Qwen3.6 has no registered weights class for this artifact".into());
+                }
+                if !self.is_cpu() {
+                    return Err("This model runs only on the CPU; choose Device CPU".into());
+                }
+                if tp != 1 || draft_tp != 0 {
+                    return Err("Qwen3.6 runs one TP1 package on the CPU".into());
+                }
+                262144
+            }
             _ => return Err("model is not a registered host launch target".into()),
         };
         Ok(maximum)
     }
     pub(crate) fn args(&self) -> Vec<String> {
+        if self.is_cpu() {
+            return self.cpu_args();
+        }
         let mut args = vec![
             "--spec".into(),
             self.spec.clone(),
@@ -539,6 +598,26 @@ impl LaunchOptions {
         }
         args
     }
+    /// CPU argv carries only the settings the CPU route reads; speculation is always off.
+    fn cpu_args(&self) -> Vec<String> {
+        let mut args: Vec<String> = vec!["--device".into(), "cpu".into(), "--spec".into(), "none".into()];
+        if self.structured_outputs {
+            args.push("--structured-outputs".into());
+        }
+        if self.kv_dtype != "auto" {
+            args.extend(["--kv-dtype".into(), self.kv_dtype.clone()]);
+        }
+        if let Some(bytes) = self.kv_arena_bytes {
+            args.extend(["--kv-arena-bytes".into(), bytes.to_string()]);
+        }
+        if let Some(bytes) = self.host_kv_cache_bytes {
+            args.extend(["--host-kv-cache-bytes".into(), bytes.to_string()]);
+        }
+        if let Some(gib) = self.cpu_ram_headroom_gib {
+            args.extend(["--cpu-ram-headroom-gib".into(), gib.to_string()]);
+        }
+        args
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -579,6 +658,192 @@ pub struct ManagedInstance {
     hardware_profile_path: Option<PathBuf>,
     graph_receipt: Arc<Mutex<GraphReceipt>>,
     graph_receipt_key: Option<String>,
+}
+
+/// Typed CPU reasons the Models page keys off; the message after the code is plain text. The
+/// admission codes are GInfer's closed `DeviceAdmissionReason` set (docs/cpu-inference/all-models.md
+/// section 3.4); `cpu_ram` is the Host's plain form of a quote that does not fit.
+pub const NO_CPU_FORMAT: &str = "no_cpu_format";
+pub const NO_CPU_PROGRAM: &str = "no_cpu_program";
+pub const CPU_TP1_ONLY: &str = "cpu_tp1_only";
+pub const CPU_FEATURE_UNAVAILABLE: &str = "cpu_feature_unavailable";
+pub const CPU_HOST_UNSUPPORTED: &str = "cpu_host_unsupported";
+pub const CPU_RAM: &str = "cpu_ram";
+
+/// One plain sentence per Engine admission code; unknown codes keep the Engine message.
+pub fn cpu_admission_sentence(code: &str) -> Option<&'static str> {
+    Some(match code {
+        NO_CPU_FORMAT => "This version of the model (NVFP4) only runs on NVIDIA graphics cards. To run it on the CPU, use the INT or SMOL version.",
+        NO_CPU_PROGRAM => "This model can't run on the CPU yet.",
+        CPU_TP1_ONLY => "On the CPU this model runs from its single-file (TP1) version. Add or download that version to run it on the CPU.",
+        CPU_FEATURE_UNAVAILABLE => "Vision and Speculative Decoding are not available on the CPU for this model yet. Turn them off to use the CPU.",
+        CPU_HOST_UNSUPPORTED => "This computer's processor lacks the instructions models need on the CPU (AVX2, FMA and F16C).",
+        _ => return None,
+    })
+}
+
+/// `[code] plain sentence Engine: <engine message>` for an Engine admission reason object.
+pub fn cpu_admission_error(reason: &serde_json::Value) -> String {
+    let code = reason["code"].as_str().unwrap_or("cpu_admission");
+    let engine = reason["message"].as_str().unwrap_or("the Engine refused the CPU device");
+    match cpu_admission_sentence(code) {
+        Some(sentence) => format!("[{code}] {sentence} Engine: {engine}"),
+        None => format!("[{code}] The CPU device is not available for this model. Engine: {engine}"),
+    }
+}
+
+/// Devices the Host's launch-target registry admits for a package, used when the Engine has no
+/// capability report. A model registered for only one device (a CPU-only target) lists only
+/// that one. Whether a GPU model actually runs on the CPU is the Engine's answer at its CPU quote.
+pub fn target_devices(identity: &crate::engine_inventory::ArtifactIdentity) -> Vec<&'static str> {
+    let admits = |device: &str| LaunchOptions { device: device.into(), vision: false, spec: "none".into(), ..Default::default() }
+        .validate_target(identity, 1, 0).is_ok()
+        || LaunchOptions { device: device.into(), vision: false, spec: "auto".into(), ..Default::default() }
+            .validate_target(identity, 1, 1).is_ok();
+    ["gpu", "cpu"].into_iter().filter(|device| admits(device)).collect()
+}
+
+/// NVFP4 weights are a graphics-card format; GInfer refuses them on the CPU (Ron, 10-20).
+pub fn cpu_format_error(identity: &crate::engine_inventory::ArtifactIdentity) -> Option<String> {
+    identity.weights_id.contains("nvfp4").then(|| format!("[{NO_CPU_FORMAT}] {}",
+        cpu_admission_sentence(NO_CPU_FORMAT).unwrap_or_default()))
+}
+
+/// `ginfer-serve --capabilities` (`ginfer-capabilities-v1`): per-identity GPU and CPU admission,
+/// built from the Engine's identity catalog without a CUDA call or a payload read.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct EngineCapabilities(pub serde_json::Value);
+impl EngineCapabilities {
+    pub fn parse(value: serde_json::Value) -> Result<Self, String> {
+        if value["schema"] != "ginfer-capabilities-v1" || !value["identities"].is_array() {
+            return Err("Engine capability report has an unsupported schema".into());
+        }
+        Ok(Self(value))
+    }
+    fn identity(&self, identity: &crate::engine_inventory::ArtifactIdentity) -> Option<&serde_json::Value> {
+        self.0["identities"].as_array()?.iter().find(|entry| {
+            entry["model_id"] == identity.model_id.as_str() && entry["weights_id"] == identity.weights_id.as_str()
+        })
+    }
+    /// Devices the Engine admits for this package; None when the identity is not listed.
+    pub fn devices(&self, identity: &crate::engine_inventory::ArtifactIdentity, tp: u32) -> Option<Vec<&'static str>> {
+        let entry = self.identity(identity)?;
+        let admitted = |device: &str| entry[device]["admitted"] == true
+            && entry[device]["tensor_parallel_sizes"].as_array().is_none_or(|sizes| sizes.iter().any(|size| size == tp));
+        let host = self.0["cpu_host"]["admitted"] != false;
+        Some([("gpu", admitted("gpu")), ("cpu", admitted("cpu") && host)].into_iter()
+            .filter_map(|(device, ok)| ok.then_some(device)).collect())
+    }
+    /// The Engine's CPU refusal for this identity (code, message, cpu_alternatives), if any.
+    pub fn cpu_reason(&self, identity: &crate::engine_inventory::ArtifactIdentity) -> Option<serde_json::Value> {
+        if self.0["cpu_host"]["admitted"] == false {
+            return Some(self.0["cpu_host"]["reason"].clone());
+        }
+        let entry = self.identity(identity)?;
+        (entry["cpu"]["admitted"] == false).then(|| entry["cpu"]["reason"].clone())
+    }
+}
+
+/// Read the capability report once per engine; older engines without it return an error.
+pub async fn probe_capabilities(serve: &Path) -> Result<EngineCapabilities, String> {
+    let mut command = Command::new(serve);
+    command.arg("--capabilities").env("CUDA_VISIBLE_DEVICES", "")
+        .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    let output = tokio::time::timeout(Duration::from_secs(10), command.output()).await
+        .map_err(|_| "Engine capability report timed out".to_string())?
+        .map_err(|error| format!("Engine capability report failed: {error}"))?;
+    if !output.status.success() || output.stdout.len() > 4 << 20 {
+        return Err("Engine has no capability report".into());
+    }
+    EngineCapabilities::parse(serde_json::from_slice(&output.stdout)
+        .map_err(|_| "Engine capability report is not JSON".to_string())?)
+}
+
+/// Plain reason for an Engine CPU refusal on engines whose quote has no `admission` block.
+pub(crate) fn cpu_quote_failure(engine_error: &str) -> String {
+    for code in [NO_CPU_FORMAT, NO_CPU_PROGRAM, CPU_TP1_ONLY, CPU_FEATURE_UNAVAILABLE, CPU_HOST_UNSUPPORTED] {
+        if engine_error.contains(code) {
+            return cpu_admission_error(&serde_json::json!({"code": code, "message": engine_error}));
+        }
+    }
+    let code = if engine_error.contains("is a GPU target") || engine_error.contains("no registered CPU weights class") {
+        NO_CPU_PROGRAM
+    } else if engine_error.contains("does not admit the requested instruction set") {
+        CPU_HOST_UNSUPPORTED
+    } else {
+        return format!("Engine startup quote failed: {engine_error}");
+    };
+    cpu_admission_error(&serde_json::json!({"code": code, "message": engine_error}))
+}
+
+fn gb(bytes: u64) -> String {
+    format!("{:.1}", bytes as f64 / 1e9)
+}
+
+/// Engine-owned CPU plan from `ginfer-serve --device cpu --quote-only` (scope `cpu-host-plan`).
+#[derive(serde::Deserialize)]
+pub(crate) struct CpuStartupQuote {
+    schema: String,
+    planning_scope: String,
+    model_id: String,
+    weights_id: String,
+    tensor_parallel_size: u32,
+    fit_status: String,
+    #[serde(default)]
+    quoted_context: u32,
+    #[serde(default)]
+    capacity_failure: Option<CpuQuoteFailure>,
+    /// Phase-0 Engines report CPU admission here; a refusal is `fit_status: not-admitted`.
+    #[serde(default)]
+    admission: Option<serde_json::Value>,
+    #[serde(default)]
+    ranks: Vec<CpuQuoteRank>,
+}
+#[derive(serde::Deserialize)]
+struct CpuQuoteFailure {
+    #[serde(default)]
+    shortfall_bytes: Option<u64>,
+    message: String,
+}
+#[derive(serde::Deserialize)]
+struct CpuQuoteRank {
+    free_bytes: u64,
+    headroom_bytes: u64,
+    host_ram_bytes: u64,
+}
+impl CpuStartupQuote {
+    /// A plan that does not fit is a plain RAM error with the amounts; it never falls back.
+    pub(crate) fn admit(&self, launch: &EngineLaunch) -> Result<(), String> {
+        if self.schema != "ginfer-startup-quote-v1"
+            || format!("{}/{}", self.model_id, self.weights_id) != launch.model_id
+        {
+            return Err("Engine CPU startup quote does not match this launch; update the Engine runtime".into());
+        }
+        if let Some(admission) = &self.admission {
+            if admission["admitted"] != true || self.fit_status == "not-admitted" {
+                return Err(cpu_admission_error(&admission["reason"]));
+            }
+        }
+        if self.planning_scope != "cpu-host-plan" || self.tensor_parallel_size != 1 || self.ranks.len() != 1 {
+            return Err("Engine CPU startup quote does not match this launch; update the Engine runtime".into());
+        }
+        let rank = &self.ranks[0];
+        if self.fit_status != "fits" {
+            let available = rank.free_bytes.saturating_sub(rank.headroom_bytes);
+            let detail = self.capacity_failure.as_ref().map(|f| f.message.as_str()).unwrap_or("does not fit");
+            let short = self.capacity_failure.as_ref().and_then(|f| f.shortfall_bytes)
+                .unwrap_or_else(|| rank.host_ram_bytes.saturating_sub(available));
+            return Err(format!(
+                "[{CPU_RAM}] Not enough memory (RAM) to run this model on the CPU with these settings: it needs {} GB, and {} GB is free after leaving {} GB for the rest of the computer ({} GB short). Close other programs, or choose a shorter Context length. Engine: {detail}",
+                gb(rank.host_ram_bytes), gb(available), gb(rank.headroom_bytes), gb(short)));
+        }
+        if self.quoted_context < launch.max_context {
+            return Err(format!("[{CPU_RAM}] The CPU plan fits only {} tokens of context; choose a shorter Context length", self.quoted_context));
+        }
+        Ok(())
+    }
 }
 
 /// Engine-owned pre-load facts, emitted by ginfer-serve --quote-only.
@@ -804,6 +1069,32 @@ impl HostProcesses {
         })
     }
 
+    /// The CPU device prefers the CUDA-free image. A CUDA image also serves `--device cpu`
+    /// without touching a GPU, but it needs the NVIDIA driver's libraries to start.
+    fn executable_for_launch(&self, launch: &EngineLaunch) -> Result<&PathBuf, String> {
+        if !launch.options.is_cpu() {
+            return self.executable_for(&launch.gpu_uuids);
+        }
+        if let Some(cpu) = self.runtimes.get(CPU_RUNTIME) {
+            return Ok(cpu);
+        }
+        // A single-image install names its own engine, which may be the CPU image.
+        if self.runtimes.is_empty() {
+            return Ok(&self.executable);
+        }
+        let driver = self.nvidia_driver_version.is_some() || !self.known_gpus.is_empty();
+        match self.runtimes.values().next() {
+            Some(cuda) if driver => Ok(cuda),
+            _ => Err("This GChat install has no CPU engine, and this computer has no NVIDIA driver for the graphics-card engine. Install a GChat version that includes the CPU engine.".into()),
+        }
+    }
+
+    /// The engine whose capability report describes this Host: the CPU image when installed.
+    pub fn capability_engine(&self) -> PathBuf {
+        self.runtimes.get(CPU_RUNTIME).or_else(|| self.runtimes.values().next())
+            .unwrap_or(&self.executable).clone()
+    }
+
     pub(crate) fn profiling_cli(&self, gpus: &[String]) -> Option<PathBuf> {
         let architecture = gpus.first().and_then(|gpu| self.gpu_architectures.get(gpu))?;
         if gpus.iter().any(|gpu| self.gpu_architectures.get(gpu) != Some(architecture)) { return None; }
@@ -956,7 +1247,17 @@ impl HostProcesses {
         if self.hardware_profile.as_ref().is_some_and(|job| job.busy()) {
             return Err("Hardware profiling reserves this host; wait for completion or cancel it before loading a model".into());
         }
-        if let Some(job) = &self.hardware_profile {
+        let cpu = launch.options.is_cpu();
+        if cpu {
+            if launch.tp != 1 || !launch.gpu_uuids.is_empty() {
+                return Err("The CPU device runs one TP1 process and uses no graphics cards".into());
+            }
+            if self.instances.values().any(|i| i.child.is_some() && i.launch.options.is_cpu()
+                && !(replacing && i.instance_id == launch.instance_id)) {
+                return Err("A model is already running on the CPU. Stop it before starting another CPU model.".into());
+            }
+        }
+        if let Some(job) = self.hardware_profile.as_ref().filter(|_| !cpu) {
             if job.is_stale(&launch.gpu_uuids) { return Err("Hardware changed — re-profile this GPU group before loading a model".into()); }
             let profile =
                 job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids)?;
@@ -966,7 +1267,7 @@ impl HostProcesses {
                 );
             }
         }
-        if !self.executable_for(&launch.gpu_uuids)?.is_file() {
+        if !self.executable_for_launch(launch)?.is_file() {
             return Err("Install the configured engine executable before loading a model".into());
         }
         launch.options.validate(launch.tp)?;
@@ -978,7 +1279,7 @@ impl HostProcesses {
         {
             return Err("instance already has a live process".into());
         }
-        if !matches!(launch.tp, 1 | 2 | 4) || launch.gpu_uuids.len() != launch.tp as usize {
+        if !cpu && (!matches!(launch.tp, 1 | 2 | 4) || launch.gpu_uuids.len() != launch.tp as usize) {
             return Err("TP degree must be 1, 2, or 4 with exactly that many GPUs".into());
         }
         let selected: BTreeSet<_> = launch.gpu_uuids.iter().cloned().collect();
@@ -1009,10 +1310,18 @@ impl HostProcesses {
         Ok(())
     }
 
+    /// The GPU hardware profile path; the CPU device runs without one.
+    fn launch_hardware_profile(&self, launch: &EngineLaunch) -> Result<Option<PathBuf>, String> {
+        if launch.options.is_cpu() {
+            return Ok(None);
+        }
+        self.hardware_profile.as_ref().map(|job| job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids).map(|configuration| configuration.profile_path)).transpose()
+    }
+
     fn command(&self, launch: &EngineLaunch) -> Result<Command, String> {
-        let executable = self.executable_for(&launch.gpu_uuids)?;
+        let executable = self.executable_for_launch(launch)?;
         let mut command = Command::new(executable);
-        let hardware_profile_path = self.hardware_profile.as_ref().map(|job| job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids).map(|configuration| configuration.profile_path)).transpose()?;
+        let hardware_profile_path = self.launch_hardware_profile(launch)?;
         #[cfg(windows)]
         command.creation_flags(0x08000000); // Background serving has no console window.
         if let Some(directory) = executable.parent() {
@@ -1065,6 +1374,9 @@ impl HostProcesses {
     pub(crate) fn graph_receipt_key(&self, launch: &EngineLaunch) -> Result<Option<String>, String> {
         use sha2::{Digest, Sha256};
         let Some(driver_version) = &self.nvidia_driver_version else { return Ok(None); };
+        if launch.options.is_cpu() {
+            return Ok(None);
+        }
         let mut recipe = launch.clone();
         recipe.instance_id = Uuid::nil();
         recipe.port = 0;
@@ -1113,7 +1425,7 @@ impl HostProcesses {
         let graph_receipt_key = self.graph_receipt_key(&launch)?;
         let graph_receipt = Arc::new(Mutex::new(GraphReceipt::default()));
         let api_key = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-        let hardware_profile_path = self.hardware_profile.as_ref().map(|job| job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids).map(|configuration| configuration.profile_path)).transpose()?;
+        let hardware_profile_path = self.launch_hardware_profile(&launch)?;
         let mut command = self.command(&launch)?;
         if let Some(path) = &self.request_log_jsonl {
             command.arg("--request-log-jsonl").arg(path);
@@ -1399,6 +1711,34 @@ mod runtime_dispatch_tests {
         std::fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
         std::fs::remove_file(root.join("sm89/bin/ginfer-serve.exe")).unwrap();
         assert!(crate::local_host::desktop_runtimes_for(provider, "windows").is_err());
+    }
+
+    #[test]
+    fn linux_runtime_sets_may_add_the_cpu_image_for_the_cpu_device() {
+        let directory = tempfile::tempdir().unwrap();
+        let provider = directory.path();
+        let root = provider.join("linux");
+        for image in ["sm80", "sm86", "sm89", "sm120a", CPU_RUNTIME] {
+            let bin = root.join(image).join("bin");
+            std::fs::create_dir_all(&bin).unwrap();
+            std::fs::write(bin.join("ginfer-serve"), image).unwrap();
+        }
+        let mut set = serde_json::json!({"schema": "ginfer-linux-runtime-set-v1", "platform": "linux-x64",
+            "source_commit": "1111111111111111111111111111111111111111",
+            "runtimes": {"8.0": "sm80", "8.6": "sm86", "8.9": "sm89", "12.0": "sm120a"}});
+        let set_path = root.join("runtime-set.json");
+        std::fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
+        assert_eq!(crate::local_host::desktop_runtimes_for(provider, "linux").unwrap().len(), 4);
+        set["runtimes"][CPU_RUNTIME] = CPU_RUNTIME.into();
+        std::fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
+        let runtimes = crate::local_host::desktop_runtimes_for(provider, "linux").unwrap();
+        assert_eq!(runtimes.get(CPU_RUNTIME), Some(&root.join("cpu/bin/ginfer-serve")));
+        let mut host = HostProcesses::new(provider.join("unused"), BTreeSet::new(), Duration::from_secs(10)).unwrap();
+        host.configure_runtimes(runtimes, BTreeMap::new()).unwrap();
+        assert_eq!(host.capability_engine(), root.join("cpu/bin/ginfer-serve"));
+        set["runtimes"][CPU_RUNTIME] = "elsewhere".into();
+        std::fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
+        assert!(crate::local_host::desktop_runtimes_for(provider, "linux").is_err());
     }
 }
 
@@ -1694,6 +2034,120 @@ fi
         std::fs::write(profile, br#"{"schema_version":2}"#).unwrap();
         processes.validate_launch(&launch, false).unwrap();
         assert!(processes.instances.is_empty());
+    }
+
+    #[test]
+    fn cpu_launch_needs_no_gpu_or_hardware_profile_and_prefers_the_cpu_image() {
+        let directory = tempfile::tempdir().unwrap();
+        let cuda = directory.path().join("ginfer-serve");
+        std::fs::write(&cuda, b"cuda image").unwrap();
+        let cpu_image = directory.path().join("cpu-ginfer-serve");
+        std::fs::write(&cpu_image, b"cpu image").unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        std::fs::write(&artifact, b"fixture artifact").unwrap();
+        let mut launch = fixture_launch(&artifact, Uuid::new_v4());
+        launch.gpu_uuids.clear();
+        launch.model_id = "qwen3.6-35b-a3b/groupwise-int".into();
+        launch.options = LaunchOptions { device: "cpu".into(), vision: false, ..Default::default() };
+        let no_gpus = |runtimes: BTreeMap<String, PathBuf>| {
+            let mut processes = HostProcesses::new(cuda.clone(), BTreeSet::new(), Duration::from_secs(10)).unwrap();
+            processes.configure_runtimes(runtimes, BTreeMap::new()).unwrap();
+            processes.hardware_profile = Some(crate::hardware_profile::HardwareProfiles::open(
+                directory.path().join("host"), Arc::new(std::sync::atomic::AtomicU64::new(0))).unwrap());
+            processes
+        };
+        // A runtime set with the CPU image serves the CPU device without any GPU profile.
+        let processes = no_gpus(BTreeMap::from([("12.0".into(), cuda.clone()), (CPU_RUNTIME.into(), cpu_image.clone())]));
+        processes.validate_launch(&launch, false).unwrap();
+        let command = processes.command(&launch).unwrap();
+        let command = command.as_std();
+        assert_eq!(command.get_program(), cpu_image.as_os_str());
+        let args: Vec<_> = command.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect();
+        assert!(!args.iter().any(|arg| arg == "--hardware-profile"), "{args:?}");
+        assert!(args.windows(2).any(|pair| pair == ["--device", "cpu"]), "{args:?}");
+        assert!(args.windows(2).any(|pair| pair == ["--tp", "1"]), "{args:?}");
+        assert!(command.get_envs().any(|(key, value)| key == "CUDA_VISIBLE_DEVICES"
+            && value.is_some_and(|value| value.is_empty())));
+        assert_eq!(processes.graph_receipt_key(&launch).unwrap(), None);
+        // GPUs and a second CPU model are refused with plain reasons.
+        let mut with_gpu = launch.clone();
+        with_gpu.gpu_uuids = vec!["GPU-fixture".into()];
+        assert!(processes.validate_launch(&with_gpu, false).unwrap_err().contains("uses no graphics cards"));
+        // CUDA images need the NVIDIA driver; without one a CPU-less runtime set says so.
+        let processes = no_gpus(BTreeMap::from([("12.0".into(), cuda.clone())]));
+        assert!(processes.validate_launch(&launch, false).unwrap_err().contains("no CPU engine"));
+        let mut driver = HostProcesses::new(cuda.clone(), BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        driver.configure_runtimes(BTreeMap::from([("12.0".into(), cuda.clone())]),
+            BTreeMap::from([("GPU-fixture".into(), "12.0".into())])).unwrap();
+        assert_eq!(driver.command(&launch).unwrap().as_std().get_program(), cuda.as_os_str());
+    }
+
+    #[test]
+    fn capability_reports_drive_device_admission_and_alternatives() {
+        let identity = |weights: &str| crate::engine_inventory::ArtifactIdentity { model_id: "qwen3.8-27b".into(), weights_id: weights.into() };
+        let report = EngineCapabilities::parse(serde_json::json!({
+            "schema": "ginfer-capabilities-v1", "image": "cuda",
+            "cpu_host": {"admitted": true, "route_class": "avx512"},
+            "identities": [
+                {"model_id": "qwen3.8-27b", "weights_id": "groupwise-int-dflash2-q4",
+                 "gpu": {"admitted": true, "tensor_parallel_sizes": [1, 2, 4]},
+                 "cpu": {"admitted": true, "tensor_parallel_sizes": [1]}},
+                {"model_id": "qwen3.8-27b", "weights_id": "nvfp4-dflash2-q4",
+                 "gpu": {"admitted": true, "tensor_parallel_sizes": [1, 2, 4]},
+                 "cpu": {"admitted": false, "reason": {"code": "no_cpu_format", "message": "GPU formats",
+                     "cpu_alternatives": [{"model_id": "qwen3.8-27b", "weights_id": "groupwise-int-dflash2-q4"}]}}}]})).unwrap();
+        assert_eq!(report.devices(&identity("groupwise-int-dflash2-q4"), 1), Some(vec!["gpu", "cpu"]));
+        assert_eq!(report.devices(&identity("groupwise-int-dflash2-q4"), 2), Some(vec!["gpu"]));
+        assert_eq!(report.devices(&identity("nvfp4-dflash2-q4"), 1), Some(vec!["gpu"]));
+        assert_eq!(report.devices(&identity("unlisted"), 1), None);
+        let reason = report.cpu_reason(&identity("nvfp4-dflash2-q4")).unwrap();
+        assert_eq!(reason["cpu_alternatives"][0]["weights_id"], "groupwise-int-dflash2-q4");
+        assert_eq!(cpu_admission_error(&reason), "[no_cpu_format] This version of the model (NVFP4) only runs on NVIDIA graphics cards. To run it on the CPU, use the INT or SMOL version. Engine: GPU formats");
+        let mut unsupported = report.0.clone();
+        unsupported["cpu_host"] = serde_json::json!({"admitted": false, "reason": {"code": "cpu_host_unsupported", "message": "no AVX2"}});
+        let unsupported = EngineCapabilities::parse(unsupported).unwrap();
+        assert_eq!(unsupported.devices(&identity("groupwise-int-dflash2-q4"), 1), Some(vec!["gpu"]));
+        assert!(cpu_admission_error(&unsupported.cpu_reason(&identity("groupwise-int-dflash2-q4")).unwrap()).starts_with("[cpu_host_unsupported] "));
+        assert!(EngineCapabilities::parse(serde_json::json!({"schema": "other"})).is_err());
+        // Phase-0 quotes report a refusal as a successful quote with an admission block.
+        let mut launch = fixture_launch(std::path::Path::new("/fixture.ginfer"), Uuid::new_v4());
+        launch.model_id = "qwen3.8-27b/nvfp4-dflash2-q4".into();
+        let refused: CpuStartupQuote = serde_json::from_value(serde_json::json!({
+            "schema": "ginfer-startup-quote-v1", "planning_scope": "cpu-host-plan", "model_id": "qwen3.8-27b",
+            "weights_id": "nvfp4-dflash2-q4", "tensor_parallel_size": 1, "fit_status": "not-admitted",
+            "device": "cpu", "admission": {"admitted": false, "reason": {"code": "no_cpu_format", "message": "GPU formats"}}})).unwrap();
+        assert!(refused.admit(&launch).unwrap_err().starts_with("[no_cpu_format] This version of the model (NVFP4)"));
+    }
+
+    #[test]
+    fn cpu_quotes_admit_fitting_plans_and_explain_ram_shortfalls() {
+        let artifact = std::path::Path::new("/fixture.ginfer");
+        let mut launch = fixture_launch(artifact, Uuid::new_v4());
+        launch.model_id = "qwen3.6-35b-a3b/groupwise-int".into();
+        launch.max_context = 8192;
+        let quote = |fit: &str, context: u32| -> CpuStartupQuote {
+            serde_json::from_value(serde_json::json!({
+                "schema": "ginfer-startup-quote-v1", "planning_scope": "cpu-host-plan",
+                "model_id": "qwen3.6-35b-a3b", "weights_id": "groupwise-int", "tensor_parallel_size": 1,
+                "fit_status": fit, "quoted_context": context,
+                "capacity_failure": if fit == "fits" { serde_json::Value::Null } else {
+                    serde_json::json!({"resource": "host-ram", "shortfall_bytes": 3_000_000_000u64, "message": "short"}) },
+                "ranks": [{"rank": 0, "free_bytes": 25_294_967_296u64, "headroom_bytes": 4_294_967_296u64,
+                    "host_ram_bytes": 24_000_000_000u64, "weights_bytes": 0}],
+            })).unwrap()
+        };
+        quote("fits", 8192).admit(&launch).unwrap();
+        let error = quote("does-not-fit", 0).admit(&launch).unwrap_err();
+        assert!(error.starts_with("[cpu_ram] Not enough memory (RAM)"), "{error}");
+        assert!(error.contains("needs 24.0 GB, and 21.0 GB is free after leaving 4.3 GB"), "{error}");
+        assert!(error.contains("(3.0 GB short)"), "{error}");
+        launch.model_id = "qwen3.6-35b-a3b/smol-q2g64".into();
+        assert!(quote("fits", 8192).admit(&launch).unwrap_err().contains("does not match"));
+        assert!(cpu_quote_failure("artifact identity 'qwen3.8-27b/x' is a GPU target; start it without --device cpu")
+            .starts_with("[no_cpu_program] This model can't run on the CPU yet."));
+        let nvfp4 = crate::engine_inventory::ArtifactIdentity { model_id: "qwen3.8-27b".into(), weights_id: "nvfp4-dflash2-nvfp4".into() };
+        assert_eq!(cpu_format_error(&nvfp4).unwrap(), "[no_cpu_format] This version of the model (NVFP4) only runs on NVIDIA graphics cards. To run it on the CPU, use the INT or SMOL version.");
+        assert!(cpu_format_error(&crate::engine_inventory::ArtifactIdentity { weights_id: "groupwise-int".into(), ..nvfp4 }).is_none());
     }
 
     #[tokio::test]
@@ -2393,5 +2847,51 @@ mod launch_options_tests {
         dflash_flash.resolve_draft_tokens(&flash);
         assert_eq!(dflash_flash.draft_tokens, 0);
         assert!(dflash_flash.validate_target(&flash, 1, 0).is_err());
+    }
+
+    #[test]
+    fn cpu_device_forwards_only_cpu_route_settings() {
+        let absent: LaunchOptions = serde_json::from_str("{}").unwrap();
+        assert_eq!(absent.device, "gpu");
+        assert!(!absent.args().iter().any(|arg| arg == "--device"));
+        let cpu = LaunchOptions {
+            device: "cpu".into(),
+            vision: false,
+            kv_dtype: "int8".into(),
+            kv_arena_bytes: Some(4096),
+            cpu_ram_headroom_gib: Some(6),
+            ..Default::default()
+        };
+        cpu.validate(1).unwrap();
+        assert_eq!(cpu.args(), [
+            "--device", "cpu", "--spec", "none", "--structured-outputs", "--kv-dtype", "int8",
+            "--kv-arena-bytes", "4096", "--cpu-ram-headroom-gib", "6",
+        ]);
+        assert!(cpu.validate(2).is_err());
+        for invalid in [
+            LaunchOptions { vision: true, ..cpu.clone() },
+            LaunchOptions { spec: "dflash".into(), ..cpu.clone() },
+            LaunchOptions { draft_tokens: 3, spec: "mtp".into(), ..cpu.clone() },
+            LaunchOptions { kv_dtype: "nvfp4".into(), ..cpu.clone() },
+            LaunchOptions { vram_budget_bytes: Some(1), ..cpu.clone() },
+            LaunchOptions { prefill_chunk: 512, ..cpu.clone() },
+            LaunchOptions { device: "tpu".into(), ..cpu.clone() },
+            LaunchOptions { device: "gpu".into(), ..cpu.clone() },
+        ] {
+            assert!(invalid.validate(1).is_err(), "{invalid:?}");
+        }
+        let qwen36 = crate::engine_inventory::ArtifactIdentity {
+            model_id: "qwen3.6-35b-a3b".into(),
+            weights_id: "groupwise-int".into(),
+        };
+        assert_eq!(cpu.validate_target(&qwen36, 1, 0), Ok(262144));
+        let gpu = LaunchOptions { vision: false, ..Default::default() };
+        assert!(gpu.validate_target(&qwen36, 1, 0).unwrap_err().contains("Device CPU"));
+        // GPU targets keep their own limits on the CPU device; the Engine reports whether it runs them.
+        let qwen = crate::engine_inventory::ArtifactIdentity {
+            model_id: "qwen3.8-27b".into(),
+            weights_id: "groupwise-int-dflash2-q4".into(),
+        };
+        assert_eq!(cpu.validate_target(&qwen, 1, 1), Ok(262144));
     }
 }

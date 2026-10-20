@@ -130,6 +130,10 @@ const LINUX_RUNTIME_ARCHITECTURES: [(&str, &str, &str); 4] = [
     ("12.0", "sm120a", "sm_120a"),
 ];
 
+/// Optional CUDA-free image for the CPU device on hosts without the NVIDIA driver.
+#[cfg(target_os = "linux")]
+const LINUX_CPU_RUNTIME: (&str, &str, &str) = ("cpu", "cpu", "none");
+
 #[cfg(target_os = "linux")]
 fn linux_runtime_set(root: &Path) -> std::io::Result<std::collections::BTreeMap<String, PathBuf>> {
     use std::io::{Error, ErrorKind};
@@ -142,11 +146,12 @@ fn linux_runtime_set(root: &Path) -> std::io::Result<std::collections::BTreeMap<
     let revision = set["source_commit"].as_str().filter(|s| !s.is_empty())
         .ok_or_else(|| invalid("runtime set has no source commit".into()))?;
     let declared = set["runtimes"].as_object().ok_or_else(|| invalid("runtime map is missing".into()))?;
-    if declared.len() != LINUX_RUNTIME_ARCHITECTURES.len() {
-        return Err(invalid("runtime set must contain exactly four architectures".into()));
+    let cpu = declared.contains_key(LINUX_CPU_RUNTIME.0);
+    if declared.len() != LINUX_RUNTIME_ARCHITECTURES.len() + usize::from(cpu) {
+        return Err(invalid("runtime set must contain exactly four architectures and at most the CPU image".into()));
     }
     let mut runtimes = std::collections::BTreeMap::new();
-    for (capability, directory, cuda_architecture) in LINUX_RUNTIME_ARCHITECTURES {
+    for (capability, directory, cuda_architecture) in LINUX_RUNTIME_ARCHITECTURES.into_iter().chain(cpu.then_some(LINUX_CPU_RUNTIME)) {
         if declared.get(capability).and_then(|v| v.as_str()) != Some(directory) {
             return Err(invalid(format!("runtime set has an invalid {capability} assignment")));
         }
@@ -1509,6 +1514,33 @@ mod tests {
         for (_, directory, _) in LINUX_RUNTIME_ARCHITECTURES {
             assert_eq!(fs::read_to_string(data.join("ginfer/linux").join(directory).join("bin/ginfer-serve")).unwrap(), format!("{directory}-version-two"));
         }
+        // The optional CUDA-free CPU image installs beside the four CUDA images.
+        let (_, cpu_directory, cpu_architecture) = LINUX_CPU_RUNTIME;
+        let cpu_image = source.join(cpu_directory);
+        fs::create_dir_all(cpu_image.join("bin")).unwrap();
+        let cpu_bytes = "cpu-version-two";
+        for name in ["ginfer", "ginfer-serve"] {
+            use std::os::unix::fs::PermissionsExt;
+            let path = cpu_image.join("bin").join(name);
+            fs::write(&path, cpu_bytes).unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let cpu_manifest = |architecture: &str| serde_json::to_vec(&serde_json::json!({
+            "schema":"ginfer-linux-runtime-v1", "source_commit":"version-two", "source_dirty":false,
+            "cuda_architecture":architecture,
+            "files":[{"path":"bin/ginfer-serve","bytes":cpu_bytes.len(),"sha256":format!("{:x}", Sha256::digest(cpu_bytes.as_bytes()))},
+                {"path":"bin/ginfer","bytes":cpu_bytes.len(),"sha256":format!("{:x}", Sha256::digest(cpu_bytes.as_bytes()))}]
+        })).unwrap();
+        fs::write(cpu_image.join("runtime-manifest.json"), cpu_manifest("sm_120a")).unwrap();
+        fs::write(source.join("runtime-set.json"), serde_json::to_vec(&serde_json::json!({
+            "schema":"ginfer-linux-runtime-set-v1", "platform":"linux-x64", "source_commit":"version-two",
+            "runtimes":{"8.0":"sm80","8.6":"sm86","8.9":"sm89","12.0":"sm120a","cpu":"cpu"}
+        })).unwrap()).unwrap();
+        assert!(linux_runtime_set(&source).is_err(), "a CPU image must declare no CUDA architecture");
+        fs::write(cpu_image.join("runtime-manifest.json"), cpu_manifest(cpu_architecture)).unwrap();
+        let runtimes = linux_runtime_set(&source).unwrap();
+        assert_eq!(runtimes.get("cpu"), Some(&source.join("cpu/bin/ginfer-serve")));
+        assert_eq!(runtimes.len(), 5);
         assert_eq!(fs::read_to_string(model).unwrap(), "model");
         for (relative_path, contents) in retained_host_files {
             assert_eq!(

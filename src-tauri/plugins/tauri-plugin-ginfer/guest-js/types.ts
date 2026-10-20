@@ -16,6 +16,8 @@ export interface SessionInfo {
   prefill_chunk: number
   max_concurrency: number
   no_cuda_graph: boolean
+  /** Execution device of the resident server: `gpu` or `cpu`. */
+  device?: string
   api_key: string
 }
 
@@ -109,6 +111,8 @@ export type GinferConfig = {
   /** Valid range 1..8; 0 leaves the server default. */
   max_concurrency: number
   no_cuda_graph: boolean
+  /** Device: `gpu`, `cpu`, or omitted for the Host's automatic choice. */
+  device?: string
   /** Ordered physical GPU UUIDs selected by the user; omitted means automatic. */
   gpu_uuids?: string[]
 }
