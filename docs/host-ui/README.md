@@ -19,6 +19,14 @@ binds every consumer Flash entry (RTX 5090, RTX 4090, laptop) through one settin
 each Flash file's exact ID set, and runs the same GPU-group selection check as the Qwen and Muse
 consumer entries. Native Windows Flash entries are out of scope.
 
+Verification (S1 CPUs 32-63, container `gchat-s1-verify:20261015`, GChat `b0ca98b9b`): the focused
+`launch_profiles` tests passed with all 54 GInfer catalogs supplied (16 passed), and ONE
+`make install-and-build && make verify` with the 37 Linux catalogs supplied passed: frontend 4000
+passed/6 skipped, extensions 128, six coverage floors, Rust 1385 passed/0 failed/31 ignored across 23
+summaries. Same environment-only settings as the Muse run (`YARN_ENABLE_IMMUTABLE_INSTALLS=false`,
+`WHISPER_DONT_GENERATE_BINDINGS=1`); a first attempt without `install-and-build` stopped at `yarn lint`
+before any check ran (no node_modules).
+
 ## Muse 2-bit mix per-class launch catalogs — claude-arch:muse-mix-profiles, October 19
 
 Ron 2026-10-19: Muse 30B 2-bit mix `9d4ca1b2` stays the shipped Muse 2-bit package; its Linux
