@@ -1236,7 +1236,7 @@ mod tests {
     /// The CPU image (GINFER_CUDA=OFF) of the NEW-ENGINE-BUNDLE commit; host minima from each smoke.
     const CPU_ENGINE: &str = "2d54a4e318079fe0ac18c125992fb83a0f66fc24";
     const CPU_AMX_HOST_FREE: u64 = 0;
-    const CPU_AVX2_HOST_FREE: u64 = 0;
+    const CPU_AVX2_HOST_FREE: u64 = 15864188928;
 
     #[test]
     fn screened_profiles_require_startup_guard_without_claiming_full_context_capacity() {
