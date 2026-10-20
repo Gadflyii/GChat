@@ -401,12 +401,28 @@ async fn load_on_host_inner(
     }
     if let Some((profile, gpu_uuids)) = selected {
         let mut launch = profile_request(model.id, &profile, gpu_uuids, &config, &requested);
-        let result = control.request("/host/v1/profile-launch", Some(serde_json::json!({
+        let launched = control.request("/host/v1/profile-launch", Some(serde_json::json!({
             "profile_id": profile.id, "model_id": model.id, "gpu_uuids": launch.gpu_uuids,
             "structured_outputs": launch.options.structured_outputs,
             "kv_arena_bytes": launch.options.kv_arena_bytes,
                     "load_operation_id":config.load_operation_id,
-                }))).await?;
+                }))).await;
+        let result = match launched {
+            Ok(result) => result,
+            Err(error) => {
+                // A package with the tested identity and size but other bytes is not the tested
+                // package: the Host now knows it and stops offering that profile, so Automatic
+                // continues with saved settings and the fit check. Any other failure stands.
+                let refreshed = control.snapshot().await?;
+                if config.use_profile_defaults
+                    && selected_profile(&refreshed, model.id, &config, &requested, &visible).is_none_or(|(again, _)| again.id != profile.id)
+                {
+                    return launch_without_profile(sessions, control, &refreshed, &model, &config, requested, &visible, cpu,
+                        model_id, model_path, timeout).await;
+                }
+                return Err(error);
+            }
+        };
         let instance_id: Uuid = serde_json::from_value(result["instance_id"].clone())
             .map_err(|e| e.to_string())?;
         launch.instance_id = Some(instance_id);
@@ -414,11 +430,31 @@ async fn load_on_host_inner(
             config.load_operation_id,
         ).await;
     }
+    launch_without_profile(sessions, control, &snapshot, &model, &config, requested, &visible, cpu,
+        model_id, model_path, timeout).await
+}
+
+/// No tested profile applies (or its package turned out to differ): Automatic uses the person's
+/// saved settings, then the fit check; explicit custom settings start as given.
+#[allow(clippy::too_many_arguments)] // The load's inputs, as load_on_host_inner holds them.
+async fn launch_without_profile(
+    sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
+    control: Arc<ginfer_host::launcher::LocalControl>,
+    snapshot: &Value,
+    model: &ginfer_host::service::ModelEntry,
+    config: &GinferConfig,
+    requested: LaunchOptions,
+    visible: &[String],
+    cpu: bool,
+    model_id: String,
+    model_path: String,
+    timeout: u64,
+) -> Result<SessionInfo, String> {
     let automatic = config.use_profile_defaults || config.max_context == 0 || config.max_concurrency == 0;
     if automatic {
         // No tested settings for these cards: the person's saved settings for this exact
         // package and these cards come next, then the longest standard context that fits.
-        if let Some(saved) = saved_request(&snapshot, model.id, &config, &visible, cpu) {
+        if let Some(saved) = saved_request(snapshot, model.id, config, visible, cpu) {
             return place_and_attach(sessions, control, saved, model_id, model_path, timeout,
                 config.load_operation_id).await;
         }
@@ -442,7 +478,7 @@ async fn load_on_host_inner(
         .filter_map(Value::as_str)
         .collect();
     let inventory = snapshot["gpus"].as_array().ok_or("Host GPU inventory is unavailable")?;
-    let order = config.gpu_uuids.as_ref().unwrap_or(&visible);
+    let order = config.gpu_uuids.as_deref().unwrap_or(visible);
     let available: Vec<_> = order.iter().filter(|id| !occupied.contains(id.as_str()))
         .filter_map(|id| inventory.iter().find(|gpu| gpu["uuid"].as_str() == Some(id.as_str())))
         .collect();
@@ -1442,6 +1478,26 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
         }
         assert!(host.processes.lock().await.endpoint(explicit_connection.instance_id).is_ok());
         control.stop_session(&explicit_connection).await.unwrap();
+
+        // A tested profile for the same identity and size but another package is not offered
+        // once the Host knows this package's SHA-256; Automatic falls through to the fit check.
+        profile.artifact_sha256 = "b".repeat(64);
+        std::fs::write(
+            directory.join("launch-profiles.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schema": "ginfer-launch-profiles-v1", "profiles": [profile]
+            })).unwrap(),
+        ).unwrap();
+        host.scan().await.unwrap();
+        assert_eq!(host.snapshot().await["launch_profiles"], serde_json::json!([]));
+        let fitted = load_on_host(
+            sessions.clone(), control.clone(), "desktop-alias".into(),
+            artifact.to_string_lossy().into_owned(),
+            GinferConfig { use_profile_defaults: true, ..config.clone() }, 5,
+        ).await.unwrap();
+        assert_eq!(fitted.max_context, 131072);
+        let fitted_connection = sessions.lock().await[&fitted.pid].owner.connection.clone();
+        control.stop_session(&fitted_connection).await.unwrap();
         server.abort();
         monitor.abort();
         host.processes.lock().await.shutdown().await.unwrap();

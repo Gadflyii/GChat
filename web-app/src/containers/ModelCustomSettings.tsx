@@ -166,6 +166,8 @@ export function ModelCustomSettings({ hostId, snapshot, model, modelName, disabl
       return result.profile
     } catch (cause) {
       setProblem(plainHostError(cause))
+      // The Host may have applied the change before the reply was lost; show what it holds now.
+      await onChanged().catch(() => undefined)
       return undefined
     } finally { setWorking(null) }
   }

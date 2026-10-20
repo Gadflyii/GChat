@@ -803,8 +803,18 @@ impl Host {
                     }
                 },
             )
-        }).await.map_err(|e| e.to_string())?
-            .map_err(crate::launch_profiles::profile_verification_error)?;
+        }).await.map_err(|e| e.to_string())?;
+        let verification = match verification {
+            Ok(verification) => verification,
+            Err(error) => {
+                if error == "SHA256 mismatch" {
+                    // Remember which package this is, so its tested settings stop being offered
+                    // for it and Automatic moves on to saved settings or the fit check.
+                    let _ = self.identify_package(&payload).await;
+                }
+                return Err(crate::launch_profiles::profile_verification_error(error));
+            }
+        };
         check_load()?;
         self.record_payload_verification(payload, verification).await
     }
@@ -1162,7 +1172,15 @@ impl Host {
         let models = self.inventory.read().await.clone();
         let saved_profiles: Vec<_> = data.custom_profiles.values().cloned().collect();
         drop(data);
-        let custom_profiles = self.custom_profile_projection(&models, saved_profiles).await;
+        // Package identities the Host already holds: a tested profile is offered only for the
+        // exact package it was tested with, and saved settings are keyed to it.
+        let mut package_hashes = BTreeMap::new();
+        for model in &models {
+            if let Some(sha256) = self.recorded_package_sha256(&model.payload).await {
+                package_hashes.insert(model.id, sha256);
+            }
+        }
+        let custom_profiles = self.custom_profile_projection(&models, saved_profiles, &package_hashes);
         let launch_profiles = self.launch_profiles.read().await;
         let mut model_index: BTreeMap<_, Vec<_>> = BTreeMap::new();
         for model in &models {
@@ -1201,6 +1219,9 @@ impl Host {
                     serde_json::json!(profile.launch_groups(&self.gpus, &Default::default(), &self.cpu)),
                 ));
                 for model in matching {
+                    if package_hashes.get(&model.id).is_some_and(|sha256| *sha256 != profile.artifact_sha256) {
+                        continue;
+                    }
                     available_profiles
                         .push(serde_json::json!({"profile":profile,"model_id":model.id,
                     "gpu_groups":groups,"compatible_gpu_groups":compatible}));
@@ -1302,22 +1323,19 @@ impl Host {
         snapshot
     }
     /// Saved custom settings with what each still matches on this computer.
-    async fn custom_profile_projection(
+    fn custom_profile_projection(
         &self,
         models: &[ModelEntry],
         saved: Vec<crate::custom_profiles::CustomProfile>,
+        hashes: &BTreeMap<Uuid, String>,
     ) -> Vec<serde_json::Value> {
         if saved.is_empty() {
             return vec![];
         }
-        let mut hashes = Vec::with_capacity(models.len());
-        for model in models {
-            hashes.push(self.recorded_package_sha256(&model.payload).await);
-        }
-        let installed: Vec<_> = models.iter().zip(&hashes).map(|(model, sha256)| {
+        let installed: Vec<_> = models.iter().map(|model| {
             crate::custom_profiles::InstalledPackage {
                 id: model.id, path: &model.path, identity: &model.metadata.identity,
-                sha256: sha256.as_deref(),
+                sha256: hashes.get(&model.id).map(String::as_str),
             }
         }).collect();
         let mut saved = saved;
