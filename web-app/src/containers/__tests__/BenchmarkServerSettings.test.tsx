@@ -65,7 +65,7 @@ it('offers Max Perf separately and applies only after selection and confirmation
   expect(screen.getByText(/does not claim hardware qualification/)).toBeInTheDocument()
   expect(mocks.command).not.toHaveBeenCalled()
   await userEvent.click(screen.getByLabelText('Max Perf profile'))
-  await userEvent.click(screen.getByRole('menuitemradio', { name: /GBench Max Perf · Flash pure 2-bit/ }))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: /GBench Max Perf · Flash SMOL/ }))
   expect(pending).toHaveBeenLastCalledWith(true)
   expect(mocks.command).not.toHaveBeenCalled()
   expect(screen.getByRole('alert')).toHaveTextContent('Applying this profile waits for current requests to finish, then restarts this server. Chats and other clients using it are affected. Wait for the server to be ready before selecting Run benchmark.')
@@ -99,7 +99,7 @@ it('clears the pending profile when selecting another server without restarting 
   const props = { sessions: [current, other], selected: current, select, disabled: false, refresh: vi.fn(), onPendingChange: pending }
   const view = render(<BenchmarkServerSettings {...props} />)
   await userEvent.click(screen.getByLabelText('Max Perf profile'))
-  await userEvent.click(screen.getByRole('menuitemradio', { name: /GBench Max Perf · Flash pure 2-bit/ }))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: /GBench Max Perf · Flash SMOL/ }))
   expect(pending).toHaveBeenLastCalledWith(true)
   await userEvent.click(screen.getByLabelText('Host / Instance'))
   await userEvent.click(screen.getByRole('menuitemradio', { name: 'Other running server' }))
@@ -134,7 +134,7 @@ it('refuses to apply from a stale session selection and clears a choice when its
   const props = { sessions: [current], selected: current, select: vi.fn(), disabled: false, refresh: vi.fn(), onPendingChange: vi.fn() }
   const view = render(<BenchmarkServerSettings {...props} />)
   await userEvent.click(screen.getByLabelText('Max Perf profile'))
-  await userEvent.click(screen.getByRole('menuitemradio', { name: /GBench Max Perf · Flash pure 2-bit/ }))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: /GBench Max Perf · Flash SMOL/ }))
   view.rerender(<BenchmarkServerSettings {...props} selected={{ ...current, session_id: 'old-session' }} />)
   expect(screen.getByLabelText('Max Perf profile')).toHaveTextContent('Choose a Max Perf profile')
   expect(screen.getByLabelText('Max Perf profile')).toBeDisabled()

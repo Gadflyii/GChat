@@ -370,8 +370,33 @@ it('explains a missing profile in plain words and points to the next step', () =
   data.instances = []
   data.launch_profiles = []
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
-  expect(screen.getByText(/No saved settings fit this model on this computer yet/)).toBeInTheDocument()
+  expect(screen.getByText(/No tested or saved settings fit this model on this computer yet. Choose your own in Model and memory settings below/)).toBeInTheDocument()
   expect(document.body).not.toHaveTextContent(/draft format and TP degree/)
+})
+
+it('lists saved custom settings beside the tested ones and starts them as custom settings', async () => {
+  const user = userEvent.setup()
+  const data = snapshot()
+  data.instances = []
+  const saved = (id: string, name: string, status: 'ready' | 'hardware_changed') => ({ id, name, status, model_id: 'model',
+    package_sha256: 'a'.repeat(64), identity: { model_id: 'muse-glimmer-30b', weights_id: 'nvfp4' }, model_path: '/model.ginfer',
+    hardware: [{ uuid: 'GPU-one', name: 'Fixture GPU', memory_mib: 32607 }], gpu_uuids: ['GPU-one'], max_context: 65536, concurrency: 2,
+    options: { vision: false, structured_outputs: true, spec: 'none' as const, draft_tokens: 0, draft_tp: 0, kv_dtype: 'int8' as const,
+      kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false },
+    created_unix_ms: 1, updated_unix_ms: 1 })
+  data.custom_profiles = [saved('long', 'Long chats', 'ready'), saved('old', 'Old card', 'hardware_changed')]
+  const launch = vi.fn()
+  const launchCustom = vi.fn()
+  render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} launchCustom={launchCustom} />)
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getByText('Tested')).toBeInTheDocument()
+  expect(screen.getByText('Custom')).toBeInTheDocument()
+  expect(screen.getByRole('menuitemradio', { name: 'Custom · Old card · 2 replies at once · 65,536 tokens · check again on the Models page' })).toHaveAttribute('data-disabled')
+  await user.click(screen.getByRole('menuitemradio', { name: 'Custom · Long chats · 2 replies at once · 65,536 tokens' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
+  expect(launch).not.toHaveBeenCalled()
+  expect(launchCustom).toHaveBeenCalledWith(expect.objectContaining({ model_id: 'model', gpu_uuids: ['GPU-one'],
+    max_context: 65536, concurrency: 2, kv_dtype: 'int8', remaining_instances: 1 }))
 })
 
 it('explains unreadable saved settings and keeps the original error available on request', () => {

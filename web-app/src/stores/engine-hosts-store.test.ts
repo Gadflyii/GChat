@@ -316,7 +316,7 @@ describe('Host facade address projection', () => {
     providers.updateProvider.mockClear()
     await useEngineHosts.getState().refresh()
     const projection = providers.updateProvider.mock.calls.at(-1)?.[1]
-    expect(projection.models[0].displayName).toBe('Qwen 3.8 27B — 2-bit mix — Ron-PC')
+    expect(projection.models[0].displayName).toBe('Qwen 3.8 27B — SMOL — Ron-PC')
   })
   describe('chat model selection from the running instance', () => {
     const host = { host_id: 'local', local: true, name: 'This computer' }

@@ -505,6 +505,15 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                     )
                     .await
             }
+            // The Host's entry for an installed model file, so its settings can be checked.
+            "local_model_host_entry" => {
+                let path = args["path"]
+                    .as_str()
+                    .filter(|path| !path.is_empty())
+                    .ok_or("path is required")?;
+                let entry = control.register_model(std::path::Path::new(path)).await?;
+                serde_json::to_value(entry).map_err(|error| error.to_string())
+            }
             "local_model_downloads" => control.request("/host/v1/downloads", None).await,
             "local_model_download" => {
                 control

@@ -238,11 +238,6 @@ pub async fn load(
     load_on_host(sessions, control, model_id, model_path, config, timeout).await
 }
 
-/// Typed code the UI keys off when a model has no qualified automatic profile; the Tauri
-/// command error is a string, so the code leads it as `[code] message` and the extension
-/// parses it into `error.code`.
-pub const NO_QUALIFIED_PROFILE: &str = "no_qualified_profile";
-
 async fn load_on_host(
     sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
     control: Arc<ginfer_host::launcher::LocalControl>,
@@ -321,20 +316,12 @@ async fn load_on_host_inner(
             let launch: LaunchRequest = serde_json::from_value(i["profile"].clone()).ok()?;
             let id: Uuid = serde_json::from_value(i["instance_id"].clone()).ok()?;
             let settings_match = if config.use_profile_defaults {
-                match automatic_launch.as_ref() {
-                    Some(expected) => {
-                        launch.gpu_uuids == expected.gpu_uuids
-                            && launch.max_context == expected.max_context
-                            && launch.concurrency == expected.concurrency
-                            && launch.options == expected.options
-                    }
-                    // No tested profile exists, so the settings the Models page checked and started with are the
-                    // only ones there can be: use the running instance of this model on the visible cards.
-                    None => launch
-                        .gpu_uuids
-                        .iter()
-                        .all(|uuid| visible.iter().any(|v| v == uuid)),
-                }
+                // Automatic uses the copy of this model that is already running on the visible
+                // (or selected) cards, whichever settings started it: tested, saved or custom.
+                launch.gpu_uuids.iter().all(|uuid| visible.iter().any(|v| v == uuid))
+                    && config.gpu_uuids.as_ref().map_or(true, |selected| {
+                        selected.iter().collect::<BTreeSet<_>>() == launch.gpu_uuids.iter().collect::<BTreeSet<_>>()
+                    })
             } else {
                 matches_resident(&launch, &config, &requested, &visible)
             };
@@ -342,6 +329,16 @@ async fn load_on_host_inner(
                 .then_some((id, launch))
         })
         .collect();
+    let mut residents = residents;
+    if residents.len() > 1 {
+        // Prefer the one copy started with the tested settings Automatic would choose.
+        let expected = automatic_launch.as_ref();
+        let tested: Vec<_> = residents.iter().filter(|(_, launch)| expected.is_some_and(|expected| {
+            launch.gpu_uuids == expected.gpu_uuids && launch.max_context == expected.max_context
+                && launch.concurrency == expected.concurrency && launch.options == expected.options
+        })).cloned().collect();
+        if tested.len() == 1 { residents = tested; }
+    }
     if residents.len() > 1 {
         return Err("Multiple matching resident instances exist; choose the intended host instance explicitly".into());
     }
@@ -365,8 +362,14 @@ async fn load_on_host_inner(
             config.load_operation_id,
         ).await;
     }
-    if config.use_profile_defaults || config.max_context == 0 || config.max_concurrency == 0 {
-        return Err(format!("[{NO_QUALIFIED_PROFILE}] {}", "No tested settings are available for this model on this computer."));
+    let automatic = config.use_profile_defaults || config.max_context == 0 || config.max_concurrency == 0;
+    if automatic {
+        // No tested settings for these cards: the person's saved settings for this exact
+        // package and these cards come next, then the longest standard context that fits.
+        if let Some(saved) = saved_request(&snapshot, model.id, &config, &visible) {
+            return place_and_attach(sessions, control, saved, model_id, model_path, timeout,
+                config.load_operation_id).await;
+        }
     }
     let occupied: BTreeSet<&str> = snapshot["instances"]
         .as_array()
@@ -406,7 +409,7 @@ async fn load_on_host_inner(
             (group.len() == model.metadata.tp_size as usize).then_some(group)
         }).ok_or("No visible unreserved homogeneous GPU group is available; manage existing instances in Engines")?
     };
-    let launch = LaunchRequest {
+    let mut launch = LaunchRequest {
         benchmark_profile: None,
         instance_id: None,
         qualified_profile_id: None,
@@ -414,27 +417,108 @@ async fn load_on_host_inner(
         gpu_uuids,
         max_context: config.max_context,
         concurrency: config.max_concurrency,
-        options: requested,
+        options: if config.use_profile_defaults { automatic_options() } else { requested },
     };
+    if automatic {
+        launch.concurrency = launch.concurrency.max(1);
+        let limit = launch.options.validate_target(
+            &model.metadata.identity, model.metadata.tp_size, model.metadata.draft_tp)?;
+        launch.max_context = fitting_context(&control, &launch, limit, config.load_operation_id).await?;
+    }
+    place_and_attach(sessions, control, launch, model_id, model_path, timeout,
+        config.load_operation_id).await
+}
+
+/// Settings Automatic uses when nothing tested or saved applies: the same defaults as
+/// the GInfer Hosts form, one reply at a time.
+fn automatic_options() -> LaunchOptions {
+    LaunchOptions {
+        spec: "none".into(),
+        kv_arena_headroom_bytes: ginfer_host::launch_profiles::MIN_PROFILE_HEADROOM_BYTES,
+        ..LaunchOptions::default()
+    }
+}
+
+/// The person's newest saved settings for this exact package on cards that are visible,
+/// free and (when chosen) the chosen ones. Saved settings whose package or cards changed
+/// are never used here; the Models page shows them with a check-again choice.
+fn saved_request(snapshot: &Value, model: Uuid, config: &GinferConfig, visible: &[String]) -> Option<LaunchRequest> {
+    let occupied: BTreeSet<&str> = snapshot["instances"].as_array().into_iter().flatten()
+        .filter(|i| matches!(i["status"].as_str(), Some("ready" | "starting" | "stopping")))
+        .flat_map(|i| i["configuration"]["gpu_uuids"].as_array().into_iter().flatten())
+        .filter_map(Value::as_str)
+        .collect();
+    // The Host lists saved settings newest first.
+    snapshot["custom_profiles"].as_array()?.iter()
+        .filter(|entry| entry["status"] == "ready" && entry["model_id"].as_str() == Some(&model.to_string()))
+        .find_map(|entry| {
+            let profile: ginfer_host::custom_profiles::CustomProfile = serde_json::from_value({
+                let mut value = entry.clone();
+                if let Some(object) = value.as_object_mut() {
+                    for key in ["status", "model_id", "gpu_uuids"] { object.remove(key); }
+                }
+                value
+            }).ok()?;
+            let request = profile.request(model);
+            let cards: BTreeSet<_> = request.gpu_uuids.iter().collect();
+            (request.gpu_uuids.iter().all(|id| visible.contains(id) && !occupied.contains(id.as_str()))
+                && config.gpu_uuids.as_ref().map_or(true, |selected| selected.iter().collect::<BTreeSet<_>>() == cards))
+                .then_some(request)
+        })
+}
+
+/// The longest standard context, at most `limit`, that the Host's startup check says
+/// fits these cards. Each check measures the cards first when they are new.
+async fn fitting_context(
+    control: &ginfer_host::launcher::LocalControl,
+    launch: &LaunchRequest,
+    limit: u32,
+    operation_id: Option<Uuid>,
+) -> Result<u32, String> {
+    use ginfer_host::startup_fit::{standard_context, STANDARD_CONTEXTS};
+    let mut context = standard_context(limit).unwrap_or(limit);
+    loop {
+        let mut check = serde_json::to_value(LaunchRequest { max_context: context, ..launch.clone() })
+            .map_err(|e| e.to_string())?;
+        check["remaining_instances"] = 1.into();
+        check["load_operation_id"] = serde_json::to_value(operation_id).map_err(|e| e.to_string())?;
+        let quote = control.request("/host/v1/startup-quote", Some(check)).await?;
+        let fit = &quote["fit"];
+        if fit["fits"] != false {
+            return Ok(context);
+        }
+        // Jump to the longest standard context the check says fits, or the next shorter one.
+        let shorter = fit["max_context"].as_u64()
+            .map(|n| n.min(u64::from(context - 1)) as u32)
+            .and_then(standard_context)
+            .or_else(|| STANDARD_CONTEXTS.into_iter().find(|n| *n < context));
+        match shorter {
+            Some(next) if next < context => context = next,
+            _ => return Err(format!("[{}] {}", ginfer_host::startup_fit::DOES_NOT_FIT, fit["message"].as_str()
+                .unwrap_or("These settings do not fit in the memory that is free."))),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)] // The load owner's attachment inputs, as attach takes them.
+async fn place_and_attach(
+    sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
+    control: Arc<ginfer_host::launcher::LocalControl>,
+    launch: LaunchRequest,
+    model_id: String,
+    model_path: String,
+    timeout: u64,
+    operation_id: Option<Uuid>,
+) -> Result<SessionInfo, String> {
     let mut placement = serde_json::to_value(&launch).map_err(|e| e.to_string())?;
     placement["load_operation_id"] =
-        serde_json::to_value(config.load_operation_id).map_err(|e| e.to_string())?;
+        serde_json::to_value(operation_id).map_err(|e| e.to_string())?;
     let result = control
         .request("/host/v1/instances", Some(placement))
         .await?;
     let instance_id: Uuid =
         serde_json::from_value(result["instance_id"].clone()).map_err(|e| e.to_string())?;
-    attach(
-        sessions,
-        control,
-        launch,
-        instance_id,
-        model_id,
-        model_path,
-        timeout,
-        config.load_operation_id,
-    )
-    .await
+    attach(sessions, control, launch, instance_id, model_id, model_path, timeout, operation_id).await
 }
 
 #[allow(clippy::too_many_arguments)] // Keep the load owner beside the existing attachment inputs.
@@ -1096,8 +1180,47 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
         assert_eq!(control.snapshot().await.unwrap()["instances"][0]["status"], "stopped");
         assert!(tokio::net::TcpStream::connect(("127.0.0.1", port)).await.is_err());
 
+        // Without tested settings Automatic starts the longest standard context that the
+        // Host's startup check says fits (this fixture quote has no K/V segment facts).
+        let fitted = load_on_host(
+            sessions.clone(), control.clone(), "desktop-alias".into(),
+            artifact.to_string_lossy().into_owned(),
+            GinferConfig { use_profile_defaults: true, ..config.clone() }, 5,
+        ).await.unwrap();
+        assert_eq!((fitted.max_context, fitted.max_concurrency, fitted.spec.as_str()), (131072, 1, "none"));
+        let fitted_connection = sessions.lock().await[&fitted.pid].owner.connection.clone();
+        control.stop_session(&fitted_connection).await.unwrap();
+
+        // Saved settings for this package and card come before the fit check.
+        let saved = control.request("/host/v1/custom-profiles", Some(serde_json::json!({
+            "action": "save", "name": "Short chats", "settings": {
+                "model_id": model_id, "gpu_uuids": ["GPU-test"], "max_context": 16384,
+                "concurrency": 2, "options": LaunchOptions { spec: "none".into(), ..LaunchOptions::default() },
+            }}))).await.unwrap();
+        let saved_id = saved["profile"]["id"].as_str().unwrap().to_owned();
+        let listed = control.snapshot().await.unwrap();
+        assert_eq!(listed["custom_profiles"][0]["status"], "ready");
+        assert_eq!(listed["custom_profiles"][0]["model_id"], model_id.to_string());
+        let chosen = load_on_host(
+            sessions.clone(), control.clone(), "desktop-alias".into(),
+            artifact.to_string_lossy().into_owned(),
+            GinferConfig { use_profile_defaults: true, ..config.clone() }, 5,
+        ).await.unwrap();
+        assert_eq!((chosen.max_context, chosen.max_concurrency), (16384, 2));
+        let chosen_connection = sessions.lock().await[&chosen.pid].owner.connection.clone();
+        control.stop_session(&chosen_connection).await.unwrap();
+        control.request("/host/v1/custom-profiles", Some(serde_json::json!({
+            "action": "update", "id": saved_id, "name": "Renamed"}))).await.unwrap();
+        assert_eq!(control.snapshot().await.unwrap()["custom_profiles"][0]["name"], "Renamed");
+        control.request("/host/v1/custom-profiles", Some(serde_json::json!({
+            "action": "delete", "id": saved_id}))).await.unwrap();
+        assert_eq!(control.snapshot().await.unwrap()["custom_profiles"], serde_json::json!([]));
+        assert!(control.request("/host/v1/custom-profiles", Some(serde_json::json!({
+            "action": "delete", "id": saved_id}))).await.is_err());
+
         let active: LaunchRequest = serde_json::from_value(
-            host.snapshot().await["instances"][0]["profile"].clone(),
+            host.snapshot().await["instances"].as_array().unwrap().iter()
+                .find(|instance| instance["instance_id"] == id.to_string()).unwrap()["profile"].clone(),
         ).unwrap();
         let mut profile = screened_profile();
         profile.platform = std::env::consts::OS.into();

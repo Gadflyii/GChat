@@ -118,6 +118,9 @@ const TERMINAL_LOAD_CODES = new Set([
   // ATO-190: the bundled macOS engine requires a newer macOS than the host
   // (missing Metal symbol). This never resolves on retry, so never auto-retry.
   'OS_VERSION_UNSUPPORTED',
+  // No setting Automatic tries fits this computer's free memory; repeating the same
+  // attempt cannot fit either. Choosing a model or custom settings still starts it.
+  'does_not_fit',
 ])
 
 function autoStartKey(providerName: string, modelId: string): string {
@@ -752,9 +755,19 @@ function reportModelLoadError(
     return
   }
 
-  // No tested settings: the Models page checks and starts settings itself and says so in plain words,
-  // so a second toast pointing at GInfer Hosts would only contradict it.
-  if (err.code === 'no_qualified_profile') return
+  // Settings that do not fit this computer: say so plainly even for an automatic
+  // start, because chat cannot send until other settings are chosen in Models.
+  if (err.code === 'does_not_fit') {
+    toast.error(t('model-errors:doesNotFitTitle'), {
+      id: 'model-load-error',
+      description: t('model-errors:doesNotFitDescription', {
+        message: err.message.replace(/^Failed to load [^:]*: /, ''),
+      }),
+      duration: 15000,
+      closeButton: true,
+    })
+    return
+  }
 
   // Only user-initiated loads surface a toast for every other failure.
   // Automatic/background loads (startup auto-start, ChatInput auto-start,

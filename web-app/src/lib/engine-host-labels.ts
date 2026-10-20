@@ -1,11 +1,14 @@
 import type { EngineInstance, EngineModel, EngineSnapshot } from '@/services/engines'
 
-/** Trailing package hashes in catalog names, e.g. "Qwen 27B 2-bit mix (483343c2...)". */
-export const plainModelName = (name: string) => name.replace(/\s*\([a-f0-9]{64}\)\s*$/i, '')
+/** Model naming (Ron, October 20): 2-bit packages are SMOL; 4-bit packages are INT or NVFP4.
+ *  Older catalogs and Hosts still say "2-bit mix" or "pure 2-bit". */
+const smolName = (name: string) => name.replace(/\b(?:2-bit mix|pure 2-bit)\b/gi, 'SMOL')
 
-/** Profile names come from the Host; older Hosts still say SMOL for the 2-bit packages. */
-export const plainProfileName = (name: string) =>
-  name.replace(/\bFlash SMOL\b/g, 'Flash pure 2-bit').replace(/\bSMOL\b/g, '2-bit mix')
+/** Catalog names without a trailing package hash, e.g. "Qwen 27B SMOL (483343c2...)". */
+export const plainModelName = (name: string) => smolName(name.replace(/\s*\([a-f0-9]{64}\)\s*$/i, ''))
+
+/** Profile names come from the Host and catalogs. */
+export const plainProfileName = (name: string) => smolName(name)
 
 const familyName = (modelId: string) => {
   if (/^qwen3\.8-27b$/i.test(modelId)) return 'Qwen 3.8 27B'
@@ -14,10 +17,10 @@ const familyName = (modelId: string) => {
   return modelId.replace(/^muse-glimmer-/i, 'Muse ').replace(/^qwen/i, 'Qwen ').replace(/-/g, ' ').replace(/(\d)b\b/gi, '$1B')
 }
 
-/** The plain name of a package format: "2-bit mix" (Qwen 27B, Muse 30B), "pure 2-bit" (Flash), INT or NVFP4. */
-export function plainWeightsName(modelId: string, weightsId: string): string {
+/** The plain name of a package format: SMOL (2-bit), INT or NVFP4. */
+export function plainWeightsName(_modelId: string, weightsId: string): string {
   const id = weightsId.toLowerCase()
-  if (id.includes('smol')) return /flash/i.test(modelId) ? 'pure 2-bit' : '2-bit mix'
+  if (id.includes('smol')) return 'SMOL'
   if (id.includes('nvfp4')) return 'NVFP4'
   if (/(^|[-_])(int|groupwise)/.test(id) || id.startsWith('int')) return 'INT'
   return weightsId.split(/[-_]/).map(part => part.toUpperCase()).join(' ')

@@ -1540,7 +1540,7 @@ impl Client {
                 serde_json::to_value(status).map_err(|error| error.to_string())
             }
             "gbot_grant" | "host_name" | "lan_sharing" | "remove_model" | "download" | "download_action"
-            | "profile_launch" | "launch" | "quote" | "start" | "stop" | "restart" | "reload" | "scan" => {
+            | "profile_launch" | "launch" | "quote" | "custom_profile" | "start" | "stop" | "restart" | "reload" | "scan" => {
                 let id = argument_id(&args, "host_id")?;
                 let path = match action {
                     "gbot_grant" => "/host/v1/gbot/grant".into(),
@@ -1548,6 +1548,7 @@ impl Client {
                     "lan_sharing" => "/host/v1/lan-sharing".into(),
                     "launch" => "/host/v1/instances".into(),
                     "quote" => "/host/v1/startup-quote".into(),
+                    "custom_profile" => "/host/v1/custom-profiles".into(),
                     "profile_launch" => "/host/v1/profile-launch".into(),
                     "scan" => "/host/v1/scan".into(),
                     "download" => "/host/v1/downloads".into(),

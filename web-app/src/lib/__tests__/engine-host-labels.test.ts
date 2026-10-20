@@ -4,31 +4,32 @@ import { hostInstanceLabel, identityLabel, plainModelName, plainWeightsName, wei
 
 describe('plain model names', () => {
   it.each([
-    ['qwen3.8-27b', 'smol-q2g64-mix-dflash2-q4', 'Qwen 3.8 27B — 2-bit mix'],
-    ['muse-glimmer-30b', 'smol-q2g64-mix-dflash-q4', 'Muse 30B — 2-bit mix'],
-    ['qwen3.8-flash-next', 'smol-q2g64', 'Qwen 3.8 Flash — pure 2-bit'],
+    ['qwen3.8-27b', 'smol-q2g64-mix-dflash2-q4', 'Qwen 3.8 27B — SMOL'],
+    ['muse-glimmer-30b', 'smol-q2g64-mix-dflash-q4', 'Muse 30B — SMOL'],
+    ['qwen3.8-flash-next', 'smol-q2g64', 'Qwen 3.8 Flash — SMOL'],
     ['qwen3.8-27b', 'groupwise-int-dflash2-q4', 'Qwen 3.8 27B — INT'],
     ['muse-glimmer-30b', 'nvfp4-dflash-nvfp4', 'Muse 30B — NVFP4'],
   ])('shows %s / %s as "%s" without internal format names', (model, weights, label) => {
     expect(identityLabel({ model_id: model, weights_id: weights })).toBe(label)
-    expect(label).not.toMatch(/smol|q2g64|dflash|groupwise/i)
+    expect(label).not.toMatch(/q2g64|dflash|groupwise|2-bit/i)
   })
 
   it('keeps the drafter for a details line and strips a trailing package hash from catalog names', () => {
     expect(weightsDrafterDetail('smol-q2g64-mix-dflash2-q4')).toBe('Speculative drafter: DFlash2')
     expect(weightsDrafterDetail('nvfp4')).toBeUndefined()
-    expect(plainModelName(`Qwen 27B 2-bit mix (${'a'.repeat(64)})`)).toBe('Qwen 27B 2-bit mix')
-    expect(plainModelName('Qwen 27B 2-bit mix')).toBe('Qwen 27B 2-bit mix')
+    expect(plainModelName(`Qwen 27B 2-bit mix (${'a'.repeat(64)})`)).toBe('Qwen 27B SMOL')
+    expect(plainModelName('Qwen 3.8 Flash pure 2-bit')).toBe('Qwen 3.8 Flash SMOL')
+    expect(plainModelName('Qwen 27B INT')).toBe('Qwen 27B INT')
     expect(plainWeightsName('x', 'weird-format')).toBe('WEIRD FORMAT')
   })
 })
 
 describe('plain profile names', () => {
-  it('maps SMOL in Host profile names to the plain names', async () => {
+  it('names 2-bit packages SMOL in Host profile names, including older 2-bit wording', async () => {
     const { plainProfileName } = await import('../engine-host-labels')
-    expect(plainProfileName('GBench Max Perf · Flash SMOL')).toBe('GBench Max Perf · Flash pure 2-bit')
-    expect(plainProfileName('GBench Max Perf · Qwen 3.8 Flash SMOL')).toBe('GBench Max Perf · Qwen 3.8 Flash pure 2-bit')
-    expect(plainProfileName('Qwen 27B SMOL')).toBe('Qwen 27B 2-bit mix')
+    expect(plainProfileName('GBench Max Perf · Flash SMOL')).toBe('GBench Max Perf · Flash SMOL')
+    expect(plainProfileName('GBench Max Perf · Qwen 3.8 Flash pure 2-bit')).toBe('GBench Max Perf · Qwen 3.8 Flash SMOL')
+    expect(plainProfileName('Muse 2-bit mix')).toBe('Muse SMOL')
     expect(plainProfileName('GBench Max Perf · Qwen 3.8 27B INT')).toBe('GBench Max Perf · Qwen 3.8 27B INT')
   })
 })
@@ -36,7 +37,7 @@ describe('plain profile names', () => {
 describe('plain GPU and startup names', () => {
   it('names a startup profile without the raw package id', async () => {
     const { plainStartupModelName } = await import('../engine-host-labels')
-    expect(plainStartupModelName('qwen3.8-27b/smol-q2g64-mix-dflash2-q4')).toBe('Qwen 3.8 27B — 2-bit mix')
+    expect(plainStartupModelName('qwen3.8-27b/smol-q2g64-mix-dflash2-q4')).toBe('Qwen 3.8 27B — SMOL')
     expect(plainStartupModelName('muse')).toBe('muse')
   })
   it('numbers cards only when names repeat', async () => {

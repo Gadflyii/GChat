@@ -39,3 +39,6 @@ pub mod gbot_control;
 
 #[cfg(target_os = "linux")]
 pub mod gbot_login;
+
+pub mod startup_fit;
+pub mod custom_profiles;

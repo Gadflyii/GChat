@@ -38,9 +38,9 @@ describe('bundled GInfer profile', () => {
 
 describe('Host load failures', () => {
   it('exposes a leading Host code as error.code and keeps the message plain', () => {
-    const failure = loadFailure('Qwen', new Error('[no_qualified_profile] No qualified automatic profile is available.'))
-    expect(failure.message).toBe('Failed to load Qwen: No qualified automatic profile is available.')
-    expect((failure as Error & { code?: string }).code).toBe('no_qualified_profile')
+    const failure = loadFailure('Qwen', new Error('[does_not_fit] These settings need 3.2 GB more GPU memory than is free.'))
+    expect(failure.message).toBe('Failed to load Qwen: These settings need 3.2 GB more GPU memory than is free.')
+    expect((failure as Error & { code?: string }).code).toBe('does_not_fit')
     expect(loadFailure('Qwen', 'boom')).toMatchObject({ message: 'Failed to load Qwen: boom' })
     expect((loadFailure('Qwen', 'boom') as Error & { code?: string }).code).toBeUndefined()
   })

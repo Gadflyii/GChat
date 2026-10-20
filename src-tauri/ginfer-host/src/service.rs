@@ -104,6 +104,9 @@ pub struct Persistent {
     pub managed_model_root: Option<PathBuf>,
     #[serde(default)]
     pub first_run: crate::first_run::Progress,
+    /// Launch settings the person saved, keyed to a package SHA-256 and these graphics cards.
+    #[serde(default)]
+    pub custom_profiles: BTreeMap<Uuid, crate::custom_profiles::CustomProfile>,
 }
 pub struct Host {
     pub gbot: crate::gbot_control::Control,
@@ -439,6 +442,7 @@ impl Host {
                 local_artifacts: vec![],
                 managed_model_root: None,
                 first_run: Default::default(),
+                custom_profiles: Default::default(),
             },
             Err(e) => return Err(e.to_string()),
         };
@@ -1132,7 +1136,9 @@ impl Host {
             Err(error) => serde_json::json!({"error":error}),
         };
         let models = self.inventory.read().await.clone();
+        let saved_profiles: Vec<_> = data.custom_profiles.values().cloned().collect();
         drop(data);
+        let custom_profiles = self.custom_profile_projection(&models, saved_profiles).await;
         let launch_profiles = self.launch_profiles.read().await;
         let mut model_index: BTreeMap<_, Vec<_>> = BTreeMap::new();
         for model in &models {
@@ -1252,8 +1258,132 @@ impl Host {
                 "managed_root":self.downloads.root(),"engine_presets_available":engine_presets_available}});
         snapshot["instances"] = serde_json::Value::Array(instances);
         snapshot["launch_profiles"] = serde_json::Value::Array(available_profiles);
+        snapshot["custom_profiles"] = serde_json::Value::Array(custom_profiles);
         snapshot["max_perf_profiles"] = serde_json::Value::Array(max_perf_profiles);
         snapshot
+    }
+    /// Saved custom settings with what each still matches on this computer.
+    async fn custom_profile_projection(
+        &self,
+        models: &[ModelEntry],
+        saved: Vec<crate::custom_profiles::CustomProfile>,
+    ) -> Vec<serde_json::Value> {
+        if saved.is_empty() {
+            return vec![];
+        }
+        let mut hashes = Vec::with_capacity(models.len());
+        for model in models {
+            hashes.push(self.recorded_package_sha256(&model.payload).await);
+        }
+        let installed: Vec<_> = models.iter().zip(&hashes).map(|(model, sha256)| {
+            crate::custom_profiles::InstalledPackage {
+                id: model.id, path: &model.path, identity: &model.metadata.identity,
+                sha256: sha256.as_deref(),
+            }
+        }).collect();
+        let mut saved = saved;
+        saved.sort_by(|a, b| b.updated_unix_ms.cmp(&a.updated_unix_ms).then(a.name.cmp(&b.name)));
+        saved.iter().map(|profile| {
+            let (status, model_id) = profile.status(&installed, &self.gpus);
+            let mut value = serde_json::json!(profile);
+            value["status"] = serde_json::json!(status);
+            value["model_id"] = serde_json::json!(model_id);
+            value["gpu_uuids"] = serde_json::json!(profile.hardware.iter().map(|gpu| &gpu.uuid).collect::<Vec<_>>());
+            value
+        }).collect()
+    }
+    /// Save, rename, re-save or delete one set of custom launch settings.
+    async fn change_custom_profile(&self, body: serde_json::Value) -> Result<serde_json::Value, String> {
+        use crate::custom_profiles::{profile_name, CustomProfile, SavedGpu};
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Settings {
+            model_id: Uuid,
+            gpu_uuids: Vec<String>,
+            max_context: u32,
+            concurrency: u32,
+            options: LaunchOptions,
+        }
+        #[derive(Deserialize)]
+        #[serde(tag = "action", rename_all = "snake_case")]
+        enum Change {
+            Save { name: String, settings: Settings },
+            Update { id: Uuid, #[serde(default)] name: Option<String>, #[serde(default)] settings: Option<Settings> },
+            Delete { id: Uuid },
+        }
+        let change: Change = serde_json::from_value(body).map_err(|error| error.to_string())?;
+        // The settings must describe a launch this Host can prepare for this model and these cards.
+        let keyed = |settings: Settings| async move {
+            let request = LaunchRequest {
+                instance_id: None, qualified_profile_id: None, benchmark_profile: None,
+                model_id: settings.model_id, gpu_uuids: settings.gpu_uuids.clone(),
+                max_context: settings.max_context, concurrency: settings.concurrency,
+                options: settings.options.clone(),
+            };
+            let launch = self.prepare_launch(&request).await?;
+            launch.options.validate(launch.tp)?;
+            let model = self.inventory.read().await.iter().find(|model| model.id == settings.model_id)
+                .cloned().ok_or("model is not installed")?;
+            let package_sha256 = self.identify_package(&model.payload).await?
+                .ok_or("GChat could not read this model file's identity, so these settings cannot be saved for it")?;
+            let hardware = settings.gpu_uuids.iter().map(|uuid| self.gpus.iter().find(|gpu| &gpu.uuid == uuid)
+                .map(SavedGpu::from).ok_or_else(|| "unknown GPU".to_string())).collect::<Result<Vec<_>, _>>()?;
+            Ok::<_, String>((package_sha256, model.metadata.identity.clone(), model.path.clone(), hardware, settings))
+        };
+        let now = now_unix_ms();
+        let (id, next, existing) = match change {
+            Change::Save { name, settings } => {
+                let name = profile_name(&name)?;
+                let (package_sha256, identity, model_path, hardware, settings) = keyed(settings).await?;
+                let id = Uuid::new_v4();
+                (id, Some(CustomProfile {
+                    id, name, package_sha256, identity, model_path, hardware,
+                    max_context: settings.max_context, concurrency: settings.concurrency,
+                    options: settings.options, created_unix_ms: now, updated_unix_ms: now,
+                }), false)
+            }
+            Change::Update { id, name, settings } => {
+                let mut profile = self.data.lock().await.custom_profiles.get(&id).cloned()
+                    .ok_or("These saved settings no longer exist")?;
+                if let Some(name) = name { profile.name = profile_name(&name)?; }
+                if let Some(settings) = settings {
+                    let (package_sha256, identity, model_path, hardware, settings) = keyed(settings).await?;
+                    profile.package_sha256 = package_sha256;
+                    profile.identity = identity;
+                    profile.model_path = model_path;
+                    profile.hardware = hardware;
+                    profile.max_context = settings.max_context;
+                    profile.concurrency = settings.concurrency;
+                    profile.options = settings.options;
+                }
+                profile.updated_unix_ms = now;
+                (id, Some(profile), true)
+            }
+            Change::Delete { id } => (id, None, true),
+        };
+        // Hold the lock through the durable write so a failed write is never observed.
+        let mut data = self.data.lock().await;
+        let previous = match &next {
+            Some(profile) => data.custom_profiles.insert(id, profile.clone()),
+            None => data.custom_profiles.remove(&id),
+        };
+        if existing && previous.is_none() {
+            data.custom_profiles.remove(&id);
+            return Err("These saved settings no longer exist".into());
+        }
+        let written = serde_json::to_vec(&*data).map_err(|e| e.to_string())
+            .and_then(|bytes| write_private(&self.directory.join("host.json"), &bytes));
+        if let Err(error) = written {
+            match previous {
+                Some(previous) => { data.custom_profiles.insert(id, previous); }
+                None => { data.custom_profiles.remove(&id); }
+            }
+            return Err(error);
+        }
+        drop(data);
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        let saved = next;
+        Ok(serde_json::json!({"profile": saved}))
     }
     pub async fn authenticated(&self, request: &Request<Body>) -> bool {
         self.principal(request).await.is_some()
@@ -1725,8 +1855,16 @@ impl Host {
             let tail = &output.stderr[output.stderr.len().saturating_sub(16_384)..];
             return Err(format!("Engine startup quote failed: {}", String::from_utf8_lossy(tail).trim()));
         }
-        let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+        let mut value: serde_json::Value = serde_json::from_slice(&output.stdout)
             .map_err(|error| format!("Engine startup quote is unavailable or invalid; update the Engine runtime: {error}"))?;
+        // A launch that cannot hold its context is reported, not sized: callers
+        // show the shortfall, and placement refuses it before any process starts.
+        let fit = crate::startup_fit::evaluate(&value, launch.max_context, !launch.options.is_cpu());
+        value["fit"] = serde_json::json!(fit);
+        value["fit"]["message"] = (!fit.fits).then(|| fit.sentence()).into();
+        if !fit.fits {
+            return Ok((value, None));
+        }
         let quote: crate::engine_host::StartupQuote = serde_json::from_value(value.clone())
             .map_err(|error| format!("Engine startup quote is unavailable or invalid; update the Engine runtime: {error}"))?;
         // A first solo start measures graph memory. Unknown graph cost
@@ -1749,12 +1887,16 @@ impl Host {
         }
         let launch = self.prepare_launch(&request).await?;
         self.stop_background_profile().await?;
+        // A check on cards this computer has not measured yet measures them first,
+        // exactly as starting the model would, instead of refusing.
+        self.ensure_selected_profile(&launch).await?;
         self.processes.lock().await.validate_launch(&launch, false)?;
         let (quote, kv_arena_bytes) = self.quote_prepared(&launch, remaining).await?;
         Ok(serde_json::json!({
             "model_identity": {"model_id": quote["model_id"], "weights_id": quote["weights_id"]},
             "instance_count": remaining,
             "kv_arena_bytes": kv_arena_bytes,
+            "fit": quote["fit"],
             "quote": quote,
         }))
     }
@@ -1774,6 +1916,10 @@ impl Host {
         }
         let (quote, kv_arena_bytes) = self.quote_prepared(&launch, remaining).await?;
         check_load()?;
+        if quote["fit"]["fits"] == false {
+            return Err(format!("[{}] {}", crate::startup_fit::DOES_NOT_FIT,
+                quote["fit"]["message"].as_str().unwrap_or("These settings do not fit in the memory that is free.")));
+        }
         // A pre-load quote estimates capacity; it does not reserve VRAM or
         // include every allocation made during startup. A solo AUTO launch
         // must let the Engine size its arena after those allocations. Shared
@@ -1992,11 +2138,14 @@ impl Host {
         if req.method() != hyper::Method::POST
             || !matches!(
                 req.uri().path(),
-                "/host/v1/profile-launch" | "/host/v1/instances"
+                "/host/v1/profile-launch" | "/host/v1/instances" | "/host/v1/startup-quote"
             )
         {
             return self.handle(req).await;
         }
+        // A settings check inside a load reports its measuring progress and honours
+        // Cancel, but a check that does not fit is an answer, not a failed load.
+        let check = req.uri().path() == "/host/v1/startup-quote";
         // Paired remote clients retain their existing protocol and cannot control desktop loads.
         if !self.local_administrator(req).await {
             return self.handle(req).await;
@@ -2020,7 +2169,7 @@ impl Host {
         let result = LOAD_OPERATION
             .scope(operation.clone(), self.handle(req))
             .await;
-        if result
+        if check || result
             .as_ref()
             .is_ok_and(|response| response.status().is_success())
         {
@@ -2969,6 +3118,10 @@ impl Host {
                 // deferred formats are extended by idle maintenance.
                 self.processes.lock().await.activity_notification().notify_one();
                 Ok(json(StatusCode::OK, self.snapshot().await))
+            }
+            ("POST", "/host/v1/custom-profiles") => {
+                let body = body_json(req).await?;
+                Ok(json(StatusCode::OK, self.change_custom_profile(body).await?))
             }
             ("POST", "/host/v1/startup-quote") => {
                 if !self.local_administrator(req).await {

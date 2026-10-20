@@ -31,16 +31,40 @@ export type EngineLaunchOptions = {
   kv_arena_headroom_bytes?: number;
   host_kv_cache_bytes: number | null; prefill_chunk: number; no_cuda_graph: boolean;
   flash_host_ram_headroom_gib?: number | null; expert_lfu?: boolean;
+  device?: 'gpu' | 'cpu'; cpu_ram_headroom_gib?: number | null;
 }
 export type EngineLaunchProfile = EngineLaunchOptions & {
   qualified_profile_id?: string | null;
   benchmark_profile?: BenchmarkProfileReference | null;
   instance_id?: string; model_id: string; gpu_uuids: string[]; max_context: number; concurrency: number;
 }
+/** The Host's verdict on whether one launch fits this computer's free memory. */
+export type EngineStartupFit = {
+  fits: boolean
+  /** The longest conversation these settings fit, when known. */
+  max_context?: number | null
+  shortfall_bytes?: number | null
+  resource?: string | null
+  /** What does not fit and what to try, in plain words. */
+  message?: string | null
+}
 export type EngineStartupQuote = {
   instance_count: number
   kv_arena_bytes: number | null
   model_identity: { model_id: string; weights_id: string }
+  fit?: EngineStartupFit
+}
+/** Launch settings the person saved, keyed to a model package SHA-256 and this computer's graphics cards. */
+export type EngineCustomProfile = {
+  id: string; name: string; package_sha256: string
+  identity: { model_id: string; weights_id: string }; model_path: string
+  hardware: { uuid: string; name: string; memory_mib: number; compute_capability?: string | null }[]
+  max_context: number; concurrency: number; options: EngineLaunchOptions
+  created_unix_ms: number; updated_unix_ms: number
+  status: 'ready' | 'model_changed' | 'model_missing' | 'hardware_changed'
+  /** The installed model these settings apply to, when its package still matches. */
+  model_id: string | null
+  gpu_uuids: string[]
 }
 export type BenchmarkModelClass = 'qwen27-int-dflash-q4' | 'qwen27-nvfp4-dflash-q4' | 'flash-smol-mtp' | 'flash-int-mtp'
 export type BenchmarkProfileReference = {
@@ -139,6 +163,7 @@ export type EngineSnapshot = {
     profile: { id: string; name: string; tp: number; max_context: number; concurrency: number;
       options: Partial<EngineLaunchOptions> & { vision: boolean };
       qualification: { tier: 'full-context-tested' | 'screened-startup' | 'calculated-startup-smoke' | 'calculated-pending-validation'; engine_revision: string } } }[];
+  custom_profiles?: EngineCustomProfile[];
   profile_error?: string | null;
   host_id: string; display_name: string; revision: number; boot_id?: string;
   gpus: import('@/lib/model-release').ModelGpu[];
@@ -153,5 +178,9 @@ export const hardwareProfile = (hostId: string, action: EngineHardwareProfileAct
   engineCommand<EngineHardwareProfile>('hardware_profile', {
     host_id: hostId, body: { action, ...(gpuUuids === undefined ? {} : { gpu_uuids: gpuUuids }) },
   })
+
+/** A Host error led by its typed code, `[code] message`, as plain words for the person. */
+export const plainHostError = (cause: unknown) =>
+  (cause instanceof Error ? cause.message : String(cause)).replace(/^Error: /, '').replace(/^\[[a-z_]+\] /, '')
 
 export const engineAlias = (hostId: string, instanceId: string) => `ginfer/${hostId}/${instanceId}`

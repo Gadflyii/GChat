@@ -95,7 +95,7 @@ impl MaxPerfProfile {
                 match model_class {
                     MaxPerfModelClass::Qwen27IntDflashQ4 => "Qwen 3.8 27B INT",
                     MaxPerfModelClass::Qwen27Nvfp4DflashQ4 => "Qwen 3.8 27B NVFP4",
-                    MaxPerfModelClass::FlashSmolMtp => "Qwen 3.8 Flash pure 2-bit",
+                    MaxPerfModelClass::FlashSmolMtp => "Qwen 3.8 Flash SMOL",
                     MaxPerfModelClass::FlashIntMtp => "Qwen 3.8 Flash INT",
                 }
             ),

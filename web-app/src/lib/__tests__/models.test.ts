@@ -494,13 +494,13 @@ describe('runtimeModelDisplayName', () => {
   it('uses the manifest name for a local GInfer model stored under a package hash', () => {
     expect(
       runtimeModelDisplayName('ginfer', { id: hash, name: 'Qwen 27B 2-bit mix' })
-    ).toBe('Qwen 27B 2-bit mix')
+    ).toBe('Qwen 27B SMOL')
   })
 
   it('drops a trailing package hash from the manifest name', () => {
     expect(
       runtimeModelDisplayName('ginfer', { id: hash, name: `Qwen 27B 2-bit mix (${hash})` })
-    ).toBe('Qwen 27B 2-bit mix')
+    ).toBe('Qwen 27B SMOL')
   })
 
   it('leaves the id in use when there is no distinct name or another provider', () => {

@@ -46,6 +46,10 @@ pub struct Startup {
     pub instance_ids: Vec<Uuid>,
     pub quote: Option<Value>,
     pub error: Option<String>,
+    /// GInfer chose these settings because no tested settings exist for these
+    /// cards; the startup check may shorten the context until it fits.
+    #[serde(default)]
+    pub automatic: bool,
 }
 
 fn stage(progress: &Progress, profiled: bool, reviewed: bool, jobs: &[Download]) -> &'static str {
@@ -455,7 +459,7 @@ impl Host {
             "download_id":p.download_id,"model_id":p.model_id,"gpu_uuids":p.request.gpu_uuids,
             "concurrency":p.request.concurrency,"max_context":p.request.max_context,
             "kv_arena_bytes":p.request.options.kv_arena_bytes,"instance_count":p.instance_count,
-            "quote":p.quote,"error":p.error,"instance_ids":p.instance_ids,
+            "quote":p.quote,"error":p.error,"instance_ids":p.instance_ids,"automatic":p.automatic,
             "qualification":"Engine startup estimate; full-context validation is separate"
         })).collect();
         let step = stage(
@@ -828,6 +832,7 @@ impl Host {
                 profile.request.qualified_profile_id = None;
                 profile.quote = None;
                 profile.error = None;
+                profile.automatic = false;
             }
             "complete" => {
                 if step != "startup"
@@ -1263,6 +1268,7 @@ impl Host {
                 instance_ids: vec![],
                 quote: None,
                 error: None,
+                automatic: published.is_none(),
             });
         }
         self.store_first_run(progress.clone()).await?;
@@ -1329,7 +1335,25 @@ impl Host {
             if profile.quote.is_some() || profile.error.is_some() {
                 continue;
             }
-            match self.quote_first_run(profile).await {
+            let mut quoted = self.quote_first_run(profile).await;
+            // Without tested settings, the longest standard context that fits is chosen.
+            let shorter = match &quoted {
+                Ok(quote) if profile.automatic && quote["fit"]["fits"] == false => quote["fit"]["max_context"]
+                    .as_u64()
+                    .map(|n| n.min(u64::from(u32::MAX)) as u32)
+                    .and_then(crate::startup_fit::standard_context)
+                    .filter(|context| *context < profile.request.max_context),
+                _ => None,
+            };
+            if let Some(context) = shorter {
+                profile.request.max_context = context;
+                quoted = self.quote_first_run(profile).await;
+            }
+            match quoted {
+                Ok(quote) if quote["fit"]["fits"] == false => {
+                    profile.error = Some(quote["fit"]["message"].as_str()
+                        .unwrap_or("These settings do not fit in the memory that is free.").to_owned());
+                }
                 Ok(quote) => {
                     profile.quote = Some(quote);
                 }
@@ -1776,6 +1800,7 @@ mod tests {
                         instance_ids: vec![],
                         quote: None,
                         error: None,
+                        automatic: false,
                     }
                 })
                 .collect(),

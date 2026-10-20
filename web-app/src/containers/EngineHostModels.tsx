@@ -267,7 +267,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       <summary className="cursor-pointer font-medium">Start a model with saved settings</summary>
       <EngineProfilePicker hideHeading key={active?.instance_id ?? 'additional'} instanceId={active?.instance_id ?? ''} labelPrefix={host.name}
         snapshot={snapshot} disabled={busy || !!error || active?.status === 'starting' || active?.status === 'stopping'}
-        launch={async body => { if (await act('profile_launch', { body })) setActiveId('') }} />
+        launch={async body => { if (await act('profile_launch', { body })) setActiveId('') }}
+        launchCustom={async body => { if (await act('launch', { body })) setActiveId('') }} />
       {active && snapshot.gpus.some(gpu => !snapshot.instances.some(instance => instance.configuration.gpu_uuids.includes(gpu.uuid))) &&
         <Button variant="outline" disabled={busy || !!error} onClick={() => setActiveId('additional')}>Use other graphics cards for another model</Button>}
       {activeId === 'additional' && <Button variant="outline" onClick={() => setActiveId('')}>Cancel another model</Button>}
@@ -275,7 +276,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     {snapshot && <details className="rounded-lg border p-4 space-y-3">
       <summary className="cursor-pointer font-medium">Model and memory settings</summary>
       <div className="flex flex-wrap gap-2">{snapshot.gpus.map((gpu, index) => <span className="rounded border px-3 py-1 text-sm" key={gpu.uuid}>Graphics card {index + 1}: {gpu.display_name ?? gpu.name} · {(gpu.memory_mib / 1024).toFixed(0)} GiB</span>)}</div>
-      {active?.status === 'stopped' && <p className="text-sm text-muted-foreground">This model is stopped. Choose a model and saved settings above to start it again.</p>}
+      {active?.status === 'stopped' && <p className="text-sm text-muted-foreground">This model is stopped. Choose Start model above to start it again with its own settings, or choose other settings above.</p>}
       {!snapshot.instances.length && <p className="text-sm text-muted-foreground">No models are loaded. Choose an installed model below to start one.</p>}
       {(active ? [active] : []).map((instance) => <div key={instance.instance_id} className="rounded-lg bg-muted/40 p-3 space-y-2">
         <details><summary className="cursor-pointer text-sm text-muted-foreground">Current model settings</summary><EngineInstanceSettings instance={instance} online={!error} /></details>
@@ -358,7 +359,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         <p className="text-sm text-muted-foreground">Experts are parts of a Flash model. This periodically updates which experts are kept in graphics-card memory based on how often they are used (LFU). Turning this off stops those updates; it does not clear the cache or change where uncached experts are loaded from.</p>
       </details>
       {!editing && <>
-        <p className="text-sm text-muted-foreground">Checking settings does not start a model or set aside memory. When starting several copies, automatic sizing divides the available GPU K/V cache equally. Available memory is checked again when each model starts.</p>
+        <p className="text-sm text-muted-foreground">Checking settings does not start a model or set aside memory. The first check on new graphics cards measures them once, which can take a few minutes. When starting several copies, automatic sizing divides the available GPU K/V cache equally. Available memory is checked again when each model starts.</p>
         <Button variant="outline" disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {
           const key = quoteKey
           const revision = quoteRevision.current
@@ -368,7 +369,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
             .catch(error => { if (quoteRevision.current === revision) setStartupQuote({ key, error: String(error) }) })
             .finally(() => setBusy(false))
         }}>Check model settings</Button>
-        {currentQuote?.result && <p role="status" className="text-sm">Model file checked: {identityLabel(currentQuote.result.model_identity)}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'model copy' : 'model copies'}. {currentQuote.result.kv_arena_bytes === null ? 'K/V cache is automatic. Start one copy first so GInfer can measure its memory use before sharing the graphics cards.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of GPU K/V cache per model copy.`} This check did not start a model.</p>}
+        {currentQuote?.result?.fit?.fits === false && <p role="alert" className="text-sm text-destructive">{currentQuote.result.fit.message ?? 'These settings do not fit in the memory that is free.'}</p>}
+        {currentQuote?.result && currentQuote.result.fit?.fits !== false && <p role="status" className="text-sm">Model file checked: {identityLabel(currentQuote.result.model_identity)}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'model copy' : 'model copies'}. {currentQuote.result.kv_arena_bytes === null ? 'K/V cache is automatic. Start one copy first so GInfer can measure its memory use before sharing the graphics cards.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of GPU K/V cache per model copy.`} This check did not start a model.</p>}
         {currentQuote?.error && <div role="alert" className="text-sm text-destructive"><p>These model settings could not be checked. Review your choices and available graphics-card memory, then try again.</p><ModelFailureDetails details={currentQuote.error} /></div>}
       </>}
       <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={async () => {

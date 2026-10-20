@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   controlHost: vi.fn(async () => {}),
   getActiveModels: vi.fn<(provider?: string) => Promise<string[]>>(),
   stopModel: vi.fn<(model: string, provider?: string) => Promise<{ success: boolean; error?: string } | undefined>>(),
+  stopAllModels: vi.fn(async () => {}),
 }))
 vi.mock('@gchat/core', async importOriginal => ({
   ...await importOriginal<typeof import('@gchat/core')>(), joinPath: mocks.joinPath,
@@ -46,9 +47,10 @@ vi.mock('@tanstack/react-router', async importOriginal => ({
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => <a href={to}>{children}</a>,
 }))
 vi.mock('@/utils/switchModel', () => ({ switchToModel: mocks.switchModel }))
-vi.mock('@/services/engines', () => ({ engineCommand: mocks.command, engineAlias: (host: string, instance: string) => `ginfer/${host}/${instance}` }))
+vi.mock('@/services/engines', async importOriginal => ({ ...await importOriginal<typeof import('@/services/engines')>(),
+  engineCommand: mocks.command, engineAlias: (host: string, instance: string) => `ginfer/${host}/${instance}` }))
 vi.mock('@/hooks/useServiceHub', () => ({ isServiceHubInitialized: () => false, useServiceHub: () => ({
-  models: () => ({ getActiveModels: mocks.getActiveModels, stopModel: mocks.stopModel }),
+  models: () => ({ getActiveModels: mocks.getActiveModels, stopModel: mocks.stopModel, stopAllModels: mocks.stopAllModels }),
   providers: () => ({ getProviders: mocks.getProviders }),
   dialog: () => ({ open: mocks.open }),
 }) }))
@@ -101,6 +103,20 @@ function deferred<T>() {
   let reject!: (reason: unknown) => void
   const promise = new Promise<T>((accept, fail) => { resolve = accept; reject = fail })
   return { promise, resolve, reject }
+}
+
+function customSnapshot(extra: Record<string, unknown> = {}) {
+  return { host_id: 'local-host', gpus: [{ uuid: 'gpu-1', name: 'NVIDIA GeForce RTX 5070 Ti', memory_mib: 16303, compute_capability: '12.0' }],
+    models: [{ id: 'host-model', path: '/models/local.ginfer', artifact_set: false,
+      metadata: { identity: { model_id: 'qwen3.8-27b', weights_id: 'smol-q2g64-mix-dflash2-q4' }, tp_size: 1, draft_tp: 1, size_bytes: 10667321600 } }],
+    instances: [], model_management: { version: 1, downloads: [] }, ...extra }
+}
+function savedProfile(id: string, name: string, status: string) {
+  return { id, name, status, package_sha256: '4'.repeat(64), identity: { model_id: 'qwen3.8-27b', weights_id: 'smol-q2g64-mix-dflash2-q4' },
+    model_path: '/models/local.ginfer', hardware: [{ uuid: status === 'ready' ? 'gpu-1' : 'gpu-old', name: 'Old', memory_mib: 1 }],
+    gpu_uuids: [status === 'ready' ? 'gpu-1' : 'gpu-old'], max_context: 98304, concurrency: 1, model_id: 'host-model',
+    options: { vision: false, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'int8', kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false },
+    created_unix_ms: 1, updated_unix_ms: 1 }
 }
 
 describe('host-scoped Models', () => {
@@ -611,7 +627,7 @@ describe('host-scoped Models', () => {
     mocks.command.mockImplementation(async action => action === 'local_model_downloads'
       ? [{ id: 'job', release, status: 'paused', received: 1024, bytes_per_second: 0, error: null, path: null }] : [])
     render(<ModelManagement />)
-    expect(screen.getByText(/Load model uses tested settings for your selected graphics cards/)).toBeInTheDocument()
+    expect(screen.getByText(/Load model picks settings for you: tested settings for your graphics card when they exist, then your saved settings, then the longest conversation that fits/)).toBeInTheDocument()
     expect(screen.getByText(/Choose the graphics cards to load the model onto/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
     expect(await screen.findByText('Paused; resume to continue')).toBeInTheDocument()
@@ -619,7 +635,7 @@ describe('host-scoped Models', () => {
     expect(screen.getByRole('button', { name: 'Delete partial download' })).toBeInTheDocument()
     expect(screen.getByText(/Only one model downloads at a time/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
-    expect(screen.getByText(/only recommended once it has been tested on your graphics card/)).toBeInTheDocument()
+    expect(screen.getByText(/No model in the list supports these graphics cards and fits their memory/)).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent(/CUDA_VISIBLE_DEVICES|\bTP\b|VRAM|Smol/)
   })
   it.each(['SHA256 mismatch', 'not a GInfer version-3 container'])('discards unusable saved bytes instead of retrying them: %s', async (error) => {
@@ -745,48 +761,81 @@ describe('host-scoped Models', () => {
     expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model could not be loaded. Check the error below before trying again.')
     mocks.switchModel.mockResolvedValue(undefined)
   })
-  it('checks and starts settings itself for a model without tested settings, with plain progress', async () => {
+  it('says plainly why Automatic could not start a model and offers custom settings', async () => {
     spyConfirm().mockReturnValueOnce(true)
-    mocks.switchModel.mockRejectedValue(Object.assign(new Error('No qualified automatic profile is available for this model.'), { code: 'no_qualified_profile' }))
-    const gpu = { uuid: 'gpu-1', name: 'GPU', memory_mib: 32768 }
-    const model = { id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'qwen3.8-27b', weights_id: 'w' }, tp_size: 1 } }
-    mocks.localSnapshot = { host_id: 'local-host', gpus: [gpu], models: [model], instances: [] }
-    let measured = false
-    let ensured: unknown
-    let launched: Record<string, unknown> | undefined
-    mocks.command.mockImplementation(async (action, args) => {
-      if (action === 'hardware_profile') { ensured = args!.body; measured = true; return {} }
-      if (action === 'snapshot') return { host_id: 'local-host', gpus: [gpu], models: [model], hardware_profile: { status: 'completed', available: measured, gpu_uuids: measured ? ['gpu-1'] : [] }, instances: launched ? [{ instance_id: 'i1', status: 'ready', configuration: { gpu_uuids: ['gpu-1'] } }] : [] }
-      if (action === 'quote') {
-        if ((args!.body as { max_context: number }).max_context > 131072) throw new Error('Not enough graphics memory for this length.')
-        return { instance_count: 1 }
-      }
-      if (action === 'launch') { launched = args!.body as Record<string, unknown>; return {} }
-      return []
-    })
-    render(<ModelManagement />)
-    fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
-    await waitFor(() => expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model loaded and ready to use.'))
-    expect(ensured).toEqual({ action: 'ensure', gpu_uuids: ['gpu-1'], artifact: { path: '/models/local.ginfer', tp: 1, draft_tp: 0, spec: 'none' } })
-    expect(launched).toMatchObject({ model_id: 'host-model', gpu_uuids: ['gpu-1'], max_context: 131072 })
-    expect(screen.queryByRole('link', { name: 'Open GInfer Hosts' })).toBeNull()
-    mocks.switchModel.mockResolvedValue(undefined)
-  })
-  it('shows one plain sentence and one action only when the settings check fails', async () => {
-    spyConfirm().mockReturnValueOnce(true)
-    mocks.switchModel.mockRejectedValue(Object.assign(new Error('x'), { code: 'no_qualified_profile' }))
-    mocks.localSnapshot = { host_id: 'local-host', gpus: [], models: [], instances: [] }
-    mocks.command.mockImplementation(async action => {
-      if (action === 'snapshot') return { host_id: 'local-host', gpus: [{ uuid: 'gpu-1', name: 'GPU', memory_mib: 1 }], models: [{ id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'other', weights_id: 'w' }, tp_size: 1 } }], hardware_profile: { status: 'completed', available: true, gpu_uuids: ['gpu-1'] }, instances: [] }
-      if (action === 'quote') throw new Error('Not enough graphics memory.')
-      return []
-    })
+    const message = 'These settings need 3.2 GB more GPU memory than is free. Try a shorter context length: 131,072 tokens or less fits.'
+    mocks.switchModel.mockRejectedValue(Object.assign(new Error(`Failed to load Installed locally: ${message}`), { code: 'does_not_fit' }))
+    mocks.localSnapshot = customSnapshot()
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('could not be started automatically. Open GInfer Hosts to choose its settings yourself.')
-    expect(screen.getByRole('link', { name: 'Open GInfer Hosts' })).toHaveAttribute('href', '/engines/')
+    expect(within(alert).getByText(message)).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Choose custom settings' }))
+    expect(screen.getByRole('region', { name: 'Custom settings for Installed locally' })).toBeInTheDocument()
     mocks.switchModel.mockResolvedValue(undefined)
+  })
+  it('checks custom settings, saves them as a profile and starts the model with them', async () => {
+    mocks.getActiveModels.mockResolvedValue([])
+    mocks.localSnapshot = customSnapshot()
+    const quotes: number[] = []
+    mocks.command.mockImplementation(async (action, args) => {
+      const body = args?.body as Record<string, unknown> | undefined
+      if (action === 'snapshot') return mocks.localSnapshot
+      if (action === 'quote') {
+        quotes.push(body!.max_context as number)
+        return (body!.max_context as number) > 16384
+          ? { instance_count: 1, kv_arena_bytes: null, fit: { fits: false, max_context: 20480, message: 'These settings need 1.0 GB more GPU memory than is free. Try a shorter context length: 20,480 tokens or less fits.' } }
+          : { instance_count: 1, kv_arena_bytes: null, fit: { fits: true } }
+      }
+      if (action === 'custom_profile') return { profile: { id: 'saved-1' } }
+      if (action === 'launch') return { instance_id: 'i1' }
+      return []
+    })
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('button', { name: 'Custom settings' }))
+    const panel = screen.getByRole('region', { name: 'Custom settings for Installed locally' })
+    for (const name of ['Device', 'K/V cache']) expect(within(panel).getByRole('button', { name })).toBeInTheDocument()
+    for (const name of ['Enable Speculative Decoding', 'Enable Vision', 'Structured outputs', 'CUDA Graphs'])
+      expect(within(panel).getByRole('checkbox', { name })).toHaveAccessibleDescription(/\w/)
+    expect(within(panel).getByText('Tensor parallel: 1')).toBeInTheDocument()
+    expect(within(panel).getByRole('spinbutton', { name: 'Context length (tokens)' })).toHaveAccessibleDescription(/How much text the model keeps in mind/)
+    fireEvent.click(within(panel).getByRole('button', { name: 'Check settings' }))
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('These settings need 1.0 GB more GPU memory than is free. Try a shorter context length: 20,480 tokens or less fits.')
+    expect(within(panel).queryByRole('button', { name: 'Save as profile' })).toBeNull()
+    fireEvent.change(within(panel).getByRole('spinbutton', { name: 'Context length (tokens)' }), { target: { value: '16384' } })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Check settings' }))
+    expect(await within(panel).findByText(/These settings fit\./)).toBeInTheDocument()
+    expect(quotes).toEqual([32768, 16384])
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Profile name' }), { target: { value: 'Short chats' } })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save as profile' }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('custom_profile', { host_id: 'local-host', body: {
+      action: 'save', name: 'Short chats', settings: expect.objectContaining({ model_id: 'host-model', gpu_uuids: ['gpu-1'], max_context: 16384, concurrency: 1 }) } }))
+    fireEvent.click(within(panel).getByRole('button', { name: 'Start with these settings' }))
+    await waitFor(() => expect(mocks.switchModel).toHaveBeenCalled())
+    expect(mocks.command).toHaveBeenCalledWith('launch', { host_id: 'local-host', body: expect.objectContaining({
+      model_id: 'host-model', gpu_uuids: ['gpu-1'], max_context: 16384, concurrency: 1, remaining_instances: 1, load_operation_id: expect.any(String) }) })
+    expect(mocks.switchModel).toHaveBeenCalledWith(expect.objectContaining({ modelId: 'local-model', gpuUuids: ['gpu-1'],
+      options: expect.objectContaining({ useProfileDefaults: true }) }))
+    expect(await screen.findByRole('status', { name: 'Model load status' })).toHaveTextContent('Model loaded and ready to use.')
+  })
+  it('lists tested and saved settings, labelled, and never applies a saved profile whose cards changed', async () => {
+    const user = userEvent.setup()
+    mocks.localSnapshot = customSnapshot({
+      launch_profiles: [{ model_id: 'host-model', gpu_groups: [['gpu-1']], compatible_gpu_groups: [['gpu-1']], profile: {
+        id: 'tested-1', name: 'Tested', tp: 1, max_context: 65536, concurrency: 4, options: { vision: false, structured_outputs: false, spec: 'dflash', draft_tokens: 7, draft_tp: 1, kv_dtype: 'int8', kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false },
+        qualification: { tier: 'screened-startup', engine_revision: 'abc' } } }],
+      custom_profiles: [savedProfile('ready-1', 'Long chats', 'ready'), savedProfile('old-1', 'Old card', 'hardware_changed')],
+    })
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('button', { name: 'Custom settings' }))
+    const panel = screen.getByRole('region', { name: 'Custom settings for Installed locally' })
+    await user.click(within(panel).getByRole('button', { name: 'Saved settings' }))
+    expect(screen.getByRole('menuitemradio', { name: 'Tested · Short conversations tested · 4 replies at once · 64K tokens · Text only' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitemradio', { name: 'Custom · Long chats' })).toBeInTheDocument()
+    await user.click(screen.getByRole('menuitemradio', { name: 'Custom · Old card · check again' }))
+    expect(within(panel).getByRole('alert')).toHaveTextContent('The graphics cards on this computer changed since you saved these settings. Check them again before using them.')
+    expect(within(panel).getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    expect(within(panel).getByRole('spinbutton', { name: 'Context length (tokens)' })).toHaveValue(98304)
   })
   it('shows a model started from GInfer Hosts as running and stops that Host instance', async () => {
     mocks.localSnapshot = { host_id: 'local-host', gpus: [], models: [{ id: 'host-model', path: '/models/local.ginfer' }],

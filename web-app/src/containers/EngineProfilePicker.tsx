@@ -8,10 +8,12 @@ import { profileOptionLabel, profilePresentation } from '../../../src-tauri/ginf
 
 const instanceStatusLabels = { starting: 'Starting', ready: 'Ready to chat', stopping: 'Stopping', stopped: 'Stopped', failed: 'Could not start' } as const
 
-export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: controlledInstanceId, labelPrefix, hostSelector, currentSettings = false, hideHeading = false, onPendingChange }: {
+export function EngineProfilePicker({ snapshot, disabled, launch, launchCustom, instanceId: controlledInstanceId, labelPrefix, hostSelector, currentSettings = false, hideHeading = false, onPendingChange }: {
   snapshot: EngineSnapshot
   disabled: boolean
   launch: (body: Record<string, unknown>) => Promise<void>
+  /** Starts a new model with settings the person saved; offered only when starting another model. */
+  launchCustom?: (body: Record<string, unknown>) => Promise<void>
   instanceId?: string
   labelPrefix?: string
   hostSelector?: ReactNode
@@ -53,7 +55,15 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
       : compatible[0] ? groupKey(compatible[0].group)
         : availableGroup ? groupKey(availableGroup) : undefined
   const choices = compatible.filter(item => groupKey(item.group) === gpuKey)
-  const selected = choices.find(item => item.key === choice)
+  const model = snapshot.models.find(item => item.id === modelId)
+  // Saved custom settings for this package; changed or busy ones are listed but cannot start.
+  const customs = launchCustom && !instanceId ? (snapshot.custom_profiles ?? []).filter(profile => profile.model_id === modelId
+    || (profile.model_id === null && !!model && profile.identity.model_id === model.metadata.identity.model_id
+      && profile.identity.weights_id === model.metadata.identity.weights_id)) : []
+  const selectedCustom = customs.find(profile => `custom:${profile.id}` === choice)
+  const customBlocked = (profile: (typeof customs)[number]) => profile.status !== 'ready' ? ' · check again on the Models page'
+    : profile.gpu_uuids.some(gpu => occupied.has(gpu)) ? ' · its graphics cards are in use' : ''
+  const selected = selectedCustom ? undefined : choices.find(item => item.key === choice)
     ?? (!currentSettings && !choice && !instanceId ? choices.find(item => item.entry.profile.options.vision) : undefined)
   const { recommendedIndex, visibleIndices } = profilePresentation(
     choices.map(item => item.entry.profile), selected ? choices.indexOf(selected) : -1, showAllProfiles)
@@ -90,9 +100,11 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
             label: group.map(id => { const index = snapshot.gpus.findIndex(gpu => gpu.uuid === id); const gpu = snapshot.gpus[index]; return gpu ? `Graphics card ${index + 1}: ${gpu.display_name ?? gpu.name} · ${(gpu.memory_mib / 1024).toFixed(0)} GiB` : 'Graphics card unavailable' }).join(' + ') + (group.some(gpu => occupied.has(gpu)) ? ' · In use' : '') }))]} />
     </label>
     <div className="min-w-0 text-sm"><label>Saved model settings
-      <ChoiceSelect aria-label="Saved model settings" className="mt-1 w-full" disabled={controlsDisabled || !choices.length} value={selected?.key ?? ''} onValueChange={setChoice}
+      <ChoiceSelect aria-label="Saved model settings" className="mt-1 w-full" disabled={controlsDisabled || (!choices.length && !customs.length)} value={selectedCustom ? choice : selected?.key ?? ''} onValueChange={setChoice}
         options={[{ value: '', label: currentSettings && !pending ? `Current settings · ${instance?.configuration.concurrency ?? 1} replies at once · ${instance?.configuration.max_context.toLocaleString() ?? 'Automatic'} tokens` : 'Choose saved settings' },
-          ...visibleIndices.map(index => { const { entry, key } = choices[index]; return { value: key, label: profileOptionLabel(entry.profile, index === recommendedIndex) } })]} />
+          ...visibleIndices.map(index => { const { entry, key } = choices[index]; return { value: key, group: customs.length ? 'Tested' : undefined, label: profileOptionLabel(entry.profile, index === recommendedIndex) } }),
+          ...customs.map(profile => ({ value: `custom:${profile.id}`, group: 'Custom', disabled: !!customBlocked(profile),
+            label: `Custom · ${profile.name} · ${profile.concurrency} replies at once · ${profile.max_context.toLocaleString()} tokens${customBlocked(profile)}` }))]} />
     </label>
     {(choices.length > visibleIndices.length || showAllProfiles) && <button type="button" className="mt-1 text-muted-foreground underline" disabled={controlsDisabled}
       aria-expanded={showAllProfiles} onClick={() => setShowAllProfiles(value => !value)}>{showAllProfiles ? 'Show fewer settings' : 'Show all settings'}</button>}
@@ -114,13 +126,19 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
         ? 'Memory use was estimated for full-length conversations. Starting the model and short conversations running at once were tested. Full-length conversations have not been tested.'
         : 'Memory use has only been estimated. Starting the model, available memory and replies have not been tested. These settings may fail to start until the installed GInfer program supports them.'}</p>}
     {selected && <><p className="text-sm text-muted-foreground">These results apply to the saved settings and the GInfer version used for the tests. Changed settings or another GInfer version need their own tests.</p><details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Saved settings technical details</summary><p>GInfer revision used for testing: {selected.entry.profile.qualification.engine_revision.slice(0, 8)}</p></details></>}
-    {!choices.length && <p className="text-sm text-muted-foreground">{
+    {selectedCustom && <p className="text-sm text-muted-foreground">You saved these settings on this computer. GInfer checks that they fit before the model starts.</p>}
+    {!choices.length && !customs.length && <p className="text-sm text-muted-foreground">{
       !snapshot.models.length ? 'No installed models were found on this computer. Add a .ginfer model file to its models folder, then refresh the model list.'
         : currentSettings ? 'No other saved settings match this model and these graphics cards. You can test the current running settings or choose another installed model.'
         : matching.length ? 'No saved settings fit this model on the selected graphics cards. Choose different cards or add matching saved settings. A running model keeps its cards; start another model to use different cards.'
-          : 'No saved settings fit this model on this computer yet. Use Graphics-card setup to measure the cards, or add matching saved settings and refresh the model list. You can also choose the model settings below.'
+          : 'No tested or saved settings fit this model on this computer yet. Choose your own in Model and memory settings below, or with Custom settings on the Models page.'
     }</p>}
-    {(!currentSettings || pending) && <Button disabled={controlsDisabled || !selected || (!!instanceId && !snapshot.instances.some(i => i.instance_id === instanceId))} onClick={async () => {
+    {(!currentSettings || pending) && <Button disabled={controlsDisabled || (selectedCustom ? !!customBlocked(selectedCustom) : !selected) || (!!instanceId && !snapshot.instances.some(i => i.instance_id === instanceId))} onClick={async () => {
+      if (selectedCustom && launchCustom && !controlsDisabled) {
+        void launchCustom({ ...selectedCustom.options, model_id: modelId, gpu_uuids: selectedCustom.gpu_uuids,
+          max_context: selectedCustom.max_context, concurrency: selectedCustom.concurrency, remaining_instances: 1 })
+        return
+      }
       if (!selected || controlsDisabled) return
       if (restarting && !await confirmAction({ title: 'Restart with these model settings?', message: 'The current model will finish its replies, then restart with your choices. It will be unavailable for new chats while restarting. Other people using it will be affected.', confirmLabel: 'Restart model' })) return
       void launch({ profile_id: selected.entry.profile.id, model_id: selected.entry.model_id,

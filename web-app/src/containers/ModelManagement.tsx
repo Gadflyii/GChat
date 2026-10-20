@@ -1,11 +1,9 @@
-import { startWithCheckedSettings } from './autoModelSettings'
+import { ModelCustomSettings, type CustomStart } from './ModelCustomSettings'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { confirmAction } from '@/lib/confirm'
 import { IconChevronDown } from '@tabler/icons-react'
 import { toast } from 'sonner'
-import { Link } from '@tanstack/react-router'
 import { joinPath } from '@gchat/core'
-import { route } from '@/constants/routes'
 import HeaderPage from '@/containers/HeaderPage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,7 +22,7 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { useModelCatalogStore } from '@/stores/model-catalog-store'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
-import { engineAlias, engineCommand, type EngineSnapshot, type LocalModelLoadProgress } from '@/services/engines'
+import { engineAlias, engineCommand, plainHostError, type EngineModel, type EngineSnapshot, type LocalModelLoadProgress } from '@/services/engines'
 import { controlLocalHostModel } from '@/utils/localHostModel'
 import { HostCard } from '@/containers/EngineHostModels'
 import { gpuCardName, hostModelLabel, plainModelName } from '@/lib/engine-host-labels'
@@ -55,7 +53,6 @@ export type ModelManagementTab = (typeof managementTabs)[number]
 const REGISTERED_MODEL_REFRESH_FAILED = 'The model was added, but the model list could not be refreshed. Choose Refresh installed models to try again.'
 const ACCEPTED_DOWNLOAD_REFRESH_FAILED = 'The download request was accepted, but its status could not be refreshed. Choose Refresh downloads to check its current state.'
 const STOPPED_MODEL_REFRESH_FAILED = 'The model stopped, but the running model list could not be refreshed. Choose Refresh model status before loading or stopping another model.'
-const NO_SETTINGS = ' could not be started automatically. Open GInfer Hosts to choose its settings yourself.'
 const capabilityLabels = (capabilities: string[] = []) => capabilities.flatMap(capability => {
   switch (capability.toLowerCase()) {
     case 'text': return ['Text chat']
@@ -121,9 +118,13 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const [localRegistration, setLocalRegistration] = useState<'choosing' | 'registering' | null>(null)
   const mounted = useRef(true)
   const loadRef = useRef<PendingLocalLoad | null>(null)
+  const loadSucceeded = useRef(false)
   const inventoryRefreshRef = useRef<HTMLButtonElement>(null)
   const [loadResult, setLoadResult] = useState('')
-  const [autoStartDetail, setAutoStartDetail] = useState('')
+  // The model whose Automatic load failed, so its custom settings can be offered next.
+  const [failedModelId, setFailedModelId] = useState<string | null>(null)
+  const [customFor, setCustomFor] = useState<string | null>(null)
+  const [customPreparing, setCustomPreparing] = useState<string | null>(null)
   const [pendingLoad, setPendingLoad] = useState<PendingLocalLoad | null>(null)
   const [loadProgress, setLoadProgress] = useState<LocalModelLoadProgress | null>(null)
   const [loadStatusUnavailable, setLoadStatusUnavailable] = useState(false)
@@ -316,16 +317,19 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const transferAction = (job: ModelDownload, action: string) => updateDownloads(() =>
     engineCommand(local ? 'local_model_download_action' : 'download_action', local ?
       { id: job.id, operation: action } : { host_id: destination, body: { id: job.id, action } }), `Could not ${action === 'discard' ? 'delete the partial download' : action === 'resume' ? 'resume the download' : 'pause the download'}. Try again when this computer is connected.`)
-  const loadLocal = (modelId: string) => act(async () => {
-    if (invalidGpuSelection) throw new Error('Choose the graphics cards to use before loading this model.')
+  // One load attempt with progress and Cancel. `start` first asks the Host to start
+  // the chosen custom or tested settings; Automatic leaves the choice to the desktop load.
+  const loadLocal = (modelId: string, start?: CustomStart) => act(async () => {
+    if (!start && invalidGpuSelection) throw new Error('Choose the graphics cards to use before loading this model.')
     const active = await service.models().getActiveModels('ginfer')
     if (!mounted.current) return
     if (active.some(id => id !== modelId) && !await confirmAction({ title: 'Switch the local model?', message: 'The current model will stop. Chats and agents using it may be interrupted.', confirmLabel: 'Switch model' })) return
     const load: PendingLocalLoad = { operationId: crypto.randomUUID(), controller: new AbortController(),
       startedAt: performance.now(), ready: false, settled: false, cancelRequested: false }
     loadRef.current = load
+    loadSucceeded.current = false
     setLoadResult('')
-    setAutoStartDetail('')
+    setFailedModelId(null)
     setPendingLoad(load)
     setLoadProgress(null)
     setLoadElapsedSeconds(0)
@@ -334,40 +338,55 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
     setCancelError(false)
     useModelProvider.getState().selectModelProvider('ginfer', modelId)
     try {
+      if (start) {
+        if (!localHost) throw new Error('GInfer is not ready on this computer.')
+        // Other local models stop first, as Automatic does, so the chosen cards are free.
+        if (active.some(id => id !== modelId)) await service.models().stopAllModels()
+        setLoadResult('Checking these settings and starting the model…')
+        await engineCommand(start.action, { host_id: localHost.host_id, body: { ...start.body, load_operation_id: load.operationId } })
+      }
+      // Automatic: tested settings for these cards, then your saved settings, then the longest
+      // context that fits. After a custom start this attaches to the model that is starting.
       await switchToModel({ modelId, providerName: 'ginfer', serviceHub: service,
         options: { useProfileDefaults: true, loadOperationId: load.operationId },
         signal: load.controller.signal,
-        ...(selectedGpuUuids === null ? {} : { gpuUuids: [...selectedGpuUuids] }) })
+        ...(start ? { gpuUuids: start.gpuUuids.length ? [...start.gpuUuids] : undefined }
+          : selectedGpuUuids === null ? {} : { gpuUuids: [...selectedGpuUuids] }) })
       load.ready = true
+      loadSucceeded.current = true
       if (mounted.current) setLoadResult('Model loaded and ready to use.')
     } catch (e) {
-      if ((e as { code?: string } | null)?.code === 'no_qualified_profile') {
-        // No tested settings: check settings that fit this computer and start with them, with plain progress.
-        try {
-          const target = localModels.find(x => x.id === modelId)
-          if (!localHost || !target?.path) throw new Error('GInfer is not ready on this computer.')
-          await startWithCheckedSettings(localHost.host_id, target.path, {
-            signal: load.controller.signal,
-            report: (text) => { if (mounted.current) setLoadResult(text) },
-          })
-          load.ready = true
-          if (mounted.current) setLoadResult('Model loaded and ready to use.')
-          return
-        } catch (auto) {
-          if (mounted.current) setLoadResult((auto as { name?: string } | null)?.name === 'AbortError' ? 'Model startup cancelled.' : 'Model could not be loaded. Check the error below before trying again.')
-          const m = localModels.find(x => x.id === modelId)
-          setAutoStartDetail(auto instanceof Error ? auto.message : String(auto))
-          throw new Error(plainModelName(m?.displayName ?? modelId) + NO_SETTINGS)
-        }
+      if (mounted.current) {
+        const cancelled = (e as { name?: string } | null)?.name === 'AbortError'
+        setLoadResult(cancelled ? 'Model startup cancelled.' : 'Model could not be loaded. Check the error below before trying again.')
+        if (!cancelled) setFailedModelId(modelId)
       }
-      if (mounted.current) setLoadResult((e as { name?: string } | null)?.name === 'AbortError' ? 'Model startup cancelled.' : 'Model could not be loaded. Check the error below before trying again.')
       throw e
     } finally {
       load.settled = true
       if (loadRef.current === load) loadRef.current = null
       if (mounted.current) setPendingLoad(null)
     }
-  }, 'Could not load this model. Check that the selected graphics cards are available and have enough memory, then try again.')
+  }, 'Could not load this model. Choose Custom settings to try a shorter context or other settings, or check that the selected graphics cards are available.')
+  /** The Host's entry for an installed model file; the Host learns a file the first time it is used. */
+  const hostModelFor = (path?: string): EngineModel | undefined => path ? localSnapshot?.models.find(h => h.path === path) : undefined
+  const openCustom = async (modelId: string, path?: string) => {
+    setCustomFor(current => current === modelId ? null : modelId)
+    if (!path || hostModelFor(path) || !localHost) return
+    setCustomPreparing(modelId)
+    try {
+      await engineCommand('local_model_host_entry', { path })
+      const updated = await engineCommand<EngineSnapshot>('snapshot', { host_id: localHost.host_id })
+      if (mounted.current) publishSnapshot(localHost.host_id, updated)
+    } catch (e) {
+      if (mounted.current) { setErrorSummary('Could not prepare custom settings for this model. Check that the model file is available, then try again.'); setError(errorMessage(e)) }
+    } finally { if (mounted.current) setCustomPreparing(null) }
+  }
+  const refreshLocalSnapshot = async () => {
+    if (!localHost) return
+    const updated = await engineCommand<EngineSnapshot>('snapshot', { host_id: localHost.host_id })
+    if (mounted.current) publishSnapshot(localHost.host_id, updated)
+  }
   const cancelPendingLoad = async () => {
     if (!pendingLoad || pendingLoad.ready || pendingLoad.settled) return
     setCancellingLoad(true)
@@ -461,8 +480,11 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
         <Button ref={inventoryRefreshRef} variant="outline" disabled={busy || (offline && tab === 'Installed')} onClick={() => void (tab === 'Downloads' ? updateDownloads() : local && tab === 'Installed' && registrationNeedsRefresh.current ? retryRegisteredModelRefresh() : act(tab === 'Recommended' ? refreshCatalog : rescan))}>{tab === 'Recommended' ? 'Refresh recommendations' : tab === 'Downloads' ? 'Refresh downloads' : 'Refresh installed models'}</Button>
       </div></div>
       {local && tab === 'Installed' && <p className="text-sm text-muted-foreground">Add an existing .ginfer file. The file stays in its current location.</p>}
-      {error && (error.endsWith(NO_SETTINGS)
-        ? <div role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error} <Link to={route.engines.index} className="underline">Open GInfer Hosts</Link>{autoStartDetail && <details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-words">{autoStartDetail}</p></details>}</div>
+      {error && (failedModelId
+        ? <div className="space-y-2">
+          <ModelProblem message={plainHostError(error).replace(/^Failed to load [^:]*: /, '')} detail={error} />
+          {customFor !== failedModelId && <Button variant="outline" disabled={busy} onClick={() => void openCustom(failedModelId, localModels.find(x => x.id === failedModelId)?.path)}>Choose custom settings</Button>}
+        </div>
         : <ModelProblem message={errorSummary} detail={error} />)}
       {downloadNeedsRefresh && <ModelProblem message={ACCEPTED_DOWNLOAD_REFRESH_FAILED} detail={downloadRefreshError} />}
       {local && modelStatusError !== null && <div className="space-y-2">
@@ -496,14 +518,22 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
           {invalidGpuSelection && <p role="alert">{hardwareReady ? 'Select at least one available graphics card. A previously selected card may have been disconnected.' : 'Checking which graphics cards are available…'}</p>}
         </fieldset>}
         {local ? <>{!filteredModels.length && <div className="rounded-xl border p-8 text-center">{query ? <><p>No installed models match “{query}”.</p><Button className="mt-3" onClick={() => setQuery('')}>Clear search</Button></> : <><p>No installed models found.</p><Button className="mt-3" onClick={() => setTab('Recommended')}>Find a recommended model</Button></>}</div>}
-          {filteredModels.map(m => <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{plainModelName(m.displayName ?? m.id)}</h2><p className="text-sm text-muted-foreground">{stoppedModelId === m.id ? (modelStatusError !== null ? 'Status unavailable' : 'Checking status') : activeModels.includes(m.id) || hostInstanceOf(m.path) ? 'Running' : 'Installed'} · {capabilityLabels(m.capabilities) || 'GInfer model'}. Load model uses tested settings for your selected graphics cards. To choose your own settings, open GInfer Hosts.</p></div><div className="flex gap-2"><Button disabled={busy || modelStatusError !== null || !localLoadReady || invalidGpuSelection || activeModels.includes(m.id) || !!hostInstanceOf(m.path)} onClick={() => void loadLocal(m.id)}>Load model</Button><Button variant="outline" disabled={busy || modelStatusError !== null || !(activeModels.includes(m.id) || hostInstanceOf(m.path))} onClick={() => void (activeModels.includes(m.id) ? stopLocal(m.id) : stopHostInstance(m.id, hostInstanceOf(m.path)!))}>Stop model</Button><DeleteModelAction modelId={m.id} label={m.displayName ?? m.name} provider="ginfer" externalReference={m.source === 'external'} returnFocusRef={inventoryRefreshRef} /></div></section>)}</>
+          {filteredModels.map(m => { const running = activeModels.includes(m.id) || !!hostInstanceOf(m.path); const hostModel = hostModelFor(m.path); return <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{plainModelName(m.displayName ?? m.id)}</h2><p className="text-sm text-muted-foreground">{stoppedModelId === m.id ? (modelStatusError !== null ? 'Status unavailable' : 'Checking status') : running ? 'Running' : 'Installed'} · {capabilityLabels(m.capabilities) || 'GInfer model'}. Load model picks settings for you: tested settings for your graphics card when they exist, then your saved settings, then the longest conversation that fits. Choose Custom settings to pick your own.</p></div><div className="flex gap-2"><Button disabled={busy || modelStatusError !== null || !localLoadReady || invalidGpuSelection || running} onClick={() => void loadLocal(m.id)}>Load model</Button>
+            <Button variant="outline" aria-expanded={customFor === m.id} disabled={busy || !localLoadReady || !localHost} onClick={() => void openCustom(m.id, m.path)}>Custom settings</Button><Button variant="outline" disabled={busy || modelStatusError !== null || !(activeModels.includes(m.id) || hostInstanceOf(m.path))} onClick={() => void (activeModels.includes(m.id) ? stopLocal(m.id) : stopHostInstance(m.id, hostInstanceOf(m.path)!))}>Stop model</Button><DeleteModelAction modelId={m.id} label={m.displayName ?? m.name} provider="ginfer" externalReference={m.source === 'external'} returnFocusRef={inventoryRefreshRef} /></div>
+            {customFor === m.id && (hostModel && localHost && localSnapshot
+              ? <ModelCustomSettings key={hostModel.id} hostId={localHost.host_id} snapshot={localSnapshot} model={hostModel} modelName={plainModelName(m.displayName ?? m.id)}
+                disabled={busy || running || !!pendingLoad} onChanged={refreshLocalSnapshot}
+                onStart={async start => { await loadLocal(m.id, start); return loadSucceeded.current }} />
+              : <p role="status" className="w-full text-sm text-muted-foreground">{customPreparing === m.id ? 'Preparing custom settings for this model…' : 'GInfer is not ready to check settings for this model yet. Choose Refresh installed models, then try again.'}</p>)}
+            {customFor === m.id && running && <p className="w-full text-sm text-muted-foreground">This model is running. Stop it to start it with other settings.</p>}
+          </section> })}</>
           : host ? <HostCard key={host.host_id} host={host} snapshot={snapshot} error={hostErrors[destination]} /> : <p>Connect another computer in GInfer Hosts, then choose it from the Computer menu above.</p>}
         {!local && snapshot?.model_management && <details><summary className="cursor-pointer text-sm">Delete downloaded models</summary><p className="my-2 text-sm text-muted-foreground">You can delete models downloaded by GInfer. Files added from other folders stay in place. Stop a running model before deleting it.</p>{snapshot.models.filter(m => downloads.some(j => j.status === 'installed' && j.path === m.path)).map(m => <div key={m.id} className="flex items-center justify-between gap-3 border-b py-2"><span>{hostModelLabel(m)} · {formatModelBytes(m.metadata.size_bytes)}</span><Button variant="outline" disabled={busy || offline} onClick={async () => { if (await confirmAction({ title: 'Delete this downloaded model?', message: `Delete ${hostModelLabel(m)} from ${host?.name}? You will need to download it again to use it.`, confirmLabel: 'Delete model', destructive: true })) void act(() => engineCommand('remove_model', { host_id: destination, body: { model_id: m.id } }), 'Could not delete this model. Stop it if it is running, then try again.') }}>Delete model</Button></div>)}</details>}
       </>}
       {tab === 'Recommended' && <>
         {catalogError && <ModelProblem message="Could not get the latest model recommendations. Showing the last saved list. Check your connection, then choose Refresh recommendations." detail={catalogError} />}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showUnavailable} onChange={e => setShowUnavailable(e.target.checked)} />Show unavailable models and explanations</label>
-        {!releases.some(r => r.readiness.available) && <div className="rounded-xl border p-5"><h2 className="font-medium">No recommended model for these graphics cards yet</h2><p className="mt-1 text-sm text-muted-foreground">A model is only recommended once it has been tested on your graphics card. Check back later, use a model you already have installed, or choose another computer in the Computer menu.</p></div>}
+        {!releases.some(r => r.readiness.available) && <div className="rounded-xl border p-5"><h2 className="font-medium">No recommended model for these graphics cards yet</h2><p className="mt-1 text-sm text-muted-foreground">No model in the list supports these graphics cards and fits their memory. Check back later, use a model you already have installed, or choose another computer in the Computer menu.</p></div>}
         {releases.filter(r => (showUnavailable || r.readiness.available) && r.name.toLowerCase().includes(query.toLowerCase())).map((r, i) => <section key={r.release?.sha256 ?? `${r.name}-${i}`} className="space-y-3 rounded-xl border p-5"><h2 className="font-medium">{plainModelName(r.name)}</h2><p className="text-sm text-muted-foreground">{r.readiness.reason}</p>{r.release && <p className="text-sm text-muted-foreground">{formatModelBytes(r.release.bytes)} download · {r.release.tp === 1 ? '1 graphics card' : `${r.release.tp} graphics cards`} · {capabilityLabels(r.release.capabilities)}</p>}
           <Button disabled={!r.readiness.available || offline || busy || downloadNeedsRefresh || !managementAvailable} onClick={() => r.release && void download(r.release)}>Download to {local ? 'this computer' : host?.name}</Button>
         </section>)}
