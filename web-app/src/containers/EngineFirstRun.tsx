@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { Link } from '@tanstack/react-router'
+import { route } from '@/constants/routes'
 import { Input } from '@/components/ui/input'
 import { HardwareProfileError } from './EngineHardwareProfile'
 import { engineCommand, type EngineHardwareProfile } from '@/services/engines'
@@ -278,7 +280,9 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
       <p className="text-sm">Select the graphics card you want GInfer to use. You can use 1, 2 or 4 cards of the same model together; each combination needs its own saved settings. If you have one card, select it below, then select Use selected graphics cards to continue.</p>
       {known.map(gpu => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={() => setGpus(toggle(gpus, gpu.uuid))} />{gpu.display_name ?? gpu.name} · {formatModelBytes(gpu.memory_mib * 1024 ** 2)} graphics memory</label>)}
       {!!known.length && <details className="text-sm"><summary className="cursor-pointer">Graphics card details</summary>{known.map((gpu, i) => <p key={gpu.uuid}>{gpuCardName(known, i)} · NVIDIA compatibility {gpu.compute_capability}</p>)}</details>}
-      {!known.length && <p role="alert">No supported NVIDIA graphics cards were found. Check that your card has a compatible NVIDIA driver. You can also use GInfer on another computer.</p>}
+      {!known.length && (snapshot?.cpu?.isa_path
+        ? <p role="status">No supported NVIDIA graphics card was found, so GChat runs models on this computer’s processor (CPU) and system memory. Open <Link to={route.hub.index} className="underline">Models</Link>, select Add local model to choose a .ginfer file, then select Load model.</p>
+        : <p role="alert">No supported NVIDIA graphics cards were found. Check that your card has a compatible NVIDIA driver. You can also use GInfer on another computer.</p>)}
       <Button disabled={!validGroup} onClick={() => void act({ action: 'profile', gpu_uuids: gpus })}>Use selected graphics cards</Button>
     </fieldset>}
     {selectedReady && <p role="status">Your graphics-card settings are ready for the selected models. {step === 'storage_review' ? 'Review where to keep them before GInfer checks their startup memory needs.' : 'GInfer will now check their startup memory needs.'}</p>}

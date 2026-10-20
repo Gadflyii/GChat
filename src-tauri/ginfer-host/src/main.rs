@@ -495,9 +495,14 @@ async fn run(
         .await
     {
         Ok(output) if output.status.success() => (String::from_utf8_lossy(&output.stdout).into_owned(), None),
-        Ok(output) => (String::new(), Some(format!(
-            "No usable NVIDIA graphics card: nvidia-smi reported {}",
-            String::from_utf8_lossy(&output.stderr).trim()))),
+        Ok(output) => {
+            let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            (String::new(), Some(if detail.is_empty() {
+                format!("No usable NVIDIA graphics card: nvidia-smi exited with {}", output.status)
+            } else {
+                format!("No usable NVIDIA graphics card: nvidia-smi reported {detail}")
+            }))
+        }
         Err(error) => (String::new(), Some(format!("No NVIDIA graphics driver was found ({error})"))),
     };
     if let Some(note) = &gpu_inventory_note {

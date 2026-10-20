@@ -752,7 +752,7 @@ describe('host-scoped Models', () => {
   it('checks and starts settings itself for a model without tested settings, with plain progress', async () => {
     spyConfirm().mockReturnValueOnce(true)
     mocks.switchModel.mockRejectedValue(Object.assign(new Error('No qualified automatic profile is available for this model.'), { code: 'no_qualified_profile' }))
-    const gpu = { uuid: 'gpu-1', name: 'GPU', memory_mib: 32768 }
+    const gpu = { uuid: 'gpu-1', name: 'GPU', memory_mib: 32768, compute_capability: '12.0' }
     const model = { id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'qwen3.8-27b', weights_id: 'w' }, tp_size: 1 } }
     mocks.localSnapshot = { host_id: 'local-host', gpus: [gpu], models: [model], instances: [] }
     let measured = false
@@ -851,7 +851,7 @@ describe('host-scoped Models', () => {
     mocks.switchModel.mockRejectedValue(Object.assign(new Error('x'), { code: 'no_qualified_profile' }))
     mocks.localSnapshot = { host_id: 'local-host', gpus: [], models: [], instances: [] }
     mocks.command.mockImplementation(async action => {
-      if (action === 'snapshot') return { host_id: 'local-host', gpus: [{ uuid: 'gpu-1', name: 'GPU', memory_mib: 1 }], models: [{ id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'other', weights_id: 'w' }, tp_size: 1 } }], hardware_profile: { status: 'completed', available: true, gpu_uuids: ['gpu-1'] }, instances: [] }
+      if (action === 'snapshot') return { host_id: 'local-host', gpus: [{ uuid: 'gpu-1', name: 'GPU', memory_mib: 1, compute_capability: '8.6' }], models: [{ id: 'host-model', path: '/models/local.ginfer', metadata: { identity: { model_id: 'other', weights_id: 'w' }, tp_size: 1 } }], hardware_profile: { status: 'completed', available: true, gpu_uuids: ['gpu-1'] }, instances: [] }
       if (action === 'quote') throw new Error('Not enough graphics memory.')
       return []
     })

@@ -41,19 +41,24 @@ export const CPU_LAUNCH_OPTIONS: EngineLaunchOptions = {
 export class ModelStartError extends Error {
   code?: string
   detail?: string
-  constructor(text: string) {
+  /** CPU problems have their own next step; GInfer Hosts cannot fix them. */
+  device?: EngineDevice
+  constructor(text: string, device?: EngineDevice) {
     const parts = engineErrorParts(text)
     super(parts.message)
     this.code = parts.code
     this.detail = parts.detail
+    this.device = device
   }
 }
+
+const SUPPORTED_GPU = ['8.0', '8.6', '8.9', '12.0']
 
 /** Automatic picks the CPU for a CPU-only model or a computer without a usable NVIDIA graphics card. */
 export function resolveDevice(snapshot: EngineSnapshot, model: EngineModel, preference: DevicePreference = 'auto'): EngineDevice {
   if (preference !== 'auto') return preference
   if (model.devices?.length === 1 && model.devices[0] === 'cpu') return 'cpu'
-  return snapshot.gpus.length ? 'gpu' : 'cpu'
+  return snapshot.gpus.some((gpu) => SUPPORTED_GPU.includes(gpu.compute_capability ?? '')) ? 'gpu' : 'cpu'
 }
 
 const busy = (profile?: EngineHardwareProfile) =>
@@ -204,10 +209,10 @@ async function startOnCpu(hostId: string, model: EngineModel, deps: AutoStartDep
       lastError = message(cause)
       // A model or processor the CPU cannot run fails the same way at every length.
       const code = engineErrorParts(lastError).code
-      if (code && CPU_ADMISSION_CODES.includes(code)) throw new ModelStartError(lastError)
+      if (code && CPU_ADMISSION_CODES.includes(code)) throw new ModelStartError(lastError, 'cpu')
     }
   }
-  if (!chosen) throw new ModelStartError(lastError)
+  if (!chosen) throw new ModelStartError(lastError, 'cpu')
   report('Starting the model on the CPU. Large models take a few minutes to read into memory…')
   const started = await command<{ instance_id?: string } | undefined>('launch', { host_id: hostId, body: { ...chosen, remaining_instances: 1 } })
   const deadline = Date.now() + (deps.timeoutMs ?? 15 * 60 * 1000)
@@ -218,8 +223,8 @@ async function startOnCpu(hostId: string, model: EngineModel, deps: AutoStartDep
       ? i.instance_id === started.instance_id
       : i.configuration.device === 'cpu' && i.profile?.model_id === model.id)
     if (mine?.status === 'ready') return
-    if (mine?.status === 'failed') throw new ModelStartError(mine.last_error ?? 'The model could not start.')
-    if (Date.now() > deadline) throw new Error('The model did not become ready in time.')
+    if (mine?.status === 'failed') throw new ModelStartError(mine.last_error ?? 'The model could not start.', 'cpu')
+    if (Date.now() > deadline) throw new ModelStartError('The model did not become ready in time.', 'cpu')
     await sleep(deps.pollMs ?? 2000)
   }
 }

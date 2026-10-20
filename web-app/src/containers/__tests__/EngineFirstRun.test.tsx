@@ -10,6 +10,10 @@ vi.mock('@/services/engines', async importOriginal => ({
 }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (state: unknown) => unknown) => selector(mocks.state) }))
 vi.mock('@/hooks/useBundledResources', () => ({ useBundledResources: () => mocks.resources }))
+vi.mock('@tanstack/react-router', async importOriginal => ({
+  ...await importOriginal<typeof import('@tanstack/react-router')>(),
+  Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => <a href={to} className={className}>{children}</a>,
+}))
 const release = { name: 'Muse', identity: { model_id: 'muse', weights_id: 'q4' }, url: `https://huggingface.co/test/muse/resolve/${'c'.repeat(40)}/muse.ginfer`,
   sha256: 'a'.repeat(64), bytes: 1024 ** 3, tp: 1, qualified_sm: ['8.6'], min_vram_mib_per_gpu: 16384, capabilities: [], launch_profiles: [{ id: 'c1' }] }
 const profile = { download_id: 'download', model_id: 'muse', gpu_uuids: ['GPU-one'], concurrency: 4, max_context: 32768, kv_arena_bytes: null, instance_count: 1, quote: null, error: null }
@@ -916,6 +920,15 @@ it('shows pending work before the Host returns initial startup profiles', async 
   render(<EngineFirstRun />)
   expect(await screen.findByText('Preparing settings and checking that each model has enough memory…')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Finish local setup' })).toBeDisabled()
+})
+
+it('points a computer without a supported graphics card to CPU models instead of a dead end', async () => {
+  mocks.state = { ...mocks.state, snapshots: { local: { gpus: [], cpu: { isa_path: 'avx2', label: 'CPU AVX2' } } } }
+  mocks.command.mockResolvedValue(flow('gpu'))
+  render(<EngineFirstRun />)
+  expect(await screen.findByText(/so GChat runs models on this computer’s processor \(CPU\)/)).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/hub/')
+  expect(screen.queryByText(/No supported NVIDIA graphics cards were found/)).not.toBeInTheDocument()
 })
 
 it('surfaces unsupported and unavailable hosts with an actionable state', async () => {
