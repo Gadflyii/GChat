@@ -1859,7 +1859,12 @@ impl Host {
             .map_err(|error| format!("Engine startup quote is unavailable or invalid; update the Engine runtime: {error}"))?;
         // A launch that cannot hold its context is reported, not sized: callers
         // show the shortfall, and placement refuses it before any process starts.
-        let fit = crate::startup_fit::evaluate(&value, launch.max_context, !launch.options.is_cpu());
+        // Flash's planner searches capacity itself where the Engine reports its verdict; Qwen 27B
+        // and Muse 30B quotes (and older Engines) report the per-rank K/V facts the Host
+        // compares with one full conversation on the cards.
+        let planner_verdict = launch.model_id.starts_with("qwen3.8-flash-next/") && value.get("fit_status").is_some();
+        let fit = crate::startup_fit::evaluate(&value, launch.max_context,
+            !launch.options.is_cpu() && !planner_verdict);
         value["fit"] = serde_json::json!(fit);
         value["fit"]["message"] = (!fit.fits).then(|| fit.sentence()).into();
         if !fit.fits {

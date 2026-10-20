@@ -149,19 +149,19 @@ mod tests {
         };
         let id = Uuid::new_v4();
         let sha = "a".repeat(64);
-        let same = [InstalledPackage { id, path: &path, identity: &identity, sha256: Some(&sha) }];
+        let same = [InstalledPackage { id, path: &path, identity: &identity, sha256: Some(sha.as_str()) }];
         assert_eq!(profile.status(&same, &[gpu("GPU-1", 16303)]), (CustomProfileStatus::Ready, Some(id)));
         assert_eq!(profile.request(id).gpu_uuids, vec!["GPU-1".to_string()]);
         // Another card, or the same card with different memory, is different hardware.
         assert_eq!(profile.status(&same, &[gpu("GPU-2", 16303)]).0, CustomProfileStatus::HardwareChanged);
         assert_eq!(profile.status(&same, &[gpu("GPU-1", 8192)]).0, CustomProfileStatus::HardwareChanged);
         let changed_sha = "b".repeat(64);
-        let changed = [InstalledPackage { id, path: &path, identity: &identity, sha256: Some(&changed_sha) }];
+        let changed = [InstalledPackage { id, path: &path, identity: &identity, sha256: Some(changed_sha.as_str()) }];
         assert_eq!(profile.status(&changed, &[gpu("GPU-1", 16303)]), (CustomProfileStatus::ModelChanged, None));
         let unknown = [InstalledPackage { id, path: &path, identity: &identity, sha256: None }];
         assert_eq!(profile.status(&unknown, &[gpu("GPU-1", 16303)]).0, CustomProfileStatus::ModelChanged);
         let elsewhere = PathBuf::from("/models/muse.ginfer");
-        let missing = [InstalledPackage { id, path: &elsewhere, identity: &other, sha256: Some(&sha) }];
+        let missing = [InstalledPackage { id, path: &elsewhere, identity: &other, sha256: Some(sha.as_str()) }];
         assert_eq!(profile.status(&missing, &[gpu("GPU-1", 16303)]).0, CustomProfileStatus::ModelMissing);
         assert_eq!(profile_name("  Fast  ").unwrap(), "Fast");
         assert!(profile_name(" ").is_err());

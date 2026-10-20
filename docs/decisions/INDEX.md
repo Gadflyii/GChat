@@ -571,3 +571,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-18** — [Preserve confirmed model Stop during status recovery](2026-10-18-preserve-confirmed-model-stop-during-status-recovery.md)
 - **2026-10-19** — [Dispatch Chat sub-agents through spawn and wait](2026-10-19-dispatch-chat-sub-agents-through-spawn-and-wait.md)
 - **2026-10-19** — [Dispatch Gbot sub-agents as child tasks](2026-10-19-dispatch-gbot-sub-agents-as-child-tasks.md)
+- **2026-10-20** — [Load without tested profiles and save custom profiles](2026-10-20-load-without-tested-profiles-and-save-custom-profiles.md)

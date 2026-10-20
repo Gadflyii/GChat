@@ -51,8 +51,9 @@ fn rank_estimate(rank: &Value, max_context: u32) -> Option<(u64, u64)> {
 }
 
 /// The fit of a launch of `max_context` tokens, from one Engine quote JSON.
-/// `graphics_card` ranks describe GPU memory; CPU quotes keep the Engine verdict alone.
-pub fn evaluate(quote: &Value, max_context: u32, graphics_card: bool) -> StartupFit {
+/// `estimate_kv` compares the ranks' K/V segment facts with one full conversation in GPU
+/// memory; without it (CPU, and models whose planner searches capacity) the Engine verdict stands.
+pub fn evaluate(quote: &Value, max_context: u32, estimate_kv: bool) -> StartupFit {
     let failure = quote.get("capacity_failure").filter(|value| !value.is_null());
     let mut fit = StartupFit {
         fits: true,
@@ -72,7 +73,7 @@ pub fn evaluate(quote: &Value, max_context: u32, graphics_card: bool) -> Startup
         fit.max_context = quoted.filter(|n| *n > 0);
     }
     let ranks = quote.get("ranks").and_then(Value::as_array).cloned().unwrap_or_default();
-    let estimates: Option<Vec<_>> = (graphics_card && !ranks.is_empty())
+    let estimates: Option<Vec<_>> = (estimate_kv && !ranks.is_empty())
         .then(|| ranks.iter().map(|rank| rank_estimate(rank, max_context)).collect())
         .flatten();
     if let Some(estimates) = estimates {

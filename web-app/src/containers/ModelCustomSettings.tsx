@@ -47,12 +47,14 @@ const settingsOf = (form: Form, modelId: string) => ({
   model_id: modelId, gpu_uuids: form.gpu_uuids, max_context: form.max_context, concurrency: form.concurrency, options: form.options,
 })
 
-export function ModelCustomSettings({ hostId, snapshot, model, modelName, disabled, onStart, onChanged }: {
+export function ModelCustomSettings({ hostId, snapshot, model, modelName, disabled, running = false, onStart, onChanged }: {
   hostId: string
   snapshot: EngineSnapshot
   model: EngineModel
   modelName: string
   disabled: boolean
+  /** The model is running: its settings can still be saved, but not checked or started again. */
+  running?: boolean
   onStart: (start: CustomStart) => Promise<boolean>
   onChanged: () => Promise<unknown>
 }) {
@@ -252,8 +254,8 @@ export function ModelCustomSettings({ hostId, snapshot, model, modelName, disabl
     </div>
     {invalid && <p role="alert" className="text-sm text-destructive">{invalid}</p>}
     <div className="flex flex-wrap gap-2">
-      <Button variant="outline" disabled={disabled || !!working || !!invalid} onClick={() => void runCheck()}>{working === 'check' ? 'Checking settings…' : 'Check settings'}</Button>
-      <Button disabled={disabled || !!working || !!invalid || selectedSaved?.status === 'model_missing'} onClick={() => void start()}>{working === 'start' ? 'Starting…' : 'Start with these settings'}</Button>
+      <Button variant="outline" disabled={disabled || running || !!working || !!invalid} onClick={() => void runCheck()}>{working === 'check' ? 'Checking settings…' : 'Check settings'}</Button>
+      <Button disabled={disabled || running || !!working || !!invalid || selectedSaved?.status === 'model_missing'} onClick={() => void start()}>{working === 'start' ? 'Starting…' : 'Start with these settings'}</Button>
     </div>
     <Help id={id('check-help')}>Checking does not start the model. The first check on a new graphics card measures it once, which can take a few minutes.</Help>
     {current?.quote && (current.quote.fit?.fits === false
