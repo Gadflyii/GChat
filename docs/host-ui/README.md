@@ -1,5 +1,45 @@
 # GInfer host UI
 
+## CPU-only model loading — claude-gchat-cpu, October 20 (GCHAT-CPU-ONLY-LOAD)
+
+GChat loads Qwen3.6-35B-A3B INT (`daf27aaf`, GInfer OI-145) on the processor with no graphics card.
+Behavior and contracts are in [GInfer Server Manager](../ginfer-manager/README.md#cpu-device--gchat-cpu-only-load-october-20).
+
+- **Models page:** a **Device** setting (Automatic, GPU, CPU) with one help line, saved across restarts.
+  Automatic uses the CPU for a CPU-only package or when no visible graphics card has a supported
+  compute capability. With Device CPU the graphics-card choices are hidden and Load model checks
+  settings against memory (no graphics-card measurement). CPU problems stay on the Models page in
+  plain words (RAM shortfall with the amounts, "This model can't run on the CPU yet.", the NVFP4
+  line with a download or import of the INT or SMOL version); they never point to GInfer Hosts.
+- **GInfer Hosts settings:** the same Device choice; Context length and K/V cache keep their help
+  lines (the K/V help names system memory on the CPU); Vision and speculation are refused on the
+  CPU with a plain reason.
+- **First run:** a computer without a supported NVIDIA card is told that models run on the CPU and
+  sent to Models, not to a dead end.
+- **Catalog:** GInfer `feat/claude-gchat-cpu-load-20261020` adds one screened entry per CPU path,
+  bound in `launch_profiles.rs` (path, RAM class, options, smoked host minimum, Engine revision; no
+  GPU group is ever offered):
+
+| Path | Catalog file | Entry | Context / C | RAM class | Smoke (Host argv, same-host reference) |
+|---|---|---|---:|---|---|
+| AMX | `linux-cpu-amx-qwen36-35b-a3b-groupwise-int.json` | `cpu-amx-qwen36-35b-a3b-groupwise-int-tp1-c8-256k-int8-screened` | 262144 / 8 | 96 GB | S1, Ready 47.1 s, 16,000 IDs exact |
+| AVX-512 | `linux-cpu-avx512-qwen36-35b-a3b-groupwise-int.json` | `cpu-avx512-qwen36-35b-a3b-groupwise-int-tp1-c4-256k-int8-screened` | 262144 / 4 | 64 GB | 9950X3D2, Ready 46.1 s, 8,000 IDs exact |
+| AVX2 | `linux-cpu-avx2-qwen36-35b-a3b-groupwise-int.json` | `cpu-avx2-qwen36-35b-a3b-groupwise-int-tp1-c1-256k-int8-screened` | 262144 / 1 | 40 GB | i9-14900K, Ready 72.6 s, 2,000 IDs exact |
+
+Live checks (Engine CPU image `2d54a4e31`, then the NEW-ENGINE-BUNDLE `d1d542000` five-image set):
+
+- S1, release Host with no GPU inventory (`--nvidia-smi /bin/false`), grant CPUs 36-47 (AMX):
+  Automatic ladder quoted 262,144 first and it fit; Ready 23.1 s, TTFT 0.155 s, 32.6 tok/s decode.
+- 4090 box (AVX2), release Host with no NVIDIA driver on its PATH, the 7 walk steps through the
+  Host API (the box has no Docker access or WebKitGTK for a GUI walk): profile load Ready 147.1 s
+  (including the SHA-256 check of the 20 GB NAS package), TTFT 0.134 s, 36.6 tok/s; Host stop and
+  restart, the saved CPU instance came back in 72.8 s, TTFT 0.116 s, 36.9 tok/s.
+- The bundle's five-image runtime set verifies with `scripts/stage-linux-runtime-set.py` ("all four
+  Linux runtimes and the CPU image from d1d542000").
+
+Windows is not built or run (it waits for the Windows engine decision); see the manager record for
+what it needs.
+
 ## Flash pure 2-bit laptop and RTX 4090 launch catalogs — claude-quote-search, October 20
 
 GInfer `feat/claude-flash-consumer-profiles-20261020` adds two Linux Flash pure 2-bit `8bbb85bf`

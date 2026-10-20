@@ -44,6 +44,13 @@ card can run the model. It never sends a CPU load to GInfer Hosts.
   (docs/cpu-inference/all-models.md §3.4–3.5), the Host reads them; nothing else changes.
 - **Catalog:** CPU entries carry `cpu: {isa, min_ram_mib}` and `qualification.host_free_bytes`;
   a host matches an entry when its processor path equals `isa` and MemTotal reaches the RAM class.
+- **Windows (not built or run yet):** a Windows CPU image (`GINFER_CUDA=OFF`, MSVC) staged in the
+  Windows runtime set and accepted by `desktop_runtimes_for(.., "windows")` and the NSIS/MSI
+  installer verify; Windows qualification of the CPU route (phase 1 qualified Linux only),
+  including the CPU grant from process affinity groups and AMX state permission; `cpu_host.rs`
+  RAM (`GlobalMemoryStatusEx`) and AMX detection (today Windows reports only AVX2/AVX-512 and no
+  RAM, so no CPU catalog entry can match); the extension hardware gate still requires an NVIDIA GPU
+  on Windows; and Windows CPU catalog entries smoked on a Windows host.
 
 ## Automatic first-run measurement scope — October 19
 
