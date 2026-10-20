@@ -378,7 +378,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
           if (mounted.current) setLoadResult((auto as { name?: string } | null)?.name === 'AbortError' ? 'Model startup cancelled.' : 'Model could not be loaded. Check the error below before trying again.')
           const m = localModels.find(x => x.id === modelId)
           // CPU problems are plain and have their own next step; GInfer Hosts cannot fix them.
-          if (auto instanceof ModelStartError && auto.code && CPU_CODES.includes(auto.code)) {
+          if (auto instanceof ModelStartError && (auto.device === 'cpu' || (auto.code && CPU_CODES.includes(auto.code)))) {
             if (mounted.current) setCpuProblem({ message: auto.message, detail: auto.detail, code: auto.code, modelId })
             return
           }
